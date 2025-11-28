@@ -1,32 +1,39 @@
-InsightForge AI — Corporate Insights Agent
-Data-Driven Enterprise Analytics Powered by GPT-4o-Mini, Gemini, DuckDB, and Intelligent Tooling
-<img src="https://img.shields.io/badge/Category-Enterprise%20Agent-blue"> <img src="https://img.shields.io/badge/LLMs-GPT--4o--mini%20%7C%20Gemini%202.0%20Flash-brightgreen"> <img src="https://img.shields.io/badge/Tools-SQL%20%7C%20Plotting%20%7C%20Memory-orange">
+# 🚀 InsightForge AI  
+### Autonomous Corporate Analytics Agent Powered by LLM Planning + SQL Tools + Visual Intelligence
 
-🧠 Overview
+<p align="center">
+  <img src="https://img.shields.io/badge/Category-Enterprise%20AI-blue?style=for-the-badge">
+  <img src="https://img.shields.io/badge/Models-GPT--4o--mini%20%7C%20Gemini%202.0%20Flash-brightgreen?style=for-the-badge">
+  <img src="https://img.shields.io/badge/Tools-SQL%20%7C%20Plots%20%7C%20Memory-orange?style=for-the-badge">
+  <img src="https://img.shields.io/badge/Status-Competition%20Ready-success?style=for-the-badge">
+</p>
 
-InsightForge AI is an enterprise-grade agent purpose-built for fast, flexible, and explainable analysis of corporate sales data.
-It autonomously:
+---
 
-Generates multi-step analytical plans
+# ✨ Overview
 
-Executes SQL queries using DuckDB on an in-memory dataset
+**InsightForge AI** is an intelligent **Enterprise Analytics Agent** that converts natural-language business questions into structured, actionable insights.
 
-Produces clean plots (revenue trends, top products, best regions, etc.)
+It uses:
+- 🧠 GPT-4o-mini for planning  
+- 🗄️ DuckDB SQL for fast querying  
+- 📊 Matplotlib for visual analytics  
+- 📝 Gemini Flash for business summaries  
+- 🧱 Lightweight memory for storing insights  
 
-Summarizes insights using Gemini 2.0 Flash
+This agent automatically generates:
+✔ Multi-step analysis plans  
+✔ SQL transformations  
+✔ Data visualizations  
+✔ Executive-style summaries  
+✔ Full trace of reasoning artifacts  
 
-Stores summaries and metadata in agent memory for retrieval
+---
 
-This system combines:
-✔ LLM reasoning (GPT-4o-mini planner)
-✔ Deterministic analytics tools (SQL + Matplotlib)
-✔ Enterprise-friendly architecture (modular, testable, scalable)
+# 📐 Architecture
 
-All components are delivered as modular Python modules plus a Kaggle-ready notebook.
+### High-Level System Pipeline
 
-🏗️ Architecture
-
-Below is the high-level architecture of InsightForge AI.
 
                    ┌────────────────────────┐
                    │      User Prompt       │
