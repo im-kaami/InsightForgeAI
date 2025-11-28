@@ -22,6 +22,7 @@ It uses:
 - 🧱 Lightweight memory for storing insights  
 
 This agent automatically generates:
+
 ✔ Multi-step analysis plans  
 ✔ SQL transformations  
 ✔ Data visualizations  
@@ -35,153 +36,150 @@ This agent automatically generates:
 ### High-Level System Pipeline
 
 
-                   ┌────────────────────────┐
-                   │      User Prompt       │
-                   └───────────┬────────────┘
-                               │
-                               ▼
-                   ┌────────────────────────┐
-                   │    GPT-4o-mini Planner │
-                   │  (JSON Step Generator) │
-                   └───────────┬────────────┘
-                               │ Steps []
-                               ▼
-        ┌─────────────────────────────────────────────────┐
-        │                   Agent Loop                    │
-        │   Executes steps sequentially:                  │
-        │   • SQL → DuckDB                                │
-        │   • PLOT → Matplotlib                           │
-        │   • NLP → Gemini Summarizer                     │
-        └───────────────────┬─────────────────────────────┘
-                            │
-                            ▼
-                ┌────────────────────────────┐
-                │  Memory (SimpleMemory)     │
-                │ Stores summaries + artifacts│
-                └────────────┬──────────────┘
-                             │
-                             ▼
-                ┌────────────────────────────┐
-                │ Final Summary + Artifacts  │
-                └────────────────────────────┘
+![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Architecture.png)
 
+    
+### Component Diagram
 flowchart TD
-    A[User Prompt] --> B[GPT-4o-mini Planner<br/>JSON Plan Generator]
 
-    B --> C[Agent Executor]
-
-    C --> D[SQL Tool<br/>DuckDB]
-    C --> E[Plot Tool<br/>Matplotlib]
-    C --> F[NLP Tool<br/>Gemini Summary]
+    A[User Prompt] --> B[Planner: GPT-4o-mini]
+    B --> C[Agent Execution Loop]
+    C --> D[SQL Tool (DuckDB)]
+    C --> E[Plot Tool (Matplotlib)]
+    C --> F[NLP Summary<br/>Gemini Flash]
 
     D --> C
     E --> C
     F --> C
 
     C --> G[Memory Store]
-    C --> H[Final Summary + Visualizations]
-
-🔧 Components
-1. Planner — planner.py
-
-Uses GPT-4o-mini to generate a JSON plan of steps.
-
-Ensures:
-
-Valid SQL using only known dataset columns
-
-Valid plot instructions
-
-Optional summarization steps
-
-Includes deterministic fallback if the LLM output fails.
-
-2. Tools — tools.py
-
-sql_tool() → DuckDB SQL queries on GLOBAL_DF
-
-plot_tool() → Automated detection of appropriate dataframe
-
-gemini_summarize() → Optional summarizer using Gemini
-
-3. Agent — agent.py
-
-Executes planner steps sequentially.
-
-Automatically selects correct dataframes for plots.
-
-Produces final summary through NLP step (Gemini or fallback).
-
-Appends memory entries.
-
-4. Memory — memory.py
-
-Simple document store:
-
-add(id, text, metadata)
-
-query_recent(k) returns latest k reasoning episodes.
+    C --> H[Final Output]
 
 
-📈 Example Agent Output
+# 🔧 Components
+## 🧠 Planner — planner.py
 
-Prompt:
+* Uses GPT-4o-mini to generate structured JSON plans
+* Enforces valid column names
+* Includes deterministic fallback
+* Ensures zero hallucinations
 
-"Show revenue trends over time and identify growth drivers."
+## 🛠 Tools — tools.py
 
-Planner Output (sample):
+#### SQL Tool:
+- Runs DuckDB SQL on the registered dataframe.
 
+#### Plot Tool:
+- Supports line & bar charts with automatic fallback mapping.
+
+#### Gemini Summarizer:
+- Optional NLP summary using Gemini 2.0 Flash.
+
+
+## 🤖 Agent Controller — agent.py
+
+#### Executes each planner step:
+- SQL execution
+- Plot generation
+- Summaries
+- Artifact collection
+- Memory writing
+
+
+## 🧱 Memory — memory.py
+
+#### Simple, clean memory for:
+- Storing summaries
+- Query metadata
+- Retrieving context
+
+
+## 📈 Example
+
+#### Input Prompt:
+
+  "Show revenue trends over time and identify growth drivers."
+
+#### Planner Output:
+```json
 [
-  {"name":"rev_by_date","action":"sql",
-   "args":{"query":"SELECT date, SUM(revenue) AS revenue FROM sales GROUP BY date ORDER BY date"}},
-
-  {"name":"plot_revenue_trends","action":"plot",
-   "args":{"kind":"line","x":"date","y":"revenue","title":"Revenue Trends"}},
-
-  {"name":"rev_by_product","action":"sql",
-   "args":{"query":"SELECT product, SUM(revenue) AS revenue FROM sales GROUP BY product ORDER BY revenue DESC"}},
-
-  {"name":"plot_top_products","action":"plot",
-   "args":{"kind":"bar","x":"product","y":"revenue","title":"Top Products"}} 
+  {
+    "name": "rev_by_date",
+    "action": "sql",
+    "args": {
+      "query": "SELECT date, SUM(revenue) AS revenue FROM sales GROUP BY date ORDER BY date"
+    }
+  },
+  {
+    "name": "plot_revenue_trends",
+    "action": "plot",
+    "args": {
+      "kind": "line",
+      "x": "date",
+      "y": "revenue",
+      "title": "Revenue Trends"
+    }
+  }
 ]
 
-Outputs produced:
+```
 
-Line plot (revenue over time)
+#### Final Output:
+- 📊 Revenue trend line chart
 
-Bar chart (top-performing products)
+![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Revenue%20Trends%20Over%20Time.png)
 
-Optional summary (Gemini-based)
+- 🔎 Product & region breakdowns
 
-Memory record storing the session
+![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Revenue%20Trends%20by%20Regions.png)
 
-🛠️ How to Run (Local)
-Install:
+![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Revenue%20Trends%20by%20Channels.png)
+
+- 📝 Executive summary via Gemini
+
+
+# 🛠️ How to Run
+### Install:
+```nginx
 pip install -r requirements.txt
-
-Set environment variables:
-export OPENAI_API_KEY="sk-xxxxx"
-export GEMINI_API_KEY="AIza-xxxxx"   # optional
-
-Run the agent:
+```
+### Set API Keys:
+```arduino
+export OPENAI_API_KEY="sk-your-key"
+export GEMINI_API_KEY="AIza-your-key"
+```
+### Execute:
+```python
 from agent import InsightForgeAgent
 from tools import register_global_df
 import pandas as pd
 
-df = pd.read_csv("your_sales.csv")
+df = pd.read_csv("data.csv")
 register_global_df(df)
 
 agent = InsightForgeAgent()
-out = agent.run("Show revenue trends and top product performance")
-print(out["summary"])
+res = agent.run("Show revenue trends and top products")
+print(res["summary"])
+```
 
-🧪 Testing
+### Execute Notebook:
+```css
+jupyter nbconvert --execute submission.ipynb
+```
 
-Included test utilities:
+# 📦 Repository Structure
+```txt
 
-smoke_test.py confirms planner + SQL + plots + agent loop
 
-pytest tests for tools (optional)
+insightforge-agent/
+│
+├── agent.py
+├── planner.py
+├── tools.py
+├── memory.py
+├── submission.ipynb
+├── README.md
+└── requirements.txt
+```
 
-Notebook can be executed via:jupyter nbconvert --execute submission.ipynb
 
