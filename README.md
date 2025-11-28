@@ -7,6 +7,9 @@
   <img src="https://img.shields.io/badge/Tools-SQL%20%7C%20Plots%20%7C%20Memory-orange?style=for-the-badge">
   <img src="https://img.shields.io/badge/Status-Competition%20Ready-success?style=for-the-badge">
 </p>
+<p align="center">
+  <img src="placeholders/InsightForge Logo.png" width="175" height="175">
+</p>
 
 ---
 
@@ -36,7 +39,7 @@ This agent automatically generates:
 ### High-Level System Pipeline
 
 
-![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Architecture.png)
+![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Agent%20Architecture.png)
 
     
 ### Component Diagram
