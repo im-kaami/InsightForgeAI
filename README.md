@@ -42,7 +42,7 @@ This agent automatically generates:
 ![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Agent%20Architecture.png)
 
     
-### Component Diagram
+### Activity Diagram
 
 ![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Activity%20Diagram.png)
 
