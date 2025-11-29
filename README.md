@@ -43,21 +43,8 @@ This agent automatically generates:
 
     
 ### Component Diagram
-flowchart TD
 
-    A[User Prompt] --> B[Planner: GPT-4o-mini]
-    B --> C[Agent Execution Loop]
-    C --> D[SQL Tool (DuckDB)]
-    C --> E[Plot Tool (Matplotlib)]
-    C --> F[NLP Summary<br/>Gemini Flash]
-
-    D --> C
-    E --> C
-    F --> C
-
-    C --> G[Memory Store]
-    C --> H[Final Output]
-
+![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Activity%20Diagram.png)
 
 # 🔧 Components
 ## 🧠 Planner — planner.py
