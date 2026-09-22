@@ -17,6 +17,8 @@ from insightforge.core.llm import (
     OpenAICompatibleClient,
     build_llm,
     extract_json,
+    llm_mode,
+    offline_fake_llm,
 )
 from insightforge.core.memory import ConversationMemory, Turn
 from insightforge.core.planner import (
@@ -67,6 +69,8 @@ __all__ = [
     "Turn",
     "build_llm",
     "extract_json",
+    "llm_mode",
+    "offline_fake_llm",
     "fallback_plan",
     "figure_to_png",
     "guard_sql",

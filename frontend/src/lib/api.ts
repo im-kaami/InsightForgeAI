@@ -40,6 +40,8 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 
 const json = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 
+export const health = () => apiFetch<{ status: string; llm: string; model: string }>("/health");
+
 export const auth = {
   register: (email: string, password: string) =>
     apiFetch<User>("/auth/register", json({ email, password })),

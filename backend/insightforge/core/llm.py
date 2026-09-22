@@ -1,8 +1,9 @@
 import json
+import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from openai import OpenAI
 
@@ -156,8 +157,22 @@ def offline_fake_llm() -> FakeLLMClient:
     return FakeLLMClient(respond)
 
 
+def llm_mode(client: LLMClient) -> Literal["fake", "openai"]:
+    return "fake" if isinstance(client, FakeLLMClient) else "openai"
+
+
 def build_llm(settings: Settings | None = None) -> LLMClient:
     settings = settings or get_settings()
     if settings.llm_provider == "fake":
         return offline_fake_llm()
-    return OpenAICompatibleClient(settings.llm_model, settings.llm_api_key, settings.llm_base_url)
+    api_key = settings.llm_api_key
+    if api_key is None:
+        if settings.llm_base_url:
+            api_key = "not-needed"
+        else:
+            logging.getLogger("insightforge").warning(
+                "LLM_API_KEY is not set; running in offline fake mode "
+                "(set LLM_API_KEY or LLM_PROVIDER=fake to silence this)"
+            )
+            return offline_fake_llm()
+    return OpenAICompatibleClient(settings.llm_model, api_key, settings.llm_base_url)

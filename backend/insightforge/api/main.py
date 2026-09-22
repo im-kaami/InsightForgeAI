@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -7,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from insightforge.api.routers import auth, connections, datasets, runs, schedules, sessions
 from insightforge.config import get_settings
-from insightforge.core.llm import build_llm
+from insightforge.core.llm import build_llm, llm_mode
 from insightforge.db.models import Run
 from insightforge.db.session import SessionLocal, configure, init_db
 from insightforge.services.datasets import DatasetBusyError
@@ -47,6 +48,10 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    logger = logging.getLogger("insightforge")
+    if not logger.handlers:
+        logger.addHandler(logging.StreamHandler())
+    logger.setLevel(logging.INFO)
     application = FastAPI(title="InsightForge", lifespan=lifespan)
     application.add_middleware(
         CORSMiddleware,
@@ -72,7 +77,11 @@ def create_app() -> FastAPI:
 
     @application.get("/api/health")
     def health():
-        return {"status": "ok"}
+        return {
+            "status": "ok",
+            "llm": llm_mode(application.state.llm),
+            "model": settings.llm_model,
+        }
 
     return application
 
