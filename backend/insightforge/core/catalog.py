@@ -1,11 +1,14 @@
 import re
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import duckdb
 import pandas as pd
 
 from insightforge.core.schema import ColumnInfo, SchemaInfo, TableInfo
+
+if TYPE_CHECKING:
+    from insightforge.ingest.base import LoadResult
 
 
 def sanitize_identifier(name: str) -> str:
@@ -30,7 +33,7 @@ class DataCatalog:
         self.attachments: dict[str, str] = {}
 
     def register_df(self, name: str, df: pd.DataFrame) -> None:
-        table_name = sanitize_identifier(name)
+        table_name = "__".join(sanitize_identifier(part) for part in name.split("__"))
         self.connection.register("_insightforge_df", df)
         try:
             self.connection.execute(
@@ -100,6 +103,11 @@ class DataCatalog:
 
     def query(self, sql: str) -> pd.DataFrame:
         return self.connection.execute(sql).fetchdf()
+
+    def load(self, location: str, **kwargs: Any) -> "LoadResult":
+        from insightforge.ingest import load_any
+
+        return load_any(location, self, **kwargs)
 
     def lock(self) -> None:
         self.connection.execute("SET enable_external_access=false")
