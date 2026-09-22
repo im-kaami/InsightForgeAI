@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 
-const api = "http://localhost:8000/api";
+const api = process.env.API_URL ?? "http://localhost:3000/api";
 async function request(path, options = {}, token) {
   const headers = new Headers(options.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -12,7 +12,7 @@ async function request(path, options = {}, token) {
   return response.status === 204 ? null : response.json();
 }
 
-const credentials = { email: "demo@example.com", password: "demo12345" };
+const credentials = { email: "smoke2@example.com", password: "demo12345" };
 const register = await fetch(`${api}/auth/register`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },

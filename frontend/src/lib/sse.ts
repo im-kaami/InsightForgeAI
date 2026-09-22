@@ -1,4 +1,4 @@
-import { runs, type Run } from "./api";
+import { API_BASE, runs, type Run } from "./api";
 
 export type RunEvent = {
   type: string;
@@ -14,10 +14,9 @@ export async function streamRunEvents(
   onEvent: (event: RunEvent) => void,
   signal?: AbortSignal,
 ) {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
   const token = localStorage.getItem("if_token");
   try {
-    const response = await fetch(`${base}/runs/${runId}/events`, {
+    const response = await fetch(`${API_BASE}/runs/${runId}/events`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       signal,
     });

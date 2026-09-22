@@ -7,7 +7,7 @@ export type Session = components["schemas"]["SessionOut"];
 export type Run = components["schemas"]["RunOut"];
 export type Schedule = components["schemas"]["ScheduleOut"];
 
-const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
 export class ApiError extends Error {
   constructor(
@@ -24,7 +24,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (init.body && !(init.body instanceof FormData))
     headers.set("Content-Type", "application/json");
-  const response = await fetch(`${base}${path}`, { ...init, headers });
+  const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     if (response.status === 401 && typeof window !== "undefined") {
@@ -96,10 +96,10 @@ export const sessions = {
 
 export const runs = {
   get: (id: string) => apiFetch<Run>(`/runs/${id}`),
-  reportUrl: (id: string, format: string) => `${base}/runs/${id}/report?format=${format}`,
+  reportUrl: (id: string, format: string) => `${API_BASE}/runs/${id}/report?format=${format}`,
   downloadReport: async (id: string, format: string) => {
     const token = localStorage.getItem("if_token");
-    const response = await fetch(`${base}/runs/${id}/report?format=${format}`, {
+    const response = await fetch(`${API_BASE}/runs/${id}/report?format=${format}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!response.ok) {
