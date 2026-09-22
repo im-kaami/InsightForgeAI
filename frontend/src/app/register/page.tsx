@@ -44,7 +44,7 @@ export default function RegisterPage() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" name="password" type="password" minLength={8} required />
             </div>
-            <Button className="w-full" disabled={busy}>
+            <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Creating account..." : "Create account"}
             </Button>
             <p className="text-center text-sm text-muted-foreground">

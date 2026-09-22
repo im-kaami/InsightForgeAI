@@ -44,7 +44,7 @@ export default function LoginPage() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" name="password" type="password" required />
             </div>
-            <Button className="w-full" disabled={busy}>
+            <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Signing in..." : "Sign in"}
             </Button>
             <p className="text-center text-sm text-muted-foreground">
