@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Status-Competition%20Ready-success?style=for-the-badge">
 </p>
 <p align="center">
-  <img src="placeholders/InsightForge Logo.png" width="175" height="175">
+  <img src="docs/images/InsightForge Logo.png" width="175" height="175">
 </p>
 
 ---
@@ -39,12 +39,12 @@ This agent automatically generates:
 ### High-Level System Pipeline
 
 
-![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Agent%20Architecture.png)
+![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/docs/images/Agent%20Architecture.png)
 
     
 ### Activity Diagram
 
-![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Activity%20Diagram.png)
+![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/docs/images/Activity%20Diagram.png)
 
 # 🔧 Components
 ## 🧠 Planner — planner.py
@@ -117,13 +117,13 @@ This agent automatically generates:
 #### Final Output:
 - 📊 Revenue trend line chart
 
-![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Revenue%20Trends%20Over%20Time.png)
+![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/docs/images/Revenue%20Trends%20Over%20Time.png)
 
 - 🔎 Product & region breakdowns
 
-![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Revenue%20Trends%20by%20Regions.png)
+![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/docs/images/Revenue%20Trends%20by%20Regions.png)
 
-![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/placeholders/Revenue%20Trends%20by%20Channels.png)
+![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/docs/images/Revenue%20Trends%20by%20Channels.png)
 
 - 📝 Executive summary via Gemini
 
