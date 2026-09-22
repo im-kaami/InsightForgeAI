@@ -125,6 +125,39 @@ class FakeLLMClient:
         return parsed, response
 
 
+def offline_fake_llm() -> FakeLLMClient:
+    def respond(messages: list[dict[str, str]]) -> str:
+        system = messages[0]["content"] if messages else ""
+        user = messages[-1]["content"] if messages else ""
+        if "Correct the DuckDB SQL" in system:
+            match = re.search(r"Query:\s*(.*?)\s*\n\nError:", user, re.DOTALL)
+            return json.dumps({"query": match.group(1) if match else "SELECT 1"})
+        if "data-analysis planner" in system:
+            from insightforge.core.planner import fallback_plan
+            from insightforge.core.schema import ColumnInfo, SchemaInfo, TableInfo
+
+            tables: list[TableInfo] = []
+            matches = list(re.finditer(r"^TABLE (.+) \((\d+) rows\)$", system, re.MULTILINE))
+            for index, match in enumerate(matches):
+                end = matches[index + 1].start() if index + 1 < len(matches) else len(system)
+                block = system[match.end() : end]
+                columns = [
+                    ColumnInfo(name=name.strip(), dtype=dtype.split("  e.g.", 1)[0].strip())
+                    for name, dtype in re.findall(r"^- ([^:]+): (.+)$", block, re.MULTILINE)
+                ]
+                tables.append(
+                    TableInfo(name=match.group(1), row_count=int(match.group(2)), columns=columns)
+                )
+            return fallback_plan(user, SchemaInfo(tables=tables)).model_dump_json()
+        names = re.findall(r"^Table: ([^\n]+)", user, re.MULTILINE)
+        listed = ", ".join(names) if names else "the available results"
+        return f"## Summary\n\nOffline analysis completed for {listed}."
+
+    return FakeLLMClient(respond)
+
+
 def build_llm(settings: Settings | None = None) -> LLMClient:
     settings = settings or get_settings()
+    if settings.llm_provider == "fake":
+        return offline_fake_llm()
     return OpenAICompatibleClient(settings.llm_model, settings.llm_api_key, settings.llm_base_url)

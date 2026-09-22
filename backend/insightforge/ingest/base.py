@@ -111,11 +111,11 @@ def load_source(source: DataSource, catalog: DataCatalog) -> LoadResult:
     if source.kind == "url":
         from insightforge.ingest.url import load_url
 
-        return load_url(source, catalog)
+        return load_url(source, catalog, source.options.get("dest_dir"))
     if source.kind == "gsheet":
         from insightforge.ingest.gsheets import load_gsheet
 
-        return load_gsheet(source, catalog)
+        return load_gsheet(source, catalog, source.options.get("dest_dir"))
     if source.kind in {"postgres", "mysql", "sqlite", "sqlalchemy"}:
         from insightforge.ingest.database import load_database
 

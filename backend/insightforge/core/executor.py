@@ -1,6 +1,8 @@
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -29,6 +31,7 @@ class Executor:
         artifact_dir: Path | None = None,
         row_limit: int = 200,
         render_png: bool = False,
+        on_event: Callable[[dict[str, Any]], None] | None = None,
     ):
         self.catalog = catalog
         self.planner = planner
@@ -36,6 +39,14 @@ class Executor:
         self.artifact_dir = artifact_dir
         self.row_limit = row_limit
         self.render_png = render_png
+        self.on_event = on_event
+
+    def _emit(self, event: dict[str, Any]) -> None:
+        if self.on_event:
+            try:
+                self.on_event(event)
+            except Exception:
+                pass
 
     def execute(
         self,
@@ -54,6 +65,7 @@ class Executor:
 
         for step in plan.steps:
             started = time.perf_counter()
+            self._emit({"type": "step_start", "name": step.name, "action": step.action})
             if isinstance(step, SqlStep):
                 executed_sql = step.query
                 try:
@@ -73,6 +85,13 @@ class Executor:
                             )
                         )
                         timings[step.name] = time.perf_counter() - started
+                        self._emit(
+                            {
+                                "type": "step_done",
+                                "name": step.name,
+                                "artifact": artifacts[-1].model_dump(mode="json"),
+                            }
+                        )
                         continue
                 results[step.name] = frame
                 csv_path = None
@@ -137,6 +156,13 @@ class Executor:
                         ErrorArtifact(name=step.name, action=step.action, message=str(error))
                     )
             timings[step.name] = time.perf_counter() - started
+            self._emit(
+                {
+                    "type": "step_done",
+                    "name": step.name,
+                    "artifact": artifacts[-1].model_dump(mode="json"),
+                }
+            )
 
         token_usage = {
             key: self.planner.last_usage[key] + summary_usage[key]

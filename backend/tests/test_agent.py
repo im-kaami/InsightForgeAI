@@ -33,12 +33,24 @@ def test_agent_end_to_end_and_follow_up_memory(catalog):
     memory = ConversationMemory()
     agent = InsightForgeAgent(llm)
 
-    result = agent.run("Compare average salary by department", catalog, memory)
+    events = []
+    result = agent.run("Compare average salary by department", catalog, memory, on_event=events.append)
     assert len([item for item in result.artifacts if isinstance(item, TableArtifact)]) == 1
     assert len([item for item in result.artifacts if isinstance(item, PlotArtifact)]) == 1
     assert result.summary == "Average salary varies by department."
     assert result.timings["total"] > 0
     assert len(memory.turns) == 1
+    assert [event["type"] for event in events] == [
+        "planning",
+        "plan",
+        "step_start",
+        "step_done",
+        "step_start",
+        "step_done",
+        "step_start",
+        "step_done",
+        "done",
+    ]
 
     agent.run("Which department stands out?", catalog, memory)
     planner_calls = [

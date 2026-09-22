@@ -109,8 +109,12 @@ class DataCatalog:
 
         return load_any(location, self, **kwargs)
 
+    def set_external_access(self, enabled: bool) -> None:
+        value = "true" if enabled else "false"
+        self.connection.execute(f"SET enable_external_access={value}")
+
     def lock(self) -> None:
-        self.connection.execute("SET enable_external_access=false")
+        self.set_external_access(False)
         self.connection.execute("SET lock_configuration=true")
 
     def close(self) -> None:

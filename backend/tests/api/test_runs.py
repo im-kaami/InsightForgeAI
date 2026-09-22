@@ -1,0 +1,87 @@
+import asyncio
+
+
+async def _wait(client, headers, run_id):
+    for _ in range(100):
+        response = await client.get(f"/api/runs/{run_id}", headers=headers)
+        if response.json()["status"] in {"completed", "failed"}:
+            return response
+        await asyncio.sleep(0.1)
+    raise AssertionError("run did not finish")
+
+
+async def test_runs_events_memory_and_reports(client, auth_headers, hr_dataset, app):
+    session = await client.post(
+        "/api/sessions",
+        headers=auth_headers,
+        json={"dataset_id": hr_dataset["id"], "title": "HR"},
+    )
+    session_id = session.json()["id"]
+    first = await client.post(
+        f"/api/sessions/{session_id}/runs",
+        headers=auth_headers,
+        json={"goal": "profile departments"},
+    )
+    assert first.status_code == 202
+    assert app.state.tasks
+    completed = await _wait(client, auth_headers, first.json()["id"])
+    payload = completed.json()
+    assert payload["status"] == "completed", payload
+    assert {item["type"] for item in payload["artifacts"]} >= {"table", "plot", "text"}
+    assert payload["summary"]
+
+    events = await client.get(f"/api/runs/{payload['id']}/events", headers=auth_headers)
+    assert '"type": "done"' in events.text
+
+    second = await client.post(
+        f"/api/sessions/{session_id}/runs",
+        headers=auth_headers,
+        json={"goal": "follow up"},
+    )
+    second_done = await _wait(client, auth_headers, second.json()["id"])
+    assert second_done.json()["status"] == "completed"
+    planner_calls = [
+        call
+        for call in app.state.llm.calls
+        if call and "data-analysis planner" in call[0]["content"]
+    ]
+    assert "profile departments" in planner_calls[-1][0]["content"]
+
+    md = await client.get(
+        f"/api/runs/{payload['id']}/report", params={"format": "md"}, headers=auth_headers
+    )
+    assert "profile departments" in md.text and "|" in md.text
+    html = await client.get(
+        f"/api/runs/{payload['id']}/report", params={"format": "html"}, headers=auth_headers
+    )
+    assert "<table>" in html.text
+    pdf = await client.get(
+        f"/api/runs/{payload['id']}/report", params={"format": "pdf"}, headers=auth_headers
+    )
+    assert pdf.status_code in {200, 501}
+
+
+async def test_lifespan_marks_interrupted_runs_failed(app):
+    from insightforge.db.models import Run
+    from insightforge.db.session import SessionLocal
+
+    db = SessionLocal()
+    interrupted = Run(
+        session_id="missing-session",
+        owner_id="missing-owner",
+        goal="interrupted",
+        status="running",
+    )
+    db.add(interrupted)
+    db.commit()
+    run_id = interrupted.id
+    db.close()
+
+    async with app.router.lifespan_context(app):
+        db = SessionLocal()
+        try:
+            restored = db.get(Run, run_id)
+            assert restored.status == "failed"
+            assert restored.error == "Interrupted by server restart"
+        finally:
+            db.close()

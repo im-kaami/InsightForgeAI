@@ -8,8 +8,7 @@ from insightforge.config import get_settings
 from insightforge.core.agent import InsightForgeAgent
 from insightforge.core.artifacts import ErrorArtifact, PlotArtifact, TableArtifact, TextArtifact
 from insightforge.core.catalog import DataCatalog
-from insightforge.core.llm import FakeLLMClient, build_llm
-from insightforge.core.planner import fallback_plan
+from insightforge.core.llm import build_llm, offline_fake_llm
 from insightforge.ingest import IngestError, load_any
 
 
@@ -62,17 +61,6 @@ def _pipe_rows(columns: list[str], rows: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def _fake_llm(goal: str, catalog: DataCatalog) -> FakeLLMClient:
-    plan_json = fallback_plan(goal, catalog.introspect()).model_dump_json()
-
-    def respond(messages: list[dict[str, str]]) -> str:
-        if messages and "data-analysis planner" in messages[0]["content"]:
-            return plan_json
-        return "Summary: Offline analysis completed from the displayed result tables."
-
-    return FakeLLMClient(respond)
-
-
 def _print_result(result: Any) -> None:
     print("\nPlan")
     print(json.dumps(result.plan.model_dump(mode="json"), indent=2))
@@ -105,7 +93,7 @@ def _ask(args: argparse.Namespace) -> int:
             print(f"Note: {note}")
         catalog.lock()
         if args.fake:
-            llm = _fake_llm(args.goal, catalog)
+            llm = offline_fake_llm()
         else:
             settings = get_settings()
             updates = {}

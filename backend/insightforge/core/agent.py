@@ -1,5 +1,7 @@
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from insightforge.core.artifacts import RunResult, TextArtifact
 from insightforge.core.catalog import DataCatalog
@@ -20,17 +22,37 @@ class InsightForgeAgent:
         self.render_png = render_png
 
     def run(
-        self, goal: str, catalog: DataCatalog, memory: ConversationMemory | None = None
+        self,
+        goal: str,
+        catalog: DataCatalog,
+        memory: ConversationMemory | None = None,
+        on_event: Callable[[dict[str, Any]], None] | None = None,
     ) -> RunResult:
+        def emit(event: dict[str, Any]) -> None:
+            if on_event:
+                try:
+                    on_event(event)
+                except Exception:
+                    pass
+
         started = time.perf_counter()
         schema = catalog.introspect()
+        emit({"type": "planning"})
         plan = self.planner.plan(goal, schema, memory)
+        emit(
+            {
+                "type": "plan",
+                "plan": plan.model_dump(mode="json"),
+                "used_fallback": self.planner.last_used_fallback,
+            }
+        )
         executor = Executor(
             catalog,
             self.planner,
             self.summarizer,
             self.artifact_dir,
             render_png=self.render_png,
+            on_event=on_event,
         )
         artifacts, timings, token_usage, summary = executor.execute(
             goal, plan, schema, memory
@@ -47,6 +69,7 @@ class InsightForgeAgent:
         if memory is not None:
             memory.add(goal, summary, [table.name for table in schema.tables])
         timings["total"] = time.perf_counter() - started
+        emit({"type": "done", "summary": summary})
         return RunResult(
             goal=goal,
             plan=plan,
