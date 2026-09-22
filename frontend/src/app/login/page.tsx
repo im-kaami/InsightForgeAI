@@ -4,11 +4,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
+
+const credentialsSchema = z.object({
+  email: z.string().email("Enter a valid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -17,9 +23,17 @@ export default function LoginPage() {
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const credentials = credentialsSchema.safeParse({
+      email: String(data.get("email")),
+      password: String(data.get("password")),
+    });
+    if (!credentials.success) {
+      toast.error(credentials.error.issues[0].message);
+      return;
+    }
     setBusy(true);
     try {
-      await login(String(data.get("email")), String(data.get("password")));
+      await login(credentials.data.email, credentials.data.password);
       router.push("/datasets");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Login failed");
@@ -35,14 +49,14 @@ export default function LoginPage() {
           <CardDescription>Continue to your datasets and analysis sessions.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="space-y-4" onSubmit={submit}>
+          <form className="space-y-4" onSubmit={submit} noValidate>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" name="email" type="email" required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" required />
+              <Input id="password" name="password" type="password" minLength={8} required />
             </div>
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Signing in..." : "Sign in"}

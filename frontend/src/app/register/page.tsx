@@ -4,11 +4,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
+
+const credentialsSchema = z.object({
+  email: z.string().email("Enter a valid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -17,9 +23,17 @@ export default function RegisterPage() {
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const credentials = credentialsSchema.safeParse({
+      email: String(data.get("email")),
+      password: String(data.get("password")),
+    });
+    if (!credentials.success) {
+      toast.error(credentials.error.issues[0].message);
+      return;
+    }
     setBusy(true);
     try {
-      await register(String(data.get("email")), String(data.get("password")));
+      await register(credentials.data.email, credentials.data.password);
       router.push("/datasets");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Registration failed");
@@ -35,7 +49,7 @@ export default function RegisterPage() {
           <CardDescription>Analyze files and connected databases securely.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="space-y-4" onSubmit={submit}>
+          <form className="space-y-4" onSubmit={submit} noValidate>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" name="email" type="email" required />
@@ -43,6 +57,7 @@ export default function RegisterPage() {
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input id="password" name="password" type="password" minLength={8} required />
+              <p className="text-xs text-muted-foreground">At least 8 characters</p>
             </div>
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Creating account..." : "Create account"}
