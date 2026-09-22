@@ -38,6 +38,7 @@ dev = [
     "ruff==0.16.7",
     "respx==0.23.1",
     "Pillow==12.3.0",
+    "notebook==7.6.2",
 ]
 db = [
     "psycopg[binary]==3.3.5",

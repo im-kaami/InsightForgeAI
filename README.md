@@ -1,175 +1,222 @@
-# 🚀 InsightForge AI  
-### Autonomous Corporate Analytics Agent Powered by LLM Planning + SQL Tools + Visual Intelligence
+# InsightForge AI
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Category-Enterprise%20AI-blue?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Models-GPT--4o--mini%20%7C%20Gemini%202.0%20Flash-brightgreen?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Tools-SQL%20%7C%20Plots%20%7C%20Memory-orange?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Status-Competition%20Ready-success?style=for-the-badge">
+  <img src="https://img.shields.io/badge/Category-Enterprise%20AI-blue?style=for-the-badge" alt="Enterprise AI">
+  <img src="https://img.shields.io/badge/Models-Any%20OpenAI--compatible%20LLM-brightgreen?style=for-the-badge" alt="Any OpenAI-compatible LLM">
+  <img src="https://img.shields.io/badge/Tools-SQL%20%7C%20Plots%20%7C%20Memory-orange?style=for-the-badge" alt="SQL, plots, and memory">
+  <img src="https://img.shields.io/badge/Status-Active%20development-success?style=for-the-badge" alt="Active development">
 </p>
 <p align="center">
-  <img src="docs/images/InsightForge Logo.png" width="175" height="175">
+  <img src="docs/images/InsightForge Logo.png" width="175" height="175" alt="InsightForge logo">
 </p>
 
----
+## Overview
 
-# ✨ Overview
+InsightForge turns a natural-language business question into a validated analysis plan, safe DuckDB SQL, interactive charts, and an executive summary. Version 0.2 runs this workflow on **your data** instead of a fixed demonstration schema. It discovers tables and columns, plans against the discovered schema, executes guarded read-only queries, and keeps conversational context for follow-up questions.
 
-**InsightForge AI** is an intelligent **Enterprise Analytics Agent** that converts natural-language business questions into structured, actionable insights.
+The same engine powers the web application, CLI, Python package, and submission notebook.
 
-It uses:
-- 🧠 GPT-4o-mini for planning  
-- 🗄️ DuckDB SQL for fast querying  
-- 📊 Matplotlib for visual analytics  
-- 📝 Gemini Flash for business summaries  
-- 🧱 Lightweight memory for storing insights  
+## What's new in 0.2
 
-This agent automatically generates:
+- **Schema-agnostic analysis:** introspection and planner prompts adapt to any supported table layout.
+- **Multi-source ingestion:** combine local files, workbooks, public URLs, Google Sheets, and databases.
+- **Full web application:** authenticated datasets, chat-style analysis, live run events, reports, and schedules.
+- **Reusable core:** typed Pydantic artifacts, an OpenAI-compatible LLM client, offline fake mode, and a SELECT-only SQL guard.
 
-✔ Multi-step analysis plans  
-✔ SQL transformations  
-✔ Data visualizations  
-✔ Executive-style summaries  
-✔ Full trace of reasoning artifacts  
+## Supported data sources
 
----
+| Source | Support |
+| --- | --- |
+| CSV / TSV / Parquet / JSON | Local files and multipart uploads |
+| Excel | Multi-sheet `.xlsx`, `.xlsm`, and `.xls` workbooks |
+| HTTP URLs | Direct CSV, Excel, Parquet, and JSON downloads |
+| Google Sheets | Public share links, including individual tabs |
+| PostgreSQL / MySQL / SQLite | Read-only DuckDB attachments |
+| Other databases | SQLAlchemy URIs with installed drivers |
 
-# 📐 Architecture
+## Architecture
 
-### High-Level System Pipeline
+![Agent architecture](docs/images/Agent%20Architecture.png)
 
+```text
+Next.js frontend
+       |
+       v
+FastAPI API -- auth / datasets / sessions / runs / schedules
+       |
+       +--> ingestion layer --> files / URLs / sheets / databases
+       |
+       +--> core agent --> planner --> SQL guard --> executor --> plots / summary
+                                      |
+                                      v
+                                   DuckDB
+```
 
-![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/docs/images/Agent%20Architecture.png)
+The API persists users, datasets, runs, artifacts, and schedules through SQLAlchemy. Dataset files and DuckDB catalogs live under the configured storage directory.
 
-    
-### Activity Diagram
+## Quick start
 
-![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/docs/images/Activity%20Diagram.png)
+### Backend
 
-# 🔧 Components
-## 🧠 Planner — planner.py
+From the repository root:
 
-* Uses GPT-4o-mini to generate structured JSON plans
-* Enforces valid column names
-* Includes deterministic fallback
-* Ensures zero hallucinations
+```bash
+python -m venv backend/.venv
+backend/.venv/Scripts/python.exe -m pip install -e "backend[dev]"
+cp .env.example backend/.env
+cd backend
+.venv/Scripts/uvicorn.exe insightforge.api.main:app --reload --port 8000
+```
 
-## 🛠 Tools — tools.py
+On Linux or macOS, use `backend/.venv/bin/python`, activate with `source backend/.venv/bin/activate`, and run `uvicorn` normally.
 
-#### SQL Tool:
-- Runs DuckDB SQL on the registered dataframe.
+### Frontend
 
-#### Plot Tool:
-- Supports line & bar charts with automatic fallback mapping.
+```bash
+cd frontend
+npm install
+cp .env.local.example .env.local
+npm run dev
+```
 
-#### Gemini Summarizer:
-- Optional NLP summary using Gemini 2.0 Flash.
+Open [http://localhost:3000](http://localhost:3000). The API documentation is available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
+### CLI
 
-## 🤖 Agent Controller — agent.py
+```bash
+insightforge schema data.xlsx
+insightforge ask data.xlsx "Compare revenue by region and recommend actions"
+insightforge ask data.xlsx "Profile this dataset" --fake --png --out out
+```
 
-#### Executes each planner step:
-- SQL execution
-- Plot generation
-- Summaries
-- Artifact collection
-- Memory writing
+`--fake` provides deterministic offline planning and summaries for demos and tests.
 
+### Notebook
 
-## 🧱 Memory — memory.py
+```bash
+cd notebooks
+../backend/.venv/Scripts/jupyter.exe nbconvert --execute --to notebook --inplace submission.ipynb
+```
 
-#### Simple, clean memory for:
-- Storing summaries
-- Query metadata
-- Retrieving context
+The notebook uses the package directly, defaults to the offline fake LLM when no API key is present, and includes both sales and HR examples.
 
+## Configuration
 
-## 📈 Example
+Copy `.env.example` to `.env` and adjust these values:
 
-#### Input Prompt:
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `LLM_PROVIDER` | `openai` for a compatible API or `fake` for offline mode | `openai` |
+| `LLM_API_KEY` | API key for the configured provider | empty |
+| `LLM_BASE_URL` | OpenAI-compatible endpoint | OpenAI default |
+| `LLM_MODEL` | Model sent to the compatible chat API | `gpt-4o-mini` |
+| `DATABASE_URL` | SQLAlchemy application database | `sqlite:///./insightforge.db` |
+| `STORAGE_DIR` | Dataset catalogs, uploads, downloads, and run artifacts | `./storage` |
+| `JWT_SECRET` | Access-token signing secret | `change-me` |
+| `APP_SECRET` | Fernet key derivation secret for connection URIs | `change-me` |
+| `ACCESS_TOKEN_MINUTES` | Access-token lifetime | `10080` |
+| `CORS_ORIGINS` | JSON list of allowed frontend origins | `["http://localhost:3000"]` |
+| `SCHEDULER_ENABLED` | Start APScheduler with the API | `true` |
+| `AUTO_CREATE_TABLES` | Create application tables during development startup | `true` |
 
-  "Show revenue trends over time and identify growth drivers."
+Gemini can be used through `https://generativelanguage.googleapis.com/v1beta/openai/`. Ollama commonly uses `http://localhost:11434/v1`. Both are configured through `LLM_BASE_URL`.
 
-#### Planner Output:
+## Safety
+
+- SQL is parsed with SQLGlot and restricted to one SELECT or UNION statement.
+- External file readers, unsafe scans, mutations, ATTACH, PRAGMA, and environment functions are rejected.
+- Database connections are attached read-only where DuckDB supports it.
+- Saved connection URIs are encrypted with Fernet and redacted in API responses.
+- Downloads, uploads, Excel files, result rows, and SQL output have explicit size or row caps.
+- Every API resource is owner-scoped.
+
+## Analysis output example
+
 ```json
-[
-  {
-    "name": "rev_by_date",
-    "action": "sql",
-    "args": {
+{
+  "steps": [
+    {
+      "name": "revenue_by_date",
+      "action": "sql",
       "query": "SELECT date, SUM(revenue) AS revenue FROM sales GROUP BY date ORDER BY date"
-    }
-  },
-  {
-    "name": "plot_revenue_trends",
-    "action": "plot",
-    "args": {
+    },
+    {
+      "name": "revenue_chart",
+      "action": "plot",
       "kind": "line",
+      "data_source": "revenue_by_date",
       "x": "date",
       "y": "revenue",
-      "title": "Revenue Trends"
+      "title": "Revenue over time"
+    },
+    {
+      "name": "summary",
+      "action": "summary",
+      "focus": "growth drivers"
     }
-  }
-]
-
+  ]
+}
 ```
 
-#### Final Output:
-- 📊 Revenue trend line chart
+![Revenue over time](docs/images/Revenue%20Trends%20Over%20Time.png)
 
-![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/docs/images/Revenue%20Trends%20Over%20Time.png)
+![Revenue by region](docs/images/Revenue%20Trends%20by%20Regions.png)
 
-- 🔎 Product & region breakdowns
+![Revenue by channel](docs/images/Revenue%20Trends%20by%20Channels.png)
 
-![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/docs/images/Revenue%20Trends%20by%20Regions.png)
+## Development
 
-![Diagram](https://github.com/im-kaami/InsightForgeAI/blob/main/docs/images/Revenue%20Trends%20by%20Channels.png)
+Backend checks:
 
-- 📝 Executive summary via Gemini
-
-
-# 🛠️ How to Run
-### Install:
-```nginx
-pip install -r requirements.txt
-```
-### Set API Keys:
-```arduino
-export OPENAI_API_KEY="sk-your-key"
-export GEMINI_API_KEY="AIza-your-key"
-```
-### Execute:
-```python
-from agent import InsightForgeAgent
-from tools import register_global_df
-import pandas as pd
-
-df = pd.read_csv("data.csv")
-register_global_df(df)
-
-agent = InsightForgeAgent()
-res = agent.run("Show revenue trends and top products")
-print(res["summary"])
+```bash
+backend/.venv/Scripts/ruff.exe check backend
+backend/.venv/Scripts/python.exe -m pytest backend -q
+backend/.venv/Scripts/python.exe -m pytest backend -m integration
 ```
 
-### Execute Notebook:
-```css
-jupyter nbconvert --execute submission.ipynb
+Set `INSIGHTFORGE_TEST_PG_URI` before running the PostgreSQL integration test.
+
+Frontend checks:
+
+```bash
+cd frontend
+npm run lint
+npm run format:check
+npm run build
+npm run gen:api
 ```
 
-# 📦 Repository Structure
-```txt
+Run `npm run gen:api` while the backend is available on port 8000 whenever API schemas change.
 
+## Repository structure
 
-insightforge-agent/
-│
-├── agent.py
-├── planner.py
-├── tools.py
-├── memory.py
-├── submission.ipynb
-├── README.md
-└── requirements.txt
+```text
+InsightForgeAI/
+├── backend/
+│   ├── insightforge/
+│   │   ├── api/          # FastAPI app and routers
+│   │   ├── core/         # planner, guard, executor, plotting, memory
+│   │   ├── db/           # SQLAlchemy models and Alembic migrations
+│   │   ├── ingest/       # file, URL, Sheets, and database loaders
+│   │   └── services/     # auth, datasets, runs, reports, schedules
+│   ├── tests/
+│   └── pyproject.toml
+├── frontend/
+│   ├── src/app/          # Next.js App Router pages
+│   ├── src/components/   # application and shadcn components
+│   ├── src/lib/          # API client, generated types, auth, SSE
+│   └── scripts/
+├── notebooks/submission.ipynb
+├── docs/images/
+├── .github/workflows/ci.yml
+└── README.md
 ```
 
+## Roadmap
 
+- Docker Compose for one-command local deployment
+- Celery workers for durable distributed runs
+- Native MSSQL, BigQuery, and Snowflake connectors
+- Private Google Sheets through service-account authentication
+- A governed semantic layer for reusable metrics
+- Per-provider token and cost tracking
