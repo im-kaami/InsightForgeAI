@@ -2,7 +2,7 @@ import logging
 import re
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
 
 from insightforge.core.llm import LLMClient, LLMResponse, describe_error
 from insightforge.core.memory import ConversationMemory
@@ -25,6 +25,24 @@ class PlotStep(BaseModel):
     y: str | None = None
     color: str | None = None
     title: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_plot_fields(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        if "kind" not in data:
+            for alias in ("chart_type", "chart", "type"):
+                if alias in data:
+                    data["kind"] = data.pop(alias)
+                    break
+        for field in ("x", "y"):
+            if isinstance(data.get(field), list):
+                data[field] = data[field][0] if data[field] else None
+        if isinstance(data.get("kind"), str):
+            data["kind"] = data["kind"].lower()
+        return data
 
 
 class SummaryStep(BaseModel):
@@ -56,9 +74,24 @@ def _safe_step_name(prefix: str, column: str) -> str:
     return f"{prefix}_{suffix}"
 
 
+def _coerce_steps(raw: Any) -> Any:
+    if isinstance(raw, dict):
+        if "action" in raw:
+            return [raw]
+        if "steps" in raw:
+            return raw["steps"]
+        if "plan" in raw:
+            return _coerce_steps(raw["plan"])
+        if len(raw) == 1:
+            value = next(iter(raw.values()))
+            if isinstance(value, list):
+                return value
+    return raw
+
+
 def validate_plan(raw: Any, schema: SchemaInfo) -> Plan:
     del schema
-    values = raw.get("steps") if isinstance(raw, dict) else raw
+    values = _coerce_steps(raw)
     if not isinstance(values, list):
         raise PlanValidationError("Plan must be a list or an object containing a steps list")
 
@@ -200,6 +233,23 @@ class Planner:
         self.last_fallback_reason = None
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
         schema_text = schema.to_prompt()
+        plot_step_format = (
+            '- {"name": str, "action": "plot", '
+            '"kind": "line"|"bar"|"scatter"|"pie"|"histogram", '
+            '"data_source": <name of an earlier sql step>, "x": <column from that step>, '
+            '"y": <column from that step, omit for histogram/pie counts>, '
+            '"color": <optional column>, "title": str}'
+        )
+        sql_example = (
+            '{"name":"avg_by_group","action":"sql","query":"SELECT group_col, '
+            "AVG(value_col) AS avg_value FROM table_name GROUP BY group_col "
+            'ORDER BY avg_value DESC"}'
+        )
+        plot_example = (
+            '{"name":"avg_by_group_chart","action":"plot","kind":"bar",'
+            '"data_source":"avg_by_group","x":"group_col","y":"avg_value",'
+            '"title":"Average value by group"}'
+        )
         system = f"""You are a data-analysis planner. The available schema is:
 {schema_text}
 
@@ -208,12 +258,18 @@ Use DuckDB SQL. Rules:
   contain spaces or uppercase.
 - Every plot must reference a prior SQL step by data_source and use columns from that step's SELECT.
 - Aggregate before plotting.
+- Include a plot step when the question asks for a comparison, trend or distribution.
 - End with exactly one summary step and keep the plan to at most 6 steps.
 - Respond ONLY with JSON {{"steps": [...]}}.
-Example:
+Step formats (use these exact field names):
+- {{"name": str, "action": "sql", "query": str}}
+{plot_step_format}
+- {{"name": str, "action": "summary", "focus": str}}
+Return a single JSON object with a top-level "steps" array, for example:
 {{"steps":[
-  {{"name":"count_rows","action":"sql","query":"SELECT COUNT(*) AS count FROM table_name"}},
-  {{"name":"summary","action":"summary","focus":"row count"}}
+  {sql_example},
+  {plot_example},
+  {{"name":"summary","action":"summary","focus":"which group leads and by how much"}}
 ]}}"""
         if memory and memory.turns:
             system += (

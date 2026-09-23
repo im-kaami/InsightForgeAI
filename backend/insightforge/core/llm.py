@@ -94,7 +94,16 @@ class OpenAICompatibleClient:
             response = self._create(messages, temperature, response_format={"type": "json_object"})
         except Exception:
             response = self._create(messages, temperature)
-        parsed = extract_json(response.text)
+        try:
+            parsed = json.loads(response.text)
+        except json.JSONDecodeError:
+            parsed = extract_json(response.text)
+            if parsed is not None:
+                logging.getLogger("insightforge").warning(
+                    "LLM returned non-strict JSON; extracted embedded object "
+                    "(first 200 chars: %r)",
+                    response.text[:200],
+                )
         if parsed is None:
             raise LLMJSONError("LLM response did not contain valid JSON")
         return parsed, response
