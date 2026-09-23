@@ -1,4 +1,5 @@
 import re
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -6,9 +7,14 @@ import duckdb
 import pandas as pd
 
 from insightforge.core.schema import ColumnInfo, SchemaInfo, TableInfo
+from insightforge.core.sensitivity import classify_column
 
 if TYPE_CHECKING:
     from insightforge.ingest.base import LoadResult
+
+
+class QueryTimeoutError(RuntimeError):
+    pass
 
 
 def sanitize_identifier(name: str) -> str:
@@ -28,8 +34,18 @@ def _qualified(name: str) -> str:
 
 
 class DataCatalog:
-    def __init__(self, db_path: str | Path | None = None):
+    def __init__(
+        self,
+        db_path: str | Path | None = None,
+        memory_limit: str | None = None,
+        threads: int | None = None,
+    ):
         self.connection = duckdb.connect(str(db_path) if db_path is not None else ":memory:")
+        if memory_limit is not None:
+            escaped_limit = memory_limit.replace("'", "''")
+            self.connection.execute(f"SET memory_limit='{escaped_limit}'")
+        if threads is not None:
+            self.connection.execute(f"SET threads={int(threads)}")
         self.attachments: dict[str, str] = {}
 
     def register_df(self, name: str, df: pd.DataFrame) -> None:
@@ -69,7 +85,9 @@ class DataCatalog:
             for database, table in rows
         ]
 
-    def introspect(self, sample_rows: int = 3) -> SchemaInfo:
+    def introspect(
+        self, sample_rows: int = 3, redact_sensitive_samples: bool = True
+    ) -> SchemaInfo:
         tables: list[TableInfo] = []
         for name in self.table_names():
             qualified = _qualified(name)
@@ -80,10 +98,18 @@ class DataCatalog:
             for row in description:
                 column_name, dtype = str(row[0]), str(row[1])
                 column_sql = _quote(column_name)
-                samples = self.connection.execute(
-                    f"SELECT DISTINCT CAST({column_sql} AS VARCHAR) FROM {qualified} "
-                    f"WHERE {column_sql} IS NOT NULL LIMIT {int(sample_rows)}"
-                ).fetchall()
+                sensitivity = classify_column(column_name)
+                samples: list[tuple[Any, ...]] = []
+                if sample_rows > 0 and not (sensitivity and redact_sensitive_samples):
+                    samples = self.connection.execute(
+                        f"SELECT CAST(v AS VARCHAR) FROM (SELECT DISTINCT {column_sql} AS v "
+                        f"FROM {qualified} WHERE {column_sql} IS NOT NULL "
+                        f"ORDER BY v LIMIT {int(sample_rows)}) t"
+                    ).fetchall()
+                should_redact = sample_rows > 0 and sensitivity and redact_sensitive_samples
+                sample_values = ["<redacted>"] if should_redact else [
+                    str(value[0])[:40] for value in samples
+                ]
                 null_fraction = None
                 if not attached:
                     null_fraction = self.connection.execute(
@@ -94,15 +120,28 @@ class DataCatalog:
                     ColumnInfo(
                         name=column_name,
                         dtype=dtype,
-                        sample_values=[str(value[0])[:40] for value in samples],
+                        sample_values=sample_values,
                         null_fraction=null_fraction,
+                        sensitivity=sensitivity,
                     )
                 )
             tables.append(TableInfo(name=name, row_count=int(row_count), columns=columns))
         return SchemaInfo(tables=tables)
 
-    def query(self, sql: str) -> pd.DataFrame:
-        return self.connection.execute(sql).fetchdf()
+    def query(self, sql: str, timeout_seconds: float | None = None) -> pd.DataFrame:
+        timer = None
+        if timeout_seconds is not None:
+            timer = threading.Timer(timeout_seconds, self.connection.interrupt)
+            timer.start()
+        try:
+            return self.connection.execute(sql).fetchdf()
+        except duckdb.InterruptException as error:
+            if timeout_seconds is None:
+                raise
+            raise QueryTimeoutError(f"Query exceeded {timeout_seconds} seconds") from error
+        finally:
+            if timer:
+                timer.cancel()
 
     def load(self, location: str, **kwargs: Any) -> "LoadResult":
         from insightforge.ingest import load_any

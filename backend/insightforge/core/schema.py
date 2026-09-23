@@ -6,6 +6,7 @@ class ColumnInfo(BaseModel):
     dtype: str
     sample_values: list[str] = Field(default_factory=list)
     null_fraction: float | None = None
+    sensitivity: str | None = None
 
 
 class TableInfo(BaseModel):
@@ -35,8 +36,9 @@ class SchemaInfo(BaseModel):
             lines = [f"TABLE {table.name} ({table.row_count} rows)"]
             shown = table.columns[: max(columns_left, 0)]
             for column in shown:
+                sensitive = f" [sensitive: {column.sensitivity}]" if column.sensitivity else ""
                 samples = f"  e.g. {', '.join(column.sample_values)}" if column.sample_values else ""
-                lines.append(f"- {column.name}: {column.dtype}{samples}")
+                lines.append(f"- {column.name}: {column.dtype}{sensitive}{samples}")
             hidden = len(table.columns) - len(shown)
             omitted_columns += hidden
             columns_left -= len(shown)

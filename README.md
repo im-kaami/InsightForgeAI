@@ -106,10 +106,10 @@ Copy `.env.example` to `.env` and adjust these values:
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `LLM_PROVIDER` | `openai` for a compatible API or `fake` for offline mode | `openai` |
+| `LLM_PROVIDER` | Provider preset or `fake` for offline mode | `openai` |
 | `LLM_API_KEY` | API key for the configured provider | empty |
-| `LLM_BASE_URL` | OpenAI-compatible endpoint | OpenAI default |
-| `LLM_MODEL` | Model sent to the compatible chat API | `gpt-4o-mini` |
+| `LLM_BASE_URL` | Optional endpoint override; required for `openai-compatible` | provider default |
+| `LLM_MODEL` | Optional model override | provider default |
 | `DATABASE_URL` | SQLAlchemy application database | `sqlite:///./insightforge.db` |
 | `STORAGE_DIR` | Dataset catalogs, uploads, downloads, and run artifacts | `./storage` |
 | `JWT_SECRET` | Access-token signing secret | `change-me` |
@@ -117,9 +117,33 @@ Copy `.env.example` to `.env` and adjust these values:
 | `ACCESS_TOKEN_MINUTES` | Access-token lifetime | `10080` |
 | `CORS_ORIGINS` | JSON list of allowed frontend origins | `["http://localhost:3000"]` |
 | `SCHEDULER_ENABLED` | Start APScheduler with the API | `true` |
-| `AUTO_CREATE_TABLES` | Create application tables during development startup | `true` |
+| `AUTO_CREATE_TABLES` | Apply database migrations during application startup | `true` |
+| `ENVIRONMENT` | Validation mode: `development` or `production` | `development` |
+| `ALLOW_PRIVATE_URLS` | Permit private/internal URL ingestion for trusted development | `false` |
+| `QUERY_TIMEOUT_SECONDS` | Maximum execution time for analysis SQL | `60` |
+| `DUCKDB_MEMORY_LIMIT` | Memory available to each opened dataset catalog | `2GB` |
+| `DUCKDB_THREADS` | DuckDB worker threads per catalog | `4` |
+| `MAX_CONCURRENT_RUNS_PER_USER` | Pending/running analyses allowed per user | `2` |
+| `MAX_UPLOAD_BYTES` | Maximum bytes accepted for each uploaded file | `200000000` |
+| `LLM_SEND_SAMPLE_VALUES` | Include non-sensitive schema samples in planner prompts | `true` |
+| `LLM_SUMMARY_MAX_ROWS` | Result rows included per table in summary prompts | `20` |
 
-Gemini can be used through `https://generativelanguage.googleapis.com/v1beta/openai/`. Ollama commonly uses `http://localhost:11434/v1`. Both are configured through `LLM_BASE_URL`.
+Provider presets:
+
+| Provider | Default model | Default endpoint |
+| --- | --- | --- |
+| `openai` | `gpt-4o-mini` | OpenAI |
+| `gemini` | `gemini-3.6-flash` | Google OpenAI-compatible API |
+| `groq` | `llama-3.3-70b-versatile` | Groq OpenAI-compatible API |
+| `ollama` | `llama3.1` | `http://localhost:11434/v1` |
+| `openai-compatible` | `gpt-4o-mini` | Must be supplied with `LLM_BASE_URL` |
+| `fake` | deterministic offline responses | none |
+
+## What is sent to the LLM
+
+InsightForge sends the discovered table and column names, data types, non-sensitive sample values, the user question, and prior turns' goals and summaries. Summary requests include up to `LLM_SUMMARY_MAX_ROWS` rows from each result table. Set `LLM_SEND_SAMPLE_VALUES=false` to omit all schema sample values.
+
+Sensitive columns are detected from column names and their samples are redacted before prompts are built. This is a heuristic, not a complete data-loss-prevention system; users must review classifications and source data.
 
 ## Safety
 
@@ -129,6 +153,8 @@ Gemini can be used through `https://generativelanguage.googleapis.com/v1beta/ope
 - Saved connection URIs are encrypted with Fernet and redacted in API responses.
 - Downloads, uploads, Excel files, result rows, and SQL output have explicit size or row caps.
 - Every API resource is owner-scoped.
+
+URL and Google Sheets ingestion refuses non-HTTP(S) schemes and private, loopback, link-local, shared, or metadata addresses. Every redirect hop is validated, with a maximum of five redirects. DNS is checked before connecting, so DNS rebinding between validation and connection remains a known residual risk; production deployments should also enforce network egress rules.
 
 ## Analysis output example
 

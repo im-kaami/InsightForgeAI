@@ -9,6 +9,15 @@ from openai import OpenAI
 
 from insightforge.config import Settings, get_settings
 
+PROVIDER_PRESETS: dict[str, tuple[str | None, str]] = {
+    "openai": (None, "gpt-4o-mini"),
+    "openai-compatible": (None, "gpt-4o-mini"),
+    "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai/", "gemini-3.6-flash"),
+    "groq": ("https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
+    "ollama": ("http://localhost:11434/v1", "llama3.1"),
+    "fake": (None, "gpt-4o-mini"),
+}
+
 
 @dataclass
 class LLMResponse:
@@ -174,13 +183,27 @@ def llm_mode(client: LLMClient) -> Literal["fake", "openai"]:
     return "fake" if isinstance(client, FakeLLMClient) else "openai"
 
 
+def resolved_base_url(settings: Settings) -> str | None:
+    return settings.llm_base_url or PROVIDER_PRESETS[settings.llm_provider][0]
+
+
+def resolved_model(settings: Settings) -> str:
+    return settings.llm_model or PROVIDER_PRESETS[settings.llm_provider][1]
+
+
 def build_llm(settings: Settings | None = None) -> LLMClient:
     settings = settings or get_settings()
     if settings.llm_provider == "fake":
         return offline_fake_llm()
+    base_url = resolved_base_url(settings)
+    model = resolved_model(settings)
+    if settings.llm_provider == "openai-compatible" and not base_url:
+        raise ValueError("LLM_BASE_URL is required for the openai-compatible provider")
     api_key = settings.llm_api_key
     if api_key is None:
-        if settings.llm_base_url:
+        if settings.llm_provider == "ollama":
+            api_key = "ollama"
+        elif base_url:
             api_key = "not-needed"
         else:
             logging.getLogger("insightforge").warning(
@@ -188,4 +211,4 @@ def build_llm(settings: Settings | None = None) -> LLMClient:
                 "(set LLM_API_KEY or LLM_PROVIDER=fake to silence this)"
             )
             return offline_fake_llm()
-    return OpenAICompatibleClient(settings.llm_model, api_key, settings.llm_base_url)
+    return OpenAICompatibleClient(model, api_key, base_url)

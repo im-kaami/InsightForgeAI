@@ -1,3 +1,4 @@
+import tempfile
 from pathlib import Path
 from typing import Annotated
 
@@ -7,6 +8,7 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from insightforge.api.deps import CurrentUser, Db, StorageDep
 from insightforge.api.schemas import ConnectionDatasetCreate, DatasetOut, URLDatasetCreate
+from insightforge.config import get_settings
 from insightforge.core.sql_guard import guard_sql
 from insightforge.db.models import Connection, Dataset, User
 from insightforge.ingest import IngestError, detect_source, parse_db_uri
@@ -20,6 +22,25 @@ from insightforge.services.datasets import (
 )
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
+
+
+async def _stream_upload(file: UploadFile, storage: StorageDep) -> Path:
+    max_bytes = get_settings().max_upload_bytes
+    total = 0
+    path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=storage.temp_dir(), delete=False) as output:
+            path = Path(output.name)
+            while chunk := await file.read(1024 * 1024):
+                total += len(chunk)
+                if total > max_bytes:
+                    raise HTTPException(413, "File too large")
+                output.write(chunk)
+        return path
+    except Exception:
+        if path:
+            path.unlink(missing_ok=True)
+        raise
 
 
 def output(dataset: Dataset) -> DatasetOut:
@@ -58,18 +79,19 @@ async def upload_dataset(
     db: Db,
     files: Annotated[list[UploadFile], File()],
     user: CurrentUser,
+    storage: StorageDep,
     name: Annotated[str | None, Form()] = None,
 ):
-    values = []
-    for file in files:
-        content = await file.read()
-        if len(content) > 200_000_000:
-            raise HTTPException(400, f"File too large: {file.filename}")
-        values.append((file.filename or "upload", content))
+    values: list[tuple[str, Path]] = []
     try:
+        for file in files:
+            values.append((file.filename or "upload", await _stream_upload(file, storage)))
         return output(create_dataset_from_files(db, user, values, name))
     except IngestError as error:
         raise HTTPException(400, str(error)) from error
+    finally:
+        for _, path in values:
+            path.unlink(missing_ok=True)
 
 
 @router.post("/from-url", response_model=DatasetOut, status_code=201)
@@ -126,11 +148,10 @@ async def add_dataset_source(
             upload = next((value for value in form.values() if isinstance(value, StarletteUploadFile)), None)
             if not upload:
                 raise HTTPException(400, "A file is required")
-            content = await upload.read()
-            if len(content) > 200_000_000:
-                raise HTTPException(400, "File too large")
-            path = storage.dataset_dir(user.id, dataset.id) / "uploads" / Path(upload.filename).name
-            path.write_bytes(content)
+            temp_path = await _stream_upload(upload, storage)
+            path = storage.save_upload_path(
+                user.id, dataset.id, upload.filename or "upload", temp_path
+            )
             source = detect_source(str(path))
         else:
             body = await request.json()

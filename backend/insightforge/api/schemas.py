@@ -24,6 +24,13 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class HealthOut(BaseModel):
+    status: str
+    llm: str
+    provider: str
+    model: str
+
+
 class DatasetOut(APIModel):
     id: str
     name: str
@@ -63,6 +70,8 @@ class SessionOut(APIModel):
     title: str
     created_at: datetime
     runs: list[RunOut] = Field(default_factory=list)
+    run_count: int = 0
+    last_activity_at: datetime | None = None
 
 
 class ScheduleOut(APIModel):
@@ -71,6 +80,7 @@ class ScheduleOut(APIModel):
     session_id: str
     goal: str
     cron: str
+    timezone: str = "UTC"
     enabled: bool
     last_run_at: datetime | None
     last_run_id: str | None
@@ -110,10 +120,12 @@ class ScheduleCreate(BaseModel):
     session_id: str
     goal: str
     cron: str
+    timezone: str = "UTC"
     enabled: bool = True
 
 
-class SchedulePatch(BaseModel):
+class ScheduleUpdate(BaseModel):
     goal: str | None = None
     cron: str | None = None
+    timezone: str | None = None
     enabled: bool | None = None

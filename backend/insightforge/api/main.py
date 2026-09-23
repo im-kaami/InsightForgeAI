@@ -7,8 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from insightforge.api.routers import auth, connections, datasets, runs, schedules, sessions
-from insightforge.config import get_settings
-from insightforge.core.llm import build_llm, llm_mode
+from insightforge.api.schemas import HealthOut
+from insightforge.config import get_settings, validate_settings
+from insightforge.core.llm import build_llm, llm_mode, resolved_model
 from insightforge.db.models import Run
 from insightforge.db.session import SessionLocal, configure, init_db
 from insightforge.services.datasets import DatasetBusyError
@@ -19,6 +20,11 @@ from insightforge.services.scheduler import scheduler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    problems = validate_settings(settings)
+    if settings.environment == "production" and problems:
+        raise RuntimeError("Refusing to start: " + "; ".join(problems))
+    for problem in problems:
+        logging.getLogger("insightforge").warning("Configuration warning: %s", problem)
     init_db()
     configure()
     db = SessionLocal()
@@ -75,12 +81,13 @@ def create_app() -> FastAPI:
     async def dataset_busy(_request: Request, error: DatasetBusyError):
         return JSONResponse({"detail": str(error)}, status_code=409)
 
-    @application.get("/api/health")
+    @application.get("/api/health", response_model=HealthOut)
     def health():
         return {
             "status": "ok",
             "llm": llm_mode(application.state.llm),
-            "model": settings.llm_model,
+            "provider": settings.llm_provider,
+            "model": resolved_model(settings),
         }
 
     return application

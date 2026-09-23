@@ -6,6 +6,24 @@ import respx
 from .conftest import FIXTURES
 
 
+async def test_upload_rejects_file_over_configured_limit(client, auth_headers):
+    from insightforge.config import get_settings
+
+    settings = get_settings()
+    original = settings.max_upload_bytes
+    settings.max_upload_bytes = 1000
+    try:
+        response = await client.post(
+            "/api/datasets/upload",
+            headers=auth_headers,
+            files=[("files", ("large.csv", b"a" * 1001, "text/csv"))],
+        )
+    finally:
+        settings.max_upload_bytes = original
+    assert response.status_code == 413
+    assert response.json()["detail"] == "File too large"
+
+
 async def test_upload_schema_preview_and_owner_scope(client, auth_headers):
     response = await client.post(
         "/api/datasets/upload",
@@ -23,6 +41,10 @@ async def test_upload_schema_preview_and_owner_scope(client, auth_headers):
     assert {"hr", "workbook__orders", "workbook__customers"} <= set(dataset["tables"])
     schema = await client.get(f"/api/datasets/{dataset['id']}/schema", headers=auth_headers)
     assert "employee_id" in str(schema.json())
+    hr_schema = next(table for table in schema.json()["tables"] if table["name"] == "hr")
+    salary = next(column for column in hr_schema["columns"] if column["name"] == "salary")
+    assert salary["sensitivity"] == "financial"
+    assert salary["sample_values"] == ["<redacted>"]
     preview = await client.get(
         f"/api/datasets/{dataset['id']}/preview",
         params={"table": "hr", "limit": 50},

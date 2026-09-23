@@ -1,0 +1,24 @@
+from insightforge.config import Settings, validate_settings
+
+
+def test_development_reports_secret_problems_without_rejecting():
+    settings = Settings(_env_file=None, environment="development")
+    problems = validate_settings(settings)
+    assert any("JWT_SECRET" in problem for problem in problems)
+    assert any("APP_SECRET" in problem for problem in problems)
+
+
+def test_production_rejects_default_secrets_and_private_urls():
+    settings = Settings(
+        _env_file=None,
+        environment="production",
+        jwt_secret="change-me",
+        app_secret="short",
+        allow_private_urls=True,
+        llm_provider="fake",
+    )
+    problems = validate_settings(settings)
+    assert any("JWT_SECRET" in problem for problem in problems)
+    assert any("APP_SECRET" in problem for problem in problems)
+    assert any("ALLOW_PRIVATE_URLS" in problem for problem in problems)
+    assert not any("LLM" in problem for problem in problems)

@@ -1,4 +1,5 @@
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
@@ -7,7 +8,7 @@ from insightforge.config import get_settings
 from insightforge.db.models import Base
 
 config = context.config
-if config.config_file_name:
+if config.config_file_name and Path(config.config_file_name).exists():
     fileConfig(config.config_file_name)
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
 target_metadata = Base.metadata

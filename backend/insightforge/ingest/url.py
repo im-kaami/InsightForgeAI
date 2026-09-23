@@ -1,7 +1,7 @@
 import re
 import tempfile
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 import httpx
 
@@ -15,6 +15,7 @@ from insightforge.ingest.base import (
     load_source,
     table_name_for,
 )
+from insightforge.ingest.netguard import validate_public_url
 
 _KNOWN_SUFFIXES = {
     ".csv",
@@ -36,6 +37,7 @@ _CONTENT_SUFFIXES = {
     "application/vnd.ms-excel": ".xls",
 }
 _FILENAME_RE = re.compile(r"filename\*?=(?:UTF-8''|\")?([^\";]+)", re.IGNORECASE)
+_REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 
 
 def _filename(headers: httpx.Headers, url: str) -> str:
@@ -54,30 +56,46 @@ def download(
     *,
     client: httpx.Client | None = None,
     allow_html: bool = False,
+    allow_private: bool | None = None,
 ) -> Path:
     dest_dir.mkdir(parents=True, exist_ok=True)
     own_client = client is None
-    http_client = client or httpx.Client(timeout=timeout, follow_redirects=True)
+    http_client = client or httpx.Client(timeout=timeout, follow_redirects=False)
+    private_allowed = get_settings().allow_private_urls if allow_private is None else allow_private
     temp_path: Path | None = None
+    current = url
     try:
-        with http_client.stream("GET", url, follow_redirects=True) as response:
-            if response.status_code < 200 or response.status_code >= 300:
-                raise IngestError(f"Download failed with HTTP {response.status_code}")
-            if allow_html and urlparse(str(response.url)).hostname == "accounts.google.com":
-                raise IngestError("Download redirected to an authentication page")
-            name = _filename(response.headers, str(response.url))
-            content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
-            with tempfile.NamedTemporaryFile(dir=dest_dir, delete=False, suffix=".part") as output:
-                temp_path = Path(output.name)
-                size = 0
-                first_bytes = b""
-                for chunk in response.iter_bytes():
-                    size += len(chunk)
-                    if size > max_bytes:
-                        raise IngestError(f"Download exceeds the {max_bytes}-byte size limit")
-                    if len(first_bytes) < 4:
-                        first_bytes = (first_bytes + chunk)[:4]
-                    output.write(chunk)
+        for hop in range(6):
+            validate_public_url(current, allow_private=private_allowed)
+            with http_client.stream("GET", current, follow_redirects=False) as response:
+                if response.status_code in _REDIRECT_STATUSES:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise IngestError(f"Download failed with HTTP {response.status_code}")
+                    if hop == 5:
+                        raise IngestError("Too many redirects")
+                    current = urljoin(current, location)
+                    continue
+                if response.status_code < 200 or response.status_code >= 300:
+                    raise IngestError(f"Download failed with HTTP {response.status_code}")
+                if allow_html and urlparse(str(response.url)).hostname == "accounts.google.com":
+                    raise IngestError("Download redirected to an authentication page")
+                name = _filename(response.headers, str(response.url))
+                content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
+                with tempfile.NamedTemporaryFile(dir=dest_dir, delete=False, suffix=".part") as output:
+                    temp_path = Path(output.name)
+                    size = 0
+                    first_bytes = b""
+                    for chunk in response.iter_bytes():
+                        size += len(chunk)
+                        if size > max_bytes:
+                            raise IngestError(f"Download exceeds the {max_bytes}-byte size limit")
+                        if len(first_bytes) < 4:
+                            first_bytes = (first_bytes + chunk)[:4]
+                        output.write(chunk)
+                break
+        else:
+            raise IngestError("Too many redirects")
         suffix = Path(name).suffix.lower()
         if suffix not in _KNOWN_SUFFIXES:
             inferred = _CONTENT_SUFFIXES.get(content_type)
@@ -108,7 +126,13 @@ def load_url(
     destination = dest_dir or get_settings().storage_dir / "downloads"
     client = source.options.get("client")
     max_bytes = int(source.options.get("max_bytes", 200_000_000))
-    path = download(source.location, destination, max_bytes=max_bytes, client=client)
+    path = download(
+        source.location,
+        destination,
+        max_bytes=max_bytes,
+        client=client,
+        allow_private=source.options.get("allow_private"),
+    )
     url_name = Path(urlparse(source.location).path).name or path.name
     name = source.name or table_name_for(url_name)
     local = detect_source(str(path), name=name, options=source.options)

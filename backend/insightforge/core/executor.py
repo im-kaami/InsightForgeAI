@@ -32,6 +32,7 @@ class Executor:
         row_limit: int = 200,
         render_png: bool = False,
         on_event: Callable[[dict[str, Any]], None] | None = None,
+        query_timeout: float | None = None,
     ):
         self.catalog = catalog
         self.planner = planner
@@ -40,6 +41,7 @@ class Executor:
         self.row_limit = row_limit
         self.render_png = render_png
         self.on_event = on_event
+        self.query_timeout = query_timeout
 
     def _emit(self, event: dict[str, Any]) -> None:
         if self.on_event:
@@ -70,12 +72,12 @@ class Executor:
                 executed_sql = step.query
                 try:
                     executed_sql = guard_sql(executed_sql)
-                    frame = self.catalog.query(executed_sql)
+                    frame = self.catalog.query(executed_sql, timeout_seconds=self.query_timeout)
                 except Exception as first_error:
                     try:
                         repaired = self.planner.repair_sql(step, str(first_error), schema)
                         executed_sql = guard_sql(repaired.query)
-                        frame = self.catalog.query(executed_sql)
+                        frame = self.catalog.query(executed_sql, timeout_seconds=self.query_timeout)
                     except Exception as second_error:
                         artifacts.append(
                             ErrorArtifact(

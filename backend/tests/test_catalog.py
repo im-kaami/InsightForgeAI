@@ -3,7 +3,7 @@ import sqlite3
 import duckdb
 import pytest
 
-from insightforge.core.catalog import DataCatalog, sanitize_identifier
+from insightforge.core.catalog import DataCatalog, QueryTimeoutError, sanitize_identifier
 
 
 def test_introspection_reports_tables_rows_and_types(schema):
@@ -26,6 +26,18 @@ def test_lock_blocks_external_file_access(catalog):
     catalog.lock()
     with pytest.raises(duckdb.Error):
         catalog.query("SELECT * FROM read_csv_auto('x.csv')")
+
+
+def test_query_timeout_interrupts_long_query():
+    catalog = DataCatalog()
+    try:
+        with pytest.raises(QueryTimeoutError, match="Query exceeded 0.5 seconds"):
+            catalog.query(
+                "SELECT count(*) FROM range(3000000000) a, range(1000) b",
+                timeout_seconds=0.5,
+            )
+    finally:
+        catalog.close()
 
 
 def test_attached_sqlite_table_is_listed_and_queryable(tmp_path):

@@ -95,6 +95,7 @@ class Schedule(Base):
     session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id"), index=True)
     goal: Mapped[str] = mapped_column(Text)
     cron: Mapped[str] = mapped_column(String(100))
+    timezone: Mapped[str] = mapped_column(String(64), default="UTC")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_run_id: Mapped[str | None] = mapped_column(ForeignKey("runs.id"), nullable=True)

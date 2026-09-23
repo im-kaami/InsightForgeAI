@@ -27,8 +27,29 @@ async def test_runs_events_memory_and_reports(client, auth_headers, hr_dataset, 
     completed = await _wait(client, auth_headers, first.json()["id"])
     payload = completed.json()
     assert payload["status"] == "completed", payload
+    buffered_events = list(app.state.bus.buffers[first.json()["id"]])
+    done_events = [event for event in buffered_events if event["type"] == "done"]
+    assert len(done_events) == 1
+    assert buffered_events[-1] == done_events[0]
+    assert done_events[0]["run_id"] == payload["id"]
     assert {item["type"] for item in payload["artifacts"]} >= {"table", "plot", "text"}
     assert payload["summary"]
+    table_position = next(
+        index for index, artifact in enumerate(payload["artifacts"]) if artifact["type"] == "table"
+    )
+    csv_response = await client.get(
+        f"/api/runs/{payload['id']}/artifacts/{table_position}/csv",
+        headers=auth_headers,
+    )
+    assert csv_response.status_code == 200
+    assert csv_response.headers["content-type"].startswith("text/csv")
+    assert "row_count" in csv_response.text
+    listed_sessions = await client.get("/api/sessions", headers=auth_headers)
+    listed = next(item for item in listed_sessions.json() if item["id"] == session_id)
+    assert listed["run_count"] == 1
+    assert listed["last_activity_at"]
+    session_runs = await client.get(f"/api/sessions/{session_id}/runs", headers=auth_headers)
+    assert [item["id"] for item in session_runs.json()] == [payload["id"]]
 
     events = await client.get(f"/api/runs/{payload['id']}/events", headers=auth_headers)
     assert '"type": "done"' in events.text

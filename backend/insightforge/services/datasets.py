@@ -26,19 +26,19 @@ def refresh_schema(dataset: Dataset, catalog: DataCatalog) -> None:
 
 
 def create_dataset_from_files(
-    db: Session, user: User, files: list[tuple[str, bytes]], name: str | None
+    db: Session, user: User, files: list[tuple[str, Path]], name: str | None
 ) -> Dataset:
     dataset = Dataset(owner_id=user.id, name=name or Path(files[0][0]).stem, kind="files")
     db.add(dataset)
     db.flush()
-    directory = _storage().dataset_dir(user.id, dataset.id)
+    storage = _storage()
+    directory = storage.dataset_dir(user.id, dataset.id)
     catalog = DataCatalog(directory / "catalog.duckdb")
     sources = []
     try:
-        for filename, content in files:
+        for filename, temp_path in files:
             safe_name = Path(filename).name
-            path = directory / "uploads" / safe_name
-            path.write_bytes(content)
+            path = storage.save_upload_path(user.id, dataset.id, safe_name, temp_path)
             source = detect_source(str(path))
             load_source(source, catalog)
             sources.append({"kind": source.kind, "location": safe_name, "name": source.name, "options": {}})
@@ -138,8 +138,13 @@ def open_catalog(
 ) -> DataCatalog:
     del for_run
     path = _storage().dataset_dir(dataset.owner_id, dataset.id) / "catalog.duckdb"
+    settings = get_settings()
     try:
-        catalog = DataCatalog(path)
+        catalog = DataCatalog(
+            path,
+            memory_limit=settings.duckdb_memory_limit,
+            threads=settings.duckdb_threads,
+        )
     except duckdb.Error as error:
         if "different configuration" in str(error).lower():
             raise DatasetBusyError("Dataset is currently busy") from error

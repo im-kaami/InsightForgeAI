@@ -62,5 +62,5 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["integration: needs external DB/network"]
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration' --basetemp=.pytest_tmp"
 asyncio_mode = "auto"

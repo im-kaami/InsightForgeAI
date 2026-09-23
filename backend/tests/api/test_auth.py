@@ -2,6 +2,7 @@ async def test_health_reports_fake_llm(client):
     response = await client.get("/api/health")
     assert response.status_code == 200
     assert response.json()["llm"] == "fake"
+    assert response.json()["provider"] == "fake"
     assert response.json()["model"] == "gpt-4o-mini"
 
 

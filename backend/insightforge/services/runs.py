@@ -41,7 +41,11 @@ def execute_run(
     factory = db_factory or SessionLocal
     db = factory()
     catalog = None
-    publish = (lambda event: bus.publish(run_id, event)) if bus else (lambda event: None)
+
+    def publish(event: dict[str, Any]) -> None:
+        if bus and event.get("type") != "done":
+            bus.publish(run_id, event)
+
     try:
         run = db.get(Run, run_id)
         if not run:
@@ -62,10 +66,14 @@ def execute_run(
         memory = ConversationMemory()
         for item in reversed(previous):
             memory.add(item.goal, item.summary or "", dataset.tables_json)
+        settings = get_settings()
         agent = InsightForgeAgent(
             llm or build_llm(),
-            artifact_dir=Storage(get_settings().storage_dir).run_dir(run.owner_id, run.id),
+            artifact_dir=Storage(settings.storage_dir).run_dir(run.owner_id, run.id),
             render_png=True,
+            query_timeout=settings.query_timeout_seconds,
+            summary_max_rows=settings.llm_summary_max_rows,
+            schema_sample_rows=3 if settings.llm_send_sample_values else 0,
         )
         result = agent.run(run.goal, catalog, memory, on_event=publish)
         run.status = "completed"
@@ -89,7 +97,8 @@ def execute_run(
                 )
             )
         db.commit()
-        publish({"type": "done", "run_id": run.id})
+        if bus:
+            bus.publish(run_id, {"type": "done", "run_id": run.id})
     except Exception as error:
         db.rollback()
         run = db.get(Run, run_id)
@@ -98,7 +107,8 @@ def execute_run(
             run.error = str(error)
             run.finished_at = datetime.now(UTC)
             db.commit()
-        publish({"type": "error", "message": str(error)})
+        if bus:
+            bus.publish(run_id, {"type": "error", "message": str(error)})
     finally:
         if catalog:
             catalog.close()

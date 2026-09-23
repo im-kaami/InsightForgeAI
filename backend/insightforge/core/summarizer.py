@@ -28,8 +28,9 @@ def _pipe_table(df: pd.DataFrame, limit: int) -> str:
 
 
 class Summarizer:
-    def __init__(self, llm: LLMClient):
+    def __init__(self, llm: LLMClient, max_rows: int = 20):
         self.llm = llm
+        self.max_rows = max_rows
 
     def build_context(
         self,
@@ -44,7 +45,9 @@ class Summarizer:
         if memory and memory.turns:
             parts.append(f"Conversation so far:\n{memory.to_prompt()}")
         for name, df in tables.items():
-            parts.append(f"Table: {name}\nTotal rows: {len(df)}\n{_pipe_table(df, 20)}")
+            parts.append(
+                f"Table: {name}\nTotal rows: {len(df)}\n{_pipe_table(df, self.max_rows)}"
+            )
             numeric = df.select_dtypes(include="number")
             if not numeric.empty:
                 stats = numeric.describe().loc[["count", "mean", "min", "max"]].round(2)

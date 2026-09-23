@@ -83,6 +83,22 @@ def report(
     raise HTTPException(422, "format must be md, html, or pdf")
 
 
+@router.get("/{run_id}/artifacts/{position}/csv")
+def table_csv(run_id: str, position: int, db: Db, user: CurrentUser):
+    run = owned(db, user, run_id)
+    artifact = db.scalar(
+        select(Artifact).where(
+            Artifact.run_id == run.id,
+            Artifact.position == position,
+            Artifact.type == "table",
+        )
+    )
+    path = Path(artifact.file_path) if artifact and artifact.file_path else None
+    if not path or not path.is_file():
+        raise HTTPException(404, "Table CSV not found")
+    return FileResponse(path, media_type="text/csv", filename=f"{artifact.name}.csv")
+
+
 @router.get("/{run_id}/artifacts/{name}.png")
 def plot_file(run_id: str, name: str, db: Db, user: CurrentUser):
     run = owned(db, user, run_id)

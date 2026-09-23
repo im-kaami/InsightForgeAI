@@ -6,17 +6,21 @@ from sqlalchemy import select
 
 from insightforge.api.deps import CurrentUser, Db
 from insightforge.api.routers.sessions import run_output
-from insightforge.api.schemas import ScheduleCreate, ScheduleOut, SchedulePatch
+from insightforge.api.schemas import ScheduleCreate, ScheduleOut, ScheduleUpdate
 from insightforge.db.models import ChatSession, Dataset, Run, Schedule, User
 from insightforge.services.runs import execute_run
-from insightforge.services.scheduler import scheduler
+from insightforge.services.scheduler import schedule_timezone, scheduler
 
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 
 
-def validate_cron(value: str) -> CronTrigger:
+def validate_cron(value: str, timezone: str) -> CronTrigger:
     try:
-        return CronTrigger.from_crontab(value, timezone="UTC")
+        zone = schedule_timezone(timezone)
+    except ValueError as error:
+        raise HTTPException(422, "Unknown timezone") from error
+    try:
+        return CronTrigger.from_crontab(value, timezone=zone)
     except ValueError as error:
         raise HTTPException(422, f"Invalid cron expression: {error}") from error
 
@@ -37,7 +41,7 @@ def list_schedules(db: Db, user: CurrentUser):
 
 @router.post("", response_model=ScheduleOut, status_code=201)
 def create_schedule(body: ScheduleCreate, db: Db, user: CurrentUser):
-    trigger = validate_cron(body.cron)
+    trigger = validate_cron(body.cron, body.timezone)
     dataset = db.scalar(
         select(Dataset).where(Dataset.id == body.dataset_id, Dataset.owner_id == user.id)
     )
@@ -56,8 +60,9 @@ def create_schedule(body: ScheduleCreate, db: Db, user: CurrentUser):
         session_id=session.id,
         goal=body.goal,
         cron=body.cron,
+        timezone=body.timezone,
         enabled=body.enabled,
-        next_run_at=trigger.get_next_fire_time(None, datetime.now(UTC)),
+        next_run_at=trigger.get_next_fire_time(None, datetime.now(UTC)).astimezone(UTC),
     )
     db.add(schedule)
     db.commit()
@@ -70,15 +75,18 @@ def create_schedule(body: ScheduleCreate, db: Db, user: CurrentUser):
 @router.patch("/{schedule_id}", response_model=ScheduleOut)
 def patch_schedule(
     schedule_id: str,
-    body: SchedulePatch,
+    body: ScheduleUpdate,
     db: Db,
     user: CurrentUser,
 ):
     schedule = owned(db, user, schedule_id)
     values = body.model_dump(exclude_none=True)
-    if "cron" in values:
-        trigger = validate_cron(values["cron"])
-        schedule.next_run_at = trigger.get_next_fire_time(None, datetime.now(UTC))
+    if "cron" in values or "timezone" in values:
+        cron = values.get("cron", schedule.cron)
+        timezone = values.get("timezone", schedule.timezone)
+        trigger = validate_cron(cron, timezone)
+        next_fire = trigger.get_next_fire_time(None, datetime.now(UTC))
+        schedule.next_run_at = next_fire.astimezone(UTC) if next_fire else None
     for key, value in values.items():
         setattr(schedule, key, value)
     db.commit()

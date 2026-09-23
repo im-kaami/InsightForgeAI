@@ -12,6 +12,7 @@ from insightforge.ingest.database import load_database, parse_db_uri, redact_uri
 from insightforge.ingest.excel import load_excel
 from insightforge.ingest.files import load_file
 from insightforge.ingest.gsheets import export_url, load_gsheet, parse_gsheet
+from insightforge.ingest.netguard import validate_public_url
 from insightforge.ingest.url import download, load_url
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "parse_gsheet",
     "redact_uri",
     "table_name_for",
+    "validate_public_url",
 ]

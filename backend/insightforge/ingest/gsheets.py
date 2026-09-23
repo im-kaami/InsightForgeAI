@@ -41,6 +41,7 @@ def load_gsheet(
             max_bytes=int(source.options.get("max_bytes", 200_000_000)),
             client=client,
             allow_html=True,
+            allow_private=source.options.get("allow_private"),
         )
     except IngestError as error:
         if any(value in str(error) for value in ("HTTP 401", "HTTP 403", "authentication page")):

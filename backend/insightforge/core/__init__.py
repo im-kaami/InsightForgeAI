@@ -7,7 +7,7 @@ from insightforge.core.artifacts import (
     TableArtifact,
     TextArtifact,
 )
-from insightforge.core.catalog import DataCatalog, sanitize_identifier
+from insightforge.core.catalog import DataCatalog, QueryTimeoutError, sanitize_identifier
 from insightforge.core.executor import Executor
 from insightforge.core.llm import (
     FakeLLMClient,
@@ -20,6 +20,8 @@ from insightforge.core.llm import (
     extract_json,
     llm_mode,
     offline_fake_llm,
+    resolved_base_url,
+    resolved_model,
 )
 from insightforge.core.memory import ConversationMemory, Turn
 from insightforge.core.planner import (
@@ -35,6 +37,7 @@ from insightforge.core.planner import (
 )
 from insightforge.core.plotter import PlotError, figure_to_png, make_figure
 from insightforge.core.schema import ColumnInfo, SchemaInfo, TableInfo
+from insightforge.core.sensitivity import SENSITIVE_PATTERNS, classify_column
 from insightforge.core.sql_guard import SQLGuardError, guard_sql
 from insightforge.core.summarizer import Summarizer
 
@@ -57,7 +60,9 @@ __all__ = [
     "PlotArtifact",
     "PlotError",
     "PlotStep",
+    "QueryTimeoutError",
     "RunResult",
+    "SENSITIVE_PATTERNS",
     "SQLGuardError",
     "SchemaInfo",
     "SqlStep",
@@ -69,10 +74,13 @@ __all__ = [
     "TextArtifact",
     "Turn",
     "build_llm",
+    "classify_column",
     "describe_error",
     "extract_json",
     "llm_mode",
     "offline_fake_llm",
+    "resolved_base_url",
+    "resolved_model",
     "fallback_plan",
     "figure_to_png",
     "guard_sql",

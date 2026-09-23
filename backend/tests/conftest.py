@@ -4,6 +4,12 @@ import pandas as pd
 import pytest
 
 from insightforge.core.catalog import DataCatalog
+from insightforge.ingest import netguard
+
+
+@pytest.fixture(autouse=True)
+def public_dns(monkeypatch):
+    monkeypatch.setattr(netguard, "resolve_host", lambda _hostname: ["93.184.216.34"])
 
 
 @pytest.fixture

@@ -3,12 +3,14 @@
 *.egg-info/
 __pycache__/
 .pytest_cache/
+.pytest_tmp/
 .ruff_cache/
 .venv/
 
 # Runtime data
 storage/
 *.db
+*.db.bak-*
 .env
 out/
 

@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -8,6 +9,13 @@ from sqlalchemy.orm import Session
 from insightforge.db.models import Run, Schedule
 from insightforge.db.session import SessionLocal, configure
 from insightforge.services.runs import execute_run
+
+
+def schedule_timezone(value: str) -> ZoneInfo:
+    try:
+        return ZoneInfo(value)
+    except ZoneInfoNotFoundError as error:
+        raise ValueError(f"Unknown timezone: {value}") from error
 
 
 class SchedulerService:
@@ -28,7 +36,9 @@ class SchedulerService:
             self.add(schedule)
 
     def add(self, schedule: Schedule) -> None:
-        trigger = CronTrigger.from_crontab(schedule.cron, timezone="UTC")
+        trigger = CronTrigger.from_crontab(
+            schedule.cron, timezone=schedule_timezone(schedule.timezone)
+        )
         self.scheduler.add_job(
             self.run_schedule,
             trigger,
@@ -36,7 +46,8 @@ class SchedulerService:
             id=schedule.id,
             replace_existing=True,
         )
-        schedule.next_run_at = trigger.get_next_fire_time(None, datetime.now(UTC))
+        next_fire = trigger.get_next_fire_time(None, datetime.now(UTC))
+        schedule.next_run_at = next_fire.astimezone(UTC) if next_fire else None
 
     def remove(self, schedule_id: str) -> None:
         if self.scheduler.get_job(schedule_id):
@@ -66,8 +77,11 @@ class SchedulerService:
             schedule.last_run_id = run.id
             db.commit()
             execute_run(run.id)
-            trigger = CronTrigger.from_crontab(schedule.cron, timezone="UTC")
-            schedule.next_run_at = trigger.get_next_fire_time(None, datetime.now(UTC))
+            trigger = CronTrigger.from_crontab(
+                schedule.cron, timezone=schedule_timezone(schedule.timezone)
+            )
+            next_fire = trigger.get_next_fire_time(None, datetime.now(UTC))
+            schedule.next_run_at = next_fire.astimezone(UTC) if next_fire else None
             db.commit()
             return run.id
         finally:

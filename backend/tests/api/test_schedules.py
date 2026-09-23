@@ -1,3 +1,6 @@
+from datetime import datetime
+
+
 async def test_schedule_crud_and_run_now(client, auth_headers, hr_dataset):
     session = (
         await client.post(
@@ -9,12 +12,22 @@ async def test_schedule_crud_and_run_now(client, auth_headers, hr_dataset):
     body = {
         "dataset_id": hr_dataset["id"],
         "session_id": session["id"],
-        "goal": "weekly review",
-        "cron": "0 9 * * 1",
+        "goal": "daily review",
+        "cron": "0 9 * * *",
+        "timezone": "Asia/Karachi",
     }
     created = await client.post("/api/schedules", headers=auth_headers, json=body)
     assert created.status_code == 201, created.text
-    assert created.json()["next_run_at"]
+    assert created.json()["timezone"] == "Asia/Karachi"
+    next_run = datetime.fromisoformat(created.json()["next_run_at"])
+    assert next_run.hour == 4
+    invalid_timezone = await client.post(
+        "/api/schedules",
+        headers=auth_headers,
+        json={**body, "timezone": "Mars/Olympus"},
+    )
+    assert invalid_timezone.status_code == 422
+    assert invalid_timezone.json()["detail"] == "Unknown timezone"
     invalid = await client.post(
         "/api/schedules", headers=auth_headers, json={**body, "cron": "invalid"}
     )

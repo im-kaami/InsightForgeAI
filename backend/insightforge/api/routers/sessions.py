@@ -1,8 +1,11 @@
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException, Request, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from insightforge.api.deps import BusDep, CurrentUser, Db, LLMDep
 from insightforge.api.schemas import RunCreate, RunOut, SessionCreate, SessionOut
+from insightforge.config import get_settings
 from insightforge.db.models import Artifact, ChatSession, Dataset, Run, User
 from insightforge.db.session import SessionLocal
 from insightforge.services.runs import start_run
@@ -31,19 +34,30 @@ def run_output(db: Db, run: Run) -> RunOut:
     )
 
 
-def session_output(db: Db, session: ChatSession, include_runs: bool = True) -> SessionOut:
+def session_output(
+    db: Db,
+    session: ChatSession,
+    include_runs: bool = True,
+    run_count: int = 0,
+    last_activity_at: datetime | None = None,
+) -> SessionOut:
     runs = []
     if include_runs:
         values = db.scalars(
             select(Run).where(Run.session_id == session.id).order_by(Run.created_at)
         ).all()
         runs = [run_output(db, item) for item in values]
+        run_count = len(runs)
+        activities = [item.finished_at or item.created_at for item in values]
+        last_activity_at = max(activities, default=None)
     return SessionOut(
         id=session.id,
         dataset_id=session.dataset_id,
         title=session.title,
         created_at=session.created_at,
         runs=runs,
+        run_count=run_count,
+        last_activity_at=last_activity_at,
     )
 
 
@@ -77,12 +91,42 @@ def create_session(body: SessionCreate, db: Db, user: CurrentUser):
 @router.get("", response_model=list[SessionOut])
 def list_sessions(db: Db, user: CurrentUser):
     values = db.scalars(select(ChatSession).where(ChatSession.owner_id == user.id)).all()
-    return [session_output(db, item, include_runs=False) for item in values]
+    stats = {
+        session_id: (count, last_activity)
+        for session_id, count, last_activity in db.execute(
+            select(
+                Run.session_id,
+                func.count(),
+                func.max(func.coalesce(Run.finished_at, Run.created_at)),
+            )
+            .where(Run.owner_id == user.id)
+            .group_by(Run.session_id)
+        )
+    }
+    return [
+        session_output(
+            db,
+            item,
+            include_runs=False,
+            run_count=stats.get(item.id, (0, None))[0],
+            last_activity_at=stats.get(item.id, (0, None))[1],
+        )
+        for item in values
+    ]
 
 
 @router.get("/{session_id}", response_model=SessionOut)
 def get_session(session_id: str, db: Db, user: CurrentUser):
     return session_output(db, owned(db, user, session_id))
+
+
+@router.get("/{session_id}/runs", response_model=list[RunOut])
+def list_session_runs(session_id: str, db: Db, user: CurrentUser):
+    session = owned(db, user, session_id)
+    values = db.scalars(
+        select(Run).where(Run.session_id == session.id).order_by(Run.created_at)
+    ).all()
+    return [run_output(db, run) for run in values]
 
 
 @router.delete("/{session_id}", status_code=204)
@@ -109,6 +153,13 @@ async def create_run(
     llm: LLMDep,
 ):
     session = owned(db, user, session_id)
+    active = db.scalar(
+        select(func.count())
+        .select_from(Run)
+        .where(Run.owner_id == user.id, Run.status.in_(("pending", "running")))
+    )
+    if active >= get_settings().max_concurrent_runs_per_user:
+        raise HTTPException(429, "Too many analyses running; wait for one to finish")
     run = Run(session_id=session.id, owner_id=user.id, goal=body.goal, status="pending")
     db.add(run)
     db.commit()
