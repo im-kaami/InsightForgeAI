@@ -1,8 +1,9 @@
+import logging
 from typing import Any
 
 import pandas as pd
 
-from insightforge.core.llm import LLMClient, LLMResponse
+from insightforge.core.llm import LLMClient, LLMResponse, describe_error
 from insightforge.core.memory import ConversationMemory
 
 
@@ -73,8 +74,16 @@ class Summarizer:
         try:
             response = self.llm.chat(messages)
             return response.text, response
-        except Exception:
-            lines = ["## Analysis summary"]
+        except Exception as exc:
+            reason = describe_error(exc)
+            logging.getLogger("insightforge").warning(
+                "Summarizer falling back to raw tables: %s", reason
+            )
+            lines = [
+                f"> **LLM unavailable** ({reason}). Showing raw results instead of an executive summary.",
+                "",
+                "## Analysis summary",
+            ]
             for name, df in tables.items():
                 lines.append(f"\n### {name}\nRows: {len(df)}\n\n{_pipe_table(df, 5)}")
             if not tables:

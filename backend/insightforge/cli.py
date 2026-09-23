@@ -82,6 +82,8 @@ def _print_result(result: Any) -> None:
     print(f"\nTimings: {json.dumps(result.timings, sort_keys=True)}")
     print(f"Tokens: {json.dumps(result.token_usage, sort_keys=True)}")
     print(f"Used fallback plan: {result.used_fallback_plan}")
+    if result.fallback_reason is not None:
+        print(f"Fallback reason: {result.fallback_reason}")
 
 
 def _ask(args: argparse.Namespace) -> int:

@@ -50,3 +50,4 @@ class RunResult(BaseModel):
     timings: dict[str, float]
     token_usage: dict[str, int]
     used_fallback_plan: bool = False
+    fallback_reason: str | None = None

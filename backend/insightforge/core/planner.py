@@ -1,9 +1,10 @@
+import logging
 import re
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
-from insightforge.core.llm import LLMClient, LLMResponse
+from insightforge.core.llm import LLMClient, LLMResponse, describe_error
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.schema import SchemaInfo, TableInfo
 
@@ -185,6 +186,7 @@ class Planner:
     def __init__(self, llm: LLMClient):
         self.llm = llm
         self.last_used_fallback = False
+        self.last_fallback_reason: str | None = None
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
 
     def _record_usage(self, response: LLMResponse) -> None:
@@ -195,6 +197,7 @@ class Planner:
         self, goal: str, schema: SchemaInfo, memory: ConversationMemory | None = None
     ) -> Plan:
         self.last_used_fallback = False
+        self.last_fallback_reason = None
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
         schema_text = schema.to_prompt()
         system = f"""You are a data-analysis planner. The available schema is:
@@ -223,8 +226,12 @@ Example:
             )
             self._record_usage(response)
             return validate_plan(raw, schema)
-        except Exception:
+        except Exception as exc:
             self.last_used_fallback = True
+            self.last_fallback_reason = describe_error(exc)
+            logging.getLogger("insightforge").warning(
+                "Planner falling back to profiling plan: %s", self.last_fallback_reason
+            )
             return fallback_plan(goal, schema)
 
     def repair_sql(self, step: SqlStep, error: str, schema: SchemaInfo) -> SqlStep:

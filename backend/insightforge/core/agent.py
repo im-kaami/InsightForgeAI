@@ -44,6 +44,7 @@ class InsightForgeAgent:
                 "type": "plan",
                 "plan": plan.model_dump(mode="json"),
                 "used_fallback": self.planner.last_used_fallback,
+                "fallback_reason": self.planner.last_fallback_reason,
             }
         )
         executor = Executor(
@@ -78,4 +79,5 @@ class InsightForgeAgent:
             timings=timings,
             token_usage=token_usage,
             used_fallback_plan=self.planner.last_used_fallback,
+            fallback_reason=self.planner.last_fallback_reason,
         )

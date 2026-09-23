@@ -64,6 +64,8 @@ def test_planner_falls_back_on_garbage(schema):
     planner = Planner(FakeLLMClient(["not json"]))
     plan = planner.plan("Profile data", schema)
     assert planner.last_used_fallback is True
+    assert planner.last_fallback_reason
+    assert "LLMJSONError" in planner.last_fallback_reason
     assert any(isinstance(step, SqlStep) for step in plan.steps)
 
 

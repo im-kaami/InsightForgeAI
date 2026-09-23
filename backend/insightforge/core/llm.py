@@ -21,6 +21,10 @@ class LLMJSONError(ValueError):
     pass
 
 
+def describe_error(exc: Exception) -> str:
+    return f"{type(exc).__name__}: {str(exc)[:300]}"
+
+
 class LLMClient(Protocol):
     def chat(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> LLMResponse: ...
 

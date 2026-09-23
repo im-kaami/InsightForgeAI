@@ -41,10 +41,11 @@ test("register, ask a question, see results", async ({ page }, testInfo) => {
     await composer.fill("What is the average salary by department?");
     await composer.press("Enter");
 
-    await expect(page.getByText("Offline analysis completed", { exact: false })).toBeVisible({
+    await expect(page.getByText("completed", { exact: true })).toBeVisible({
       timeout: 60_000,
     });
     await expect(page.locator("table").last()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /summary/i }).last()).toBeVisible();
     await expect(page.locator(".js-plotly-plot svg.main-svg").first()).toBeVisible({
       timeout: 60_000,
     });

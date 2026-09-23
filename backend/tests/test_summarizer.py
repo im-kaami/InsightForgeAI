@@ -12,8 +12,10 @@ def test_context_contains_table_shape_headers_and_data(hr_df):
 
 def test_summarize_falls_back_when_llm_raises(hr_df):
     def fail(_messages):
-        raise RuntimeError("offline")
+        raise RuntimeError("boom")
 
     text, response = Summarizer(FakeLLMClient(fail)).summarize("Review HR", {"employees": hr_df})
+    assert text.startswith("> **LLM unavailable** (RuntimeError: boom)")
+    assert "## Analysis summary" in text
     assert "employees" in text
     assert response is None
