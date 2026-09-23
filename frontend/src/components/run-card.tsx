@@ -15,11 +15,19 @@ import { DataTable } from "@/components/data-table";
 import { Markdown } from "@/components/markdown";
 import { Plot } from "@/components/plot";
 import { StepTimeline } from "@/components/step-timeline";
-import { ApiError, runs, type Run } from "@/lib/api";
+import { api, ApiError, runs, type Run } from "@/lib/api";
 import type { RunEvent } from "@/lib/sse";
 
 export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] }) {
   const artifacts = run.artifacts ?? [];
+  async function downloadCsv(position: number, name: string) {
+    try {
+      await api.downloadBlob(`/runs/${run.id}/artifacts/${position}/csv`, `${name}.csv`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "CSV download failed");
+    }
+  }
+
   async function download(format: string) {
     try {
       await runs.downloadReport(run.id, format);
@@ -82,7 +90,14 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
                     sql={String(item.sql ?? "")}
                   />
                   {item.csv_path ? (
-                    <p className="text-xs text-muted-foreground">CSV saved with run artifacts</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => downloadCsv(index, String(item.name))}
+                    >
+                      <Download className="size-4" />
+                      Download CSV
+                    </Button>
                   ) : null}
                 </section>
               );

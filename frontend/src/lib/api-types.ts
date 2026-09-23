@@ -270,7 +270,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Session Runs */
+        get: operations["list_session_runs_api_sessions__session_id__runs_get"];
         put?: never;
         /** Create Run */
         post: operations["create_run_api_sessions__session_id__runs_post"];
@@ -323,6 +324,23 @@ export interface paths {
         };
         /** Report */
         get: operations["report_api_runs__run_id__report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/artifacts/{position}/csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Table Csv */
+        get: operations["table_csv_api_runs__run_id__artifacts__position__csv_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -494,6 +512,17 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HealthOut */
+        HealthOut: {
+            /** Status */
+            status: string;
+            /** Llm */
+            llm: string;
+            /** Provider */
+            provider: string;
+            /** Model */
+            model: string;
+        };
         /** RunCreate */
         RunCreate: {
             /** Goal */
@@ -553,6 +582,11 @@ export interface components {
             /** Cron */
             cron: string;
             /**
+             * Timezone
+             * @default UTC
+             */
+            timezone: string;
+            /**
              * Enabled
              * @default true
              */
@@ -570,6 +604,11 @@ export interface components {
             goal: string;
             /** Cron */
             cron: string;
+            /**
+             * Timezone
+             * @default UTC
+             */
+            timezone: string;
             /** Enabled */
             enabled: boolean;
             /** Last Run At */
@@ -584,12 +623,14 @@ export interface components {
              */
             created_at: string;
         };
-        /** SchedulePatch */
-        SchedulePatch: {
+        /** ScheduleUpdate */
+        ScheduleUpdate: {
             /** Goal */
             goal?: string | null;
             /** Cron */
             cron?: string | null;
+            /** Timezone */
+            timezone?: string | null;
             /** Enabled */
             enabled?: boolean | null;
         };
@@ -615,6 +656,13 @@ export interface components {
             created_at: string;
             /** Runs */
             runs?: components["schemas"]["RunOut"][];
+            /**
+             * Run Count
+             * @default 0
+             */
+            run_count: number;
+            /** Last Activity At */
+            last_activity_at?: string | null;
         };
         /** Token */
         Token: {
@@ -1225,6 +1273,37 @@ export interface operations {
             };
         };
     };
+    list_session_runs_api_sessions__session_id__runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_run_api_sessions__session_id__runs_post: {
         parameters: {
             query?: never;
@@ -1330,6 +1409,38 @@ export interface operations {
             header?: never;
             path: {
                 run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    table_csv_api_runs__run_id__artifacts__position__csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                position: number;
             };
             cookie?: never;
         };
@@ -1480,7 +1591,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SchedulePatch"];
+                "application/json": components["schemas"]["ScheduleUpdate"];
             };
         };
         responses: {
@@ -1550,7 +1661,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["HealthOut"];
                 };
             };
         };

@@ -11,6 +11,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { datasets, runs, sessions, type Run } from "@/lib/api";
 import { streamRunEvents, type RunEvent } from "@/lib/sse";
 
+async function waitForTerminalRun(runId: string): Promise<Run> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const run = await runs.get(runId);
+    if (["completed", "failed"].includes(run.status)) return run;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error("Run completion was not persisted in time");
+}
+
 export default function SessionPage() {
   const id = String(useParams().id);
   const client = useQueryClient();
@@ -35,7 +44,7 @@ export default function SessionPage() {
       await streamRunEvents(run.id, (event) =>
         setLive((value) => ({ ...value, [run.id]: [...(value[run.id] ?? []), event] })),
       );
-      const complete = await runs.get(run.id);
+      const complete = await waitForTerminalRun(run.id);
       setPending((items) => items.filter((item) => item.id !== run.id));
       client.setQueryData(["session", id], (value: typeof query.data) =>
         value ? { ...value, runs: [...(value.runs ?? []), complete] } : value,

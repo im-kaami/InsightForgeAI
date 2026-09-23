@@ -40,7 +40,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 
 const json = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 
-export const health = () => apiFetch<{ status: string; llm: string; model: string }>("/health");
+export const health = () => apiFetch<components["schemas"]["HealthOut"]>("/health");
 
 export const auth = {
   register: (email: string, password: string) =>
@@ -90,32 +90,40 @@ export const connections = {
 export const sessions = {
   list: () => apiFetch<Session[]>("/sessions"),
   get: (id: string) => apiFetch<Session>(`/sessions/${id}`),
+  runs: (id: string) => apiFetch<Run[]>(`/sessions/${id}/runs`),
   create: (dataset_id: string, title?: string) =>
     apiFetch<Session>("/sessions", json({ dataset_id, title })),
   remove: (id: string) => apiFetch<void>(`/sessions/${id}`, { method: "DELETE" }),
   createRun: (id: string, goal: string) => apiFetch<Run>(`/sessions/${id}/runs`, json({ goal })),
 };
 
+export async function downloadBlob(path: string, filename: string) {
+  const token = localStorage.getItem("if_token");
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new ApiError(response.status, body.detail ?? response.statusText);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+export const api = { downloadBlob };
+
 export const runs = {
   get: (id: string) => apiFetch<Run>(`/runs/${id}`),
   reportUrl: (id: string, format: string) => `${API_BASE}/runs/${id}/report?format=${format}`,
-  downloadReport: async (id: string, format: string) => {
-    const token = localStorage.getItem("if_token");
-    const response = await fetch(`${API_BASE}/runs/${id}/report?format=${format}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new ApiError(response.status, body.detail ?? response.statusText);
-    }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `insightforge-${id}.${format}`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  },
+  downloadReport: (id: string, format: string) =>
+    downloadBlob(`/runs/${id}/report?format=${format}`, `insightforge-${id}.${format}`),
 };
 
 export const schedules = {

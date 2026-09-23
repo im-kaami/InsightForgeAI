@@ -32,9 +32,9 @@ import {
 import { datasets, schedules, sessions } from "@/lib/api";
 
 const presets = [
-  ["Daily 9:00", "0 9 * * *"],
-  ["Weekly Mon 9:00", "0 9 * * 1"],
-  ["Monthly 1st", "0 9 1 * *"],
+  ["Daily 09:00", "0 9 * * *"],
+  ["Weekly Mon 09:00", "0 9 * * 1"],
+  ["Monthly 1st 09:00", "0 9 1 * *"],
 ];
 export default function SchedulesPage() {
   const query = useQuery({ queryKey: ["schedules"], queryFn: schedules.list });
@@ -46,6 +46,7 @@ export default function SchedulesPage() {
   const [datasetId, setDatasetId] = useState("");
   const [goal, setGoal] = useState("");
   const [cron, setCron] = useState("0 9 * * *");
+  const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   async function runNow(scheduleId: string, sessionId: string) {
     const run = await schedules.runNow(scheduleId);
     toast.success(`Run ${run.status}`, {
@@ -64,6 +65,7 @@ export default function SchedulesPage() {
       session_id: session.id,
       goal,
       cron,
+      timezone,
       enabled: true,
     });
     await client.invalidateQueries({ queryKey: ["schedules"] });
@@ -101,6 +103,9 @@ export default function SchedulesPage() {
               <Input value={goal} onChange={(event) => setGoal(event.target.value)} />
               <Label>Cron expression</Label>
               <Input value={cron} onChange={(event) => setCron(event.target.value)} />
+              <Label>Time zone</Label>
+              <Input value={timezone} onChange={(event) => setTimezone(event.target.value)} />
+              <p className="text-xs text-muted-foreground">Times are in {timezone}</p>
               <div className="flex flex-wrap gap-2">
                 {presets.map(([label, value]) => (
                   <Button key={value} variant="outline" size="sm" onClick={() => setCron(value)}>
@@ -121,6 +126,7 @@ export default function SchedulesPage() {
             <TableHead>Goal</TableHead>
             <TableHead>Cron</TableHead>
             <TableHead>Next run</TableHead>
+            <TableHead>Time zone</TableHead>
             <TableHead>Enabled</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
@@ -133,6 +139,7 @@ export default function SchedulesPage() {
               <TableCell>
                 {item.next_run_at ? new Date(item.next_run_at).toLocaleString() : "—"}
               </TableCell>
+              <TableCell>{item.timezone}</TableCell>
               <TableCell>
                 <Button
                   variant="ghost"

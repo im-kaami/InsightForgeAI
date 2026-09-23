@@ -51,7 +51,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {healthQuery.data?.llm === "fake" ? (
               <Badge variant="outline">Offline mode – set LLM_API_KEY</Badge>
             ) : healthQuery.data ? (
-              <p className="px-1 text-xs text-muted-foreground">{healthQuery.data.model}</p>
+              <p className="px-1 text-xs text-muted-foreground">
+                {healthQuery.data.provider} · {healthQuery.data.model}
+              </p>
             ) : null}
             <div className="rounded-lg border p-3 text-xs text-muted-foreground">
               <p className="truncate">{user?.email}</p>

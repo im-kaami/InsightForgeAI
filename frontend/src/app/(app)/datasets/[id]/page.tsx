@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { AddDataDialog } from "@/components/add-data-dialog";
 import { DataTable } from "@/components/data-table";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,7 +23,12 @@ import { cn } from "@/lib/utils";
 type SchemaTable = {
   name: string;
   row_count: number;
-  columns: { name: string; dtype: string; sample_values?: string[] }[];
+  columns: {
+    name: string;
+    dtype: string;
+    sample_values?: string[];
+    sensitivity?: string | null;
+  }[];
 };
 export default function DatasetPage() {
   const id = String(useParams().id);
@@ -109,7 +115,10 @@ export default function DatasetPage() {
                     <TabsTrigger value="columns">Columns</TabsTrigger>
                     <TabsTrigger value="preview">Preview</TabsTrigger>
                   </TabsList>
-                  <TabsContent value="columns">
+                  <TabsContent value="columns" className="space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      Sample values of columns flagged as sensitive are never sent to the LLM.
+                    </p>
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -121,7 +130,14 @@ export default function DatasetPage() {
                       <TableBody>
                         {table.columns.map((column) => (
                           <TableRow key={column.name}>
-                            <TableCell className="font-medium">{column.name}</TableCell>
+                            <TableCell className="font-medium">
+                              <span className="flex items-center gap-2">
+                                {column.name}
+                                {column.sensitivity && (
+                                  <Badge variant="outline">{column.sensitivity}</Badge>
+                                )}
+                              </span>
+                            </TableCell>
                             <TableCell>{column.dtype}</TableCell>
                             <TableCell className="text-muted-foreground">
                               {column.sample_values?.join(", ")}
