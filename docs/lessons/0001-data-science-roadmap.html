@@ -1,0 +1,1016 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 1 - The InsightForge Data Science Roadmap, Explained Simply</title>
+<style>
+  :root {
+    --ink: #1f2328;
+    --muted: #5b6470;
+    --paper: #fffdf7;
+    --panel: #ffffff;
+    --line: #e7e2d6;
+    --base: #475569;
+    --p0: #0284c7;
+    --p1: #7c3aed;
+    --p2: #059669;
+    --p3: #d97706;
+    --p4: #e11d48;
+    --p5: #2563eb;
+    --good: #15803d;
+    --bad: #b91c1c;
+    --sans: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 18px/1.65 var(--serif); }
+  a { color: var(--p5); }
+  #progress { position: fixed; top: 0; left: 0; height: 4px; width: 0; background: linear-gradient(90deg, var(--p0), var(--p1), var(--p2), var(--p3), var(--p4), var(--p5)); z-index: 20; }
+  nav.top { position: sticky; top: 0; z-index: 10; background: rgba(255, 253, 247, 0.94); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); font: 14px/1 var(--sans); }
+  nav.top .inner { max-width: 1040px; margin: 0 auto; padding: 12px 24px; display: flex; gap: 16px; overflow-x: auto; white-space: nowrap; }
+  nav.top a { color: var(--muted); text-decoration: none; }
+  nav.top a:hover { color: var(--ink); }
+  nav.top .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+  main { max-width: 1040px; margin: 0 auto; padding: 0 24px 96px; }
+  .prose { max-width: 720px; }
+  header.hero { padding: 56px 0 24px; }
+  .kicker { font: 600 13px/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  h1 { font-size: 44px; line-height: 1.15; margin: 12px 0 16px; font-weight: 600; }
+  h2 { font-size: 30px; line-height: 1.25; margin: 72px 0 12px; font-weight: 600; }
+  h3 { font-size: 21px; margin: 28px 0 8px; font-weight: 600; }
+  p { margin: 0 0 16px; }
+  .lede { font-size: 21px; color: #333a42; }
+  .meta { font: 14px/1.5 var(--sans); color: var(--muted); }
+  .box { font-family: var(--sans); font-size: 16px; line-height: 1.55; border-radius: 12px; padding: 16px 20px; margin: 20px 0; }
+  .mission { background: #fff7e6; border: 1px solid #f3d9a4; }
+  .mission strong { color: #8a5a00; }
+  .analogy { background: #f3f0ff; border: 1px solid #ddd3fb; }
+  .shortcut { background: #ecfdf5; border: 1px solid #b7ebd3; }
+  .ask { background: #eff6ff; border: 1px solid #c9ddfb; }
+  .warn { background: #fff1f2; border: 1px solid #fbcad2; }
+  .decide { background: #f8fafc; border: 2px dashed #94a3b8; }
+  figure { margin: 28px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption { font: 14px/1.5 var(--sans); color: var(--muted); margin-top: 10px; }
+  figcaption b { color: var(--ink); }
+  sup a { text-decoration: none; font: 600 11px var(--sans); padding: 0 2px; }
+  .term { border-bottom: 1.5px dotted #8b95a1; cursor: help; position: relative; }
+  .term:hover::after, .term:focus::after {
+    content: attr(data-tip); position: absolute; left: 0; top: 130%; width: 280px; z-index: 5;
+    background: #1f2328; color: #fff; font: 13px/1.45 var(--sans); padding: 10px 12px; border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.18); white-space: normal;
+  }
+  ol.spots { font: 16px/1.55 var(--sans); padding-left: 0; list-style: none; counter-reset: s; }
+  ol.spots li { counter-increment: s; margin: 10px 0; padding-left: 40px; position: relative; }
+  ol.spots li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--bad); color: #fff; font-weight: 700; font-size: 14px; display: grid; place-items: center; }
+  table.card { width: 100%; border-collapse: collapse; font: 15px/1.45 var(--sans); }
+  table.card th, table.card td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.card th { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .pill { display: inline-block; font: 600 12px/1 var(--sans); padding: 5px 9px; border-radius: 999px; }
+  .pill.have { background: #dcfce7; color: #166534; }
+  .pill.part { background: #fef3c7; color: #92400e; }
+  .pill.miss { background: #fee2e2; color: #991b1b; }
+  section.phase { margin-top: 80px; border-left: 6px solid var(--c); padding-left: 24px; }
+  section.phase .tag { font: 700 13px/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--c); }
+  section.phase h2 { margin-top: 8px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .ba { font: 15px/1.5 var(--sans); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--line); background: #fff; }
+  .ba .lbl { font: 700 12px/1 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+  .ba.before .lbl { color: var(--bad); }
+  .ba.after .lbl { color: var(--good); }
+  .ba code, .mono { font: 14px ui-monospace, "Cascadia Code", Consolas, monospace; background: #f4f4f5; padding: 1px 5px; border-radius: 4px; }
+  .tile { font: 14px/1.45 var(--sans); background: #fff; border: 1px solid var(--line); border-top: 5px solid var(--p2); border-radius: 10px; padding: 12px; }
+  .tile .q { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+  .tile .m { color: var(--muted); }
+  .tile.hatch { border: 2px dashed var(--p2); border-top-width: 5px; background: #f6fffb; }
+  .win { font: 16px/1.55 var(--sans); background: #fff; border: 1px solid var(--line); border-left: 5px solid var(--c); border-radius: 10px; padding: 12px 16px; margin: 18px 0; }
+  .win b { color: var(--c); }
+  .why { font: 15px/1.55 var(--sans); color: #39414a; }
+  details { font: 15px/1.55 var(--sans); background: #fafaf9; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 14px 0; }
+  details summary { cursor: pointer; font-weight: 600; color: var(--muted); }
+  ul.plain { font: 16px/1.6 var(--sans); padding-left: 20px; }
+  ul.plain li { margin: 6px 0; }
+  .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: 14px/1.3 var(--sans); margin: 12px 0; }
+  .chip { background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; }
+  .chip.hot { background: var(--p4); color: #fff; border-color: var(--p4); }
+  .arrow { color: var(--muted); font-weight: 700; }
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .mode { font: 14px/1.5 var(--sans); background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .mode h4 { margin: 0 0 4px; font-size: 16px; }
+  .mode .sees { color: var(--muted); margin-bottom: 10px; min-height: 44px; }
+  .mini { width: 100%; border-collapse: collapse; font: 13px var(--sans); }
+  .mini td, .mini th { border: 1px solid #e5e7eb; padding: 5px 8px; }
+  .mini th { background: #f3f4f6; text-align: left; }
+  .blur { filter: blur(4px); user-select: none; }
+  .frame { outline: 3px solid #86efac; outline-offset: 3px; border-radius: 4px; }
+  .ladder { font: 15px/1.4 var(--sans); }
+  .rung { color: #fff; border-radius: 10px; padding: 12px 16px; margin: 8px 0; display: flex; justify-content: space-between; gap: 12px; }
+  .rung span:last-child { opacity: 0.9; font-size: 13px; text-align: right; }
+  .quiz { font-family: var(--sans); }
+  .qq { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 14px 0; }
+  .qq .qt { font-weight: 700; margin-bottom: 10px; font-size: 16px; }
+  .qq button { display: block; width: 100%; text-align: left; font: 15px/1.4 var(--sans); background: #f8fafc; border: 1px solid #d7dde4; border-radius: 8px; padding: 10px 12px; margin: 6px 0; cursor: pointer; color: var(--ink); }
+  .qq button:hover:not(:disabled) { background: #eef2f7; }
+  .qq button.right { background: #dcfce7; border-color: #22c55e; }
+  .qq button.wrong { background: #fee2e2; border-color: #ef4444; }
+  .qq button:disabled { cursor: default; }
+  .qq .fb { display: none; font-size: 14px; margin-top: 8px; color: #334155; }
+  .qq.done .fb { display: block; }
+  .score { font: 600 16px var(--sans); }
+  .btn { font: 600 15px var(--sans); background: var(--ink); color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
+  .reveal { display: none; }
+  .reveal.show { display: block; }
+  dl.gloss { font: 15px/1.5 var(--sans); display: grid; grid-template-columns: 220px 1fr; gap: 8px 20px; }
+  dl.gloss dt { font-weight: 700; }
+  dl.gloss dd { margin: 0; color: #39414a; }
+  ol.src { font: 14px/1.6 var(--sans); color: #39414a; }
+  footer { font: 14px/1.6 var(--sans); color: var(--muted); border-top: 1px solid var(--line); margin-top: 64px; padding-top: 20px; }
+  @media (max-width: 800px) {
+    h1 { font-size: 34px; }
+    .grid2, .modes { grid-template-columns: 1fr; }
+    .grid4 { grid-template-columns: 1fr 1fr; }
+    dl.gloss { grid-template-columns: 1fr; }
+  }
+  @media print {
+    nav.top, #progress { display: none; }
+    figure, .box, .qq { break-inside: avoid; }
+    body { font-size: 12pt; }
+  }
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<nav class="top" aria-label="Sections">
+  <div class="inner">
+    <a href="#start">Start</a>
+    <a href="#today">Today</a>
+    <a href="#big-idea">Big idea</a>
+    <a href="#roadmap">Roadmap</a>
+    <a href="#phase-0"><span class="dot" style="background:var(--p0)"></span>Phase 0</a>
+    <a href="#phase-1"><span class="dot" style="background:var(--p1)"></span>Phase 1</a>
+    <a href="#phase-2"><span class="dot" style="background:var(--p2)"></span>Phase 2</a>
+    <a href="#phase-3"><span class="dot" style="background:var(--p3)"></span>Phase 3</a>
+    <a href="#phase-4"><span class="dot" style="background:var(--p4)"></span>Phase 4</a>
+    <a href="#phase-5"><span class="dot" style="background:var(--p5)"></span>Phase 5</a>
+    <a href="#safety">Safety rails</a>
+    <a href="#decide">Your decision</a>
+    <a href="#quiz">Quiz</a>
+    <a href="#glossary">Glossary</a>
+    <a href="#sources">Sources</a>
+  </div>
+</nav>
+
+<main>
+<header class="hero" id="start">
+  <div class="kicker">Lesson 0001 &middot; InsightForge roadmap</div>
+  <h1>From "ask a question, get a chart" to a full data science app</h1>
+  <p class="lede prose">A picture-first explanation of what InsightForge does today, what is missing, and the six phases that would turn it into a complete data science application.</p>
+  <p class="meta">About 15 minutes. Written on 2026-09-27 from the code in this repository and the research linked in <a href="#sources">Sources</a>. Hover over any <span class="term" tabindex="0" data-tip="Like this: a short plain-English definition. The full list is in the Glossary at the bottom.">dotted word</span> to see what it means.</p>
+
+  <div class="box mission prose">
+    <strong>Your mission:</strong> turn InsightForge from a tool that writes SQL and draws charts into a full data science application: one that can test ideas, forecast, predict and warn you. It must keep the trust features you already built.
+  </div>
+
+  <div class="box analogy prose">
+    <strong>One picture to keep in your head:</strong> think of InsightForge as a <b>junior analyst you hired</b>. Today the analyst is honest and careful about where data comes from, but answers every question with one quick query and never double-checks. Each phase of the roadmap trains that analyst, step by step, into a senior data scientist.
+  </div>
+
+  <div class="box shortcut prose">
+    <strong>Short on time?</strong> Look at the diagrams and read the colored "After this phase" boxes. That is 80% of the lesson.
+  </div>
+</header>
+
+<!-- ============================ TODAY ============================ -->
+<section id="today">
+  <h2>1. Where InsightForge is today</h2>
+  <div class="prose">
+    <p>When you ask a question, six things happen in a straight line. An <span class="term" tabindex="0" data-tip="A large language model: the text AI (for example GPT or Llama) that reads your question and writes a plan and SQL.">AI model</span> writes a plan, a <span class="term" tabindex="0" data-tip="Code that reads each SQL query before it runs and blocks anything that could change data or read files. It only allows read-only questions.">safety check</span> approves the SQL, <span class="term" tabindex="0" data-tip="The fast analytics database built into InsightForge. It stores your uploaded tables and runs the SQL queries.">DuckDB</span> runs it, and you get a chart and a written summary.</p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 920 270" role="img" aria-label="Today's pipeline: question, AI planner, safety check, DuckDB, chart, summary, with five weak spots and six missing capabilities">
+      <defs>
+        <marker id="aT" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker>
+      </defs>
+      <g font-family="system-ui, Segoe UI, sans-serif">
+        <path d="M318,52 L318,42 L600,42 L600,52" fill="none" stroke="#15803d" stroke-width="2"/>
+        <text x="459" y="32" text-anchor="middle" font-size="13" font-weight="700" fill="#15803d">Trust layer: keep this</text>
+
+        <g font-size="14" text-anchor="middle">
+          <rect x="10" y="62" width="128" height="72" rx="10" fill="#f1f5f9" stroke="#94a3b8"/>
+          <text x="74" y="92" font-weight="700" fill="#1f2328">Your question</text>
+          <text x="74" y="112" font-size="12" fill="#5b6470">typed in chat</text>
+
+          <rect x="164" y="62" width="128" height="72" rx="10" fill="#f5f3ff" stroke="#7c3aed"/>
+          <text x="228" y="92" font-weight="700" fill="#1f2328">AI planner</text>
+          <text x="228" y="112" font-size="12" fill="#5b6470">one plan, max 6 steps</text>
+
+          <rect x="318" y="62" width="128" height="72" rx="10" fill="#ecfdf5" stroke="#15803d"/>
+          <text x="382" y="92" font-weight="700" fill="#1f2328">Safety check</text>
+          <text x="382" y="112" font-size="12" fill="#5b6470">read-only SQL only</text>
+
+          <rect x="472" y="62" width="128" height="72" rx="10" fill="#ecfdf5" stroke="#15803d"/>
+          <text x="536" y="92" font-weight="700" fill="#1f2328">DuckDB</text>
+          <text x="536" y="112" font-size="12" fill="#5b6470">runs the query</text>
+
+          <rect x="626" y="62" width="128" height="72" rx="10" fill="#f1f5f9" stroke="#94a3b8"/>
+          <text x="690" y="92" font-weight="700" fill="#1f2328">Chart</text>
+          <text x="690" y="112" font-size="12" fill="#5b6470">5 chart types</text>
+
+          <rect x="780" y="62" width="128" height="72" rx="10" fill="#f1f5f9" stroke="#94a3b8"/>
+          <text x="844" y="92" font-weight="700" fill="#1f2328">Summary</text>
+          <text x="844" y="112" font-size="12" fill="#5b6470">written by the AI</text>
+        </g>
+
+        <g stroke="#64748b" stroke-width="2" marker-end="url(#aT)">
+          <line x1="140" y1="98" x2="161" y2="98"/>
+          <line x1="294" y1="98" x2="315" y2="98"/>
+          <line x1="448" y1="98" x2="469" y2="98"/>
+          <line x1="602" y1="98" x2="623" y2="98"/>
+          <line x1="756" y1="98" x2="777" y2="98"/>
+        </g>
+
+        <g font-size="13" font-weight="700" fill="#fff" text-anchor="middle">
+          <circle cx="270" cy="62" r="12" fill="#b91c1c"/><text x="270" y="67">1</text>
+          <circle cx="292" cy="134" r="12" fill="#b91c1c"/><text x="292" y="139">2</text>
+          <circle cx="446" cy="62" r="12" fill="#b91c1c"/><text x="446" y="67">3</text>
+          <circle cx="754" cy="62" r="12" fill="#b91c1c"/><text x="754" y="67">4</text>
+          <circle cx="908" cy="62" r="12" fill="#b91c1c"/><text x="908" y="67">5</text>
+        </g>
+
+        <text x="10" y="186" font-size="13" font-weight="700" fill="#5b6470">NOT BUILT YET</text>
+        <g font-size="13" text-anchor="middle" fill="#5b6470">
+          <rect x="10" y="200" width="140" height="44" rx="8" fill="none" stroke="#94a3b8" stroke-dasharray="6 5"/><text x="80" y="227">Statistics</text>
+          <rect x="163" y="200" width="140" height="44" rx="8" fill="none" stroke="#94a3b8" stroke-dasharray="6 5"/><text x="233" y="227">Forecasting</text>
+          <rect x="316" y="200" width="140" height="44" rx="8" fill="none" stroke="#94a3b8" stroke-dasharray="6 5"/><text x="386" y="227">Prediction models</text>
+          <rect x="469" y="200" width="140" height="44" rx="8" fill="none" stroke="#94a3b8" stroke-dasharray="6 5"/><text x="539" y="227">Data cleaning</text>
+          <rect x="622" y="200" width="140" height="44" rx="8" fill="none" stroke="#94a3b8" stroke-dasharray="6 5"/><text x="692" y="227">Dashboards</text>
+          <rect x="775" y="200" width="133" height="44" rx="8" fill="none" stroke="#94a3b8" stroke-dasharray="6 5"/><text x="841" y="227">Teams</text>
+        </g>
+      </g>
+    </svg>
+    <figcaption><b>Figure 1.</b> Today's pipeline. Green boxes are the trust layer you already built. Red numbers are weak spots (listed below). Dashed boxes are things a data science app needs but InsightForge does not have yet.</figcaption>
+  </figure>
+
+  <div class="prose">
+    <h3>The five weak spots, in plain words</h3>
+    <ol class="spots">
+      <li><b>It plans once and never looks back.</b> The AI writes up to 6 steps at the start and runs them blindly, like a vending machine. If step 2 gives a strange result, nobody notices.</li>
+      <li><b>"Local only" mode is not really useful.</b> It is the default privacy setting, but it always swaps in a basic stand-in AI, even if you run a real AI on your own computer. The result is only simple counts.</li>
+      <li><b>Results can be cut off silently.</b> Queries are capped at 10,000 rows, and the screen then reports 10,000 as the total, with no warning.</li>
+      <li><b>Charts only draw the first 500 rows</b> for bar, line and pie charts, again with no warning.</li>
+      <li><b>Summary numbers are not linked to evidence.</b> Your checked sales report links every number to its source; ordinary chat answers do not.</li>
+    </ol>
+    <p>The good news: your <b>trust layer</b> is rare. A survey of 45 AI data science agents found more than 90% had no explicit trust or safety features.<sup><a href="#src-3">[3]</a></sup> In another study, 74% of business users admitted they had shipped a wrong number that came from AI.<sup><a href="#src-8">[8]</a></sup> People want answers they can check, and that is exactly what you already care about.</p>
+  </div>
+
+  <h3>Report card: the data science lifecycle</h3>
+  <p class="prose">Data science work usually moves through these stages. Here is how InsightForge scores on each.</p>
+  <figure>
+    <table class="card">
+      <thead><tr><th>Stage</th><th>What it means</th><th>Today</th><th>Missing</th></tr></thead>
+      <tbody>
+        <tr><td><b>Understand the question</b></td><td>Know exactly what the person is asking</td><td><span class="pill part">Partial</span></td><td>Clarifying questions, a shared list of business definitions</td></tr>
+        <tr><td><b>Get the data</b></td><td>Connect files and databases</td><td><span class="pill have">Good</span></td><td>Snowflake, BigQuery, SaaS apps, private Google Sheets, PDFs</td></tr>
+        <tr><td><b>Clean the data</b></td><td>Fix types, duplicates, gaps; join tables</td><td><span class="pill miss">Missing</span></td><td>Repeatable cleaning steps, validation rules</td></tr>
+        <tr><td><b>Explore the data</b></td><td>See shapes, outliers, patterns</td><td><span class="pill part">Partial</span></td><td>Distributions, outliers, correlations, more chart types</td></tr>
+        <tr><td><b>Statistics</b></td><td>Is a difference real or just luck?</td><td><span class="pill miss">Missing</span></td><td>Tests that check their own assumptions, A/B tests, regression</td></tr>
+        <tr><td><b>Modeling</b></td><td>Predict and forecast</td><td><span class="pill miss">Missing</span></td><td>Forecasting, prediction models, clustering, anomaly detection</td></tr>
+        <tr><td><b>Explain</b></td><td>Why did it happen? What drives it?</td><td><span class="pill part">Partial</span></td><td>"Why did it change?" analysis, model explanations</td></tr>
+        <tr><td><b>Deploy and monitor</b></td><td>Keep models and reports running</td><td><span class="pill part">Partial</span></td><td>Saved models, scoring new data, drift alerts, email/Slack delivery</td></tr>
+        <tr><td><b>Work together</b></td><td>Share with a team</td><td><span class="pill miss">Missing</span></td><td>Teams, roles, sharing, comments, dashboards</td></tr>
+      </tbody>
+    </table>
+  </figure>
+</section>
+
+<!-- ============================ BIG IDEA ============================ -->
+<section id="big-idea">
+  <h2>2. The two big ideas behind the whole plan</h2>
+
+  <h3>Big idea 1: from vending machine to analyst loop</h3>
+  <div class="prose">
+    <p>A good human analyst does not plan everything upfront. They run a query, look at the result, notice something odd, adjust, and double-check before answering. Research agents that work this way score much better. Google's <b>DS-STAR</b> repeats plan, code and check for up to 10 rounds, and raised its score on the hard DABStep benchmark from 41.0% to 45.2%.<sup><a href="#src-1">[1]</a></sup> <b>Data Interpreter</b>, which checks each step, went from 75.9% to 94.9% on another benchmark.<sup><a href="#src-2">[2]</a></sup></p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 900 320" role="img" aria-label="Left: today's one-shot flow. Right: the analyst loop of plan, act, observe, check.">
+      <defs>
+        <marker id="aL" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker>
+        <marker id="aV" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/></marker>
+      </defs>
+      <g font-family="system-ui, Segoe UI, sans-serif">
+        <rect x="10" y="10" width="380" height="300" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
+        <text x="200" y="40" text-anchor="middle" font-size="15" font-weight="700" fill="#475569">TODAY: VENDING MACHINE</text>
+        <g font-size="14" text-anchor="middle" fill="#1f2328">
+          <rect x="100" y="58" width="200" height="38" rx="8" fill="#fff" stroke="#94a3b8"/><text x="200" y="82">Question</text>
+          <rect x="100" y="118" width="200" height="38" rx="8" fill="#fff" stroke="#94a3b8"/><text x="200" y="142">Plan every step at once</text>
+          <rect x="100" y="178" width="200" height="38" rx="8" fill="#fff" stroke="#94a3b8"/><text x="200" y="202">Run all steps blindly</text>
+          <rect x="100" y="238" width="200" height="38" rx="8" fill="#fff" stroke="#94a3b8"/><text x="200" y="262">Answer</text>
+        </g>
+        <g stroke="#64748b" stroke-width="2" marker-end="url(#aL)">
+          <line x1="200" y1="97" x2="200" y2="115"/>
+          <line x1="200" y1="157" x2="200" y2="175"/>
+          <line x1="200" y1="217" x2="200" y2="235"/>
+        </g>
+        <text x="200" y="298" text-anchor="middle" font-size="13" font-style="italic" fill="#b91c1c">No second look. No questions back.</text>
+
+        <rect x="410" y="10" width="480" height="300" rx="14" fill="#faf8ff" stroke="#ddd3fb"/>
+        <text x="650" y="40" text-anchor="middle" font-size="15" font-weight="700" fill="#7c3aed">GOAL: ANALYST LOOP</text>
+
+        <g stroke="#7c3aed" stroke-width="2.5" fill="none" marker-end="url(#aV)">
+          <path d="M684,94 Q742,102 748,139"/>
+          <path d="M748,211 Q742,250 684,258"/>
+          <path d="M616,258 Q558,250 552,211"/>
+          <path d="M552,139 Q558,102 614,93"/>
+        </g>
+        <g text-anchor="middle" font-size="14" font-weight="700" fill="#fff">
+          <circle cx="650" cy="88" r="34" fill="#7c3aed"/><text x="650" y="93">Plan</text>
+          <circle cx="750" cy="175" r="34" fill="#7c3aed"/><text x="750" y="180">Act</text>
+          <circle cx="650" cy="262" r="34" fill="#7c3aed"/><text x="650" y="267">Observe</text>
+          <circle cx="550" cy="175" r="34" fill="#7c3aed"/><text x="550" y="180">Check</text>
+        </g>
+        <text x="650" y="172" text-anchor="middle" font-size="12" fill="#6d28d9">repeat until</text>
+        <text x="650" y="188" text-anchor="middle" font-size="12" fill="#6d28d9">the answer holds up</text>
+
+        <rect x="424" y="62" width="84" height="30" rx="8" fill="#fff" stroke="#94a3b8"/>
+        <text x="466" y="82" text-anchor="middle" font-size="13" fill="#1f2328">Question</text>
+        <line x1="510" y1="80" x2="612" y2="84" stroke="#64748b" stroke-width="2" marker-end="url(#aL)"/>
+
+        <rect x="424" y="262" width="84" height="30" rx="8" fill="#dcfce7" stroke="#22c55e"/>
+        <text x="466" y="282" text-anchor="middle" font-size="13" fill="#1f2328">Answer</text>
+        <line x1="530" y1="204" x2="484" y2="258" stroke="#64748b" stroke-width="2" marker-end="url(#aL)"/>
+
+        <rect x="738" y="56" width="146" height="30" rx="15" fill="#fff" stroke="#7c3aed"/>
+        <text x="811" y="76" text-anchor="middle" font-size="12" fill="#6d28d9">Asks you: which period?</text>
+        <line x1="738" y1="72" x2="685" y2="80" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4 3"/>
+      </g>
+    </svg>
+    <figcaption><b>Figure 2.</b> Today the planner is a vending machine: question in, one fixed plan, answer out. The goal is a loop that plans, acts, looks at the result, checks it, and can ask you a question when something is unclear.</figcaption>
+  </figure>
+
+  <h3>Big idea 2: the AI chooses, tested code calculates</h3>
+  <div class="prose">
+    <p>AI models are good at understanding questions and poor at arithmetic and statistics. A 2026 study found that AI agents make subtle mistakes in statistical tests even when their code runs without errors.<sup><a href="#src-6">[6]</a></sup> So the AI should only <i>pick</i> the method and the columns. Well-tested code, like a statistics library, does the actual maths. Your checked sales report already works this way; the plan extends the idea to everything.</p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 900 200" role="img" aria-label="AI model chooses a method, tested code calculates, result card holds the evidence">
+      <defs>
+        <marker id="aC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker>
+      </defs>
+      <g font-family="system-ui, Segoe UI, sans-serif" font-size="13" fill="#1f2328">
+        <rect x="10" y="30" width="250" height="120" rx="12" fill="#f5f3ff" stroke="#7c3aed"/>
+        <text x="30" y="58" font-size="15" font-weight="700" fill="#6d28d9">AI model: chooses</text>
+        <text x="30" y="84">Question: do regions really differ?</text>
+        <text x="30" y="106">Picks: the compare-groups test</text>
+        <text x="30" y="128">on order_value, grouped by region</text>
+
+        <rect x="325" y="30" width="250" height="120" rx="12" fill="#ecfdf5" stroke="#059669"/>
+        <text x="345" y="58" font-size="15" font-weight="700" fill="#047857">Tested code: calculates</text>
+        <text x="345" y="84">A statistics library does the maths</text>
+        <text x="345" y="106">Checks its assumptions first</text>
+        <text x="345" y="128">Same input always gives same answer</text>
+
+        <rect x="640" y="30" width="250" height="120" rx="12" fill="#fffbeb" stroke="#d97706"/>
+        <text x="660" y="58" font-size="15" font-weight="700" fill="#b45309">Result card: evidence</text>
+        <text x="660" y="84">Difference: 12.4 (example)</text>
+        <text x="660" y="106">Likely range: 8.1 to 16.7</text>
+        <text x="660" y="128">Assumption checks: passed</text>
+
+        <g stroke="#64748b" stroke-width="2.5" marker-end="url(#aC)">
+          <line x1="263" y1="90" x2="321" y2="90"/>
+          <line x1="578" y1="90" x2="636" y2="90"/>
+        </g>
+        <text x="450" y="186" text-anchor="middle" font-size="14" font-style="italic" fill="#5b6470">The written summary may only quote numbers that appear on a result card.</text>
+      </g>
+    </svg>
+    <figcaption><b>Figure 3.</b> The rule behind every new feature. The AI never invents or calculates a number; it points at evidence.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================ ROADMAP ============================ -->
+<section id="roadmap">
+  <h2>3. The roadmap at a glance</h2>
+  <p class="prose">Six phases, built on the foundation you already have. Click a station to jump to that phase.</p>
+
+  <figure>
+    <svg viewBox="0 0 960 360" role="img" aria-label="Metro map of six phases on top of the existing foundation">
+      <defs>
+        <marker id="aM" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e11d48"/></marker>
+      </defs>
+      <g font-family="system-ui, Segoe UI, sans-serif">
+        <path d="M712,126 C700,40 500,40 482,126" fill="none" stroke="#e11d48" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#aM)"/>
+        <text x="598" y="44" text-anchor="middle" font-size="12.5" fill="#e11d48" font-weight="600">Business-user shortcut: Phase 4 can come before Phase 3</text>
+
+        <g stroke-width="9" stroke-linecap="round">
+          <line x1="80" y1="150" x2="240" y2="150" stroke="#7c3aed"/>
+          <line x1="240" y1="150" x2="400" y2="150" stroke="#059669"/>
+          <line x1="400" y1="150" x2="560" y2="150" stroke="#d97706"/>
+          <line x1="560" y1="150" x2="720" y2="150" stroke="#e11d48"/>
+          <line x1="720" y1="150" x2="880" y2="150" stroke="#2563eb"/>
+        </g>
+
+        <g stroke="#94a3b8" stroke-width="2" stroke-dasharray="3 4">
+          <line x1="80" y1="246" x2="80" y2="280"/><line x1="240" y1="246" x2="240" y2="280"/>
+          <line x1="400" y1="246" x2="400" y2="280"/><line x1="560" y1="246" x2="560" y2="280"/>
+          <line x1="720" y1="246" x2="720" y2="280"/><line x1="880" y1="246" x2="880" y2="280"/>
+        </g>
+
+        <g text-anchor="middle">
+          <a href="#phase-0"><circle cx="80" cy="150" r="24" fill="#0284c7" stroke="#fff" stroke-width="4"/><text x="80" y="157" font-size="18" font-weight="700" fill="#fff">0</text>
+            <text x="80" y="198" font-size="14" font-weight="700" fill="#1f2328">Fix the leaks</text>
+            <text x="80" y="217" font-size="12" fill="#5b6470">honest numbers</text><text x="80" y="234" font-size="12" fill="#5b6470">real local mode</text></a>
+          <a href="#phase-1"><circle cx="240" cy="150" r="24" fill="#7c3aed" stroke="#fff" stroke-width="4"/><text x="240" y="157" font-size="18" font-weight="700" fill="#fff">1</text>
+            <text x="240" y="198" font-size="14" font-weight="700" fill="#1f2328">Analyst loop</text>
+            <text x="240" y="217" font-size="12" fill="#5b6470">plan, act, check</text><text x="240" y="234" font-size="12" fill="#5b6470">asks you questions</text></a>
+          <a href="#phase-2"><circle cx="400" cy="150" r="24" fill="#059669" stroke="#fff" stroke-width="4"/><text x="400" y="157" font-size="18" font-weight="700" fill="#fff">2</text>
+            <text x="400" y="198" font-size="14" font-weight="700" fill="#1f2328">Science toolbox</text>
+            <text x="400" y="217" font-size="12" fill="#5b6470">statistics, forecasts</text><text x="400" y="234" font-size="12" fill="#5b6470">safe room for code</text></a>
+          <a href="#phase-3"><circle cx="560" cy="150" r="24" fill="#d97706" stroke="#fff" stroke-width="4"/><text x="560" y="157" font-size="18" font-weight="700" fill="#fff">3</text>
+            <text x="560" y="198" font-size="14" font-weight="700" fill="#1f2328">Clean data + models</text>
+            <text x="560" y="217" font-size="12" fill="#5b6470">cleaning recipes</text><text x="560" y="234" font-size="12" fill="#5b6470">prediction models</text></a>
+          <a href="#phase-4"><circle cx="720" cy="150" r="24" fill="#e11d48" stroke="#fff" stroke-width="4"/><text x="720" y="157" font-size="18" font-weight="700" fill="#fff">4</text>
+            <text x="720" y="198" font-size="14" font-weight="700" fill="#1f2328">Business dictionary</text>
+            <text x="720" y="217" font-size="12" fill="#5b6470">shared definitions</text><text x="720" y="234" font-size="12" fill="#5b6470">automatic alerts</text></a>
+          <a href="#phase-5"><circle cx="880" cy="150" r="24" fill="#2563eb" stroke="#fff" stroke-width="4"/><text x="880" y="157" font-size="18" font-weight="700" fill="#fff">5</text>
+            <text x="880" y="198" font-size="14" font-weight="700" fill="#1f2328">Open the doors</text>
+            <text x="880" y="217" font-size="12" fill="#5b6470">teams, sharing</text><text x="880" y="234" font-size="12" fill="#5b6470">Slack, Claude, API</text></a>
+        </g>
+
+        <rect x="30" y="280" width="900" height="54" rx="12" fill="#f1f5f9" stroke="#475569"/>
+        <text x="480" y="303" text-anchor="middle" font-size="14" font-weight="700" fill="#334155">FOUNDATION YOU ALREADY BUILT</text>
+        <text x="480" y="323" text-anchor="middle" font-size="13" fill="#475569">data versions with fingerprints &middot; SQL safety check &middot; privacy modes &middot; checked sales report with evidence</text>
+      </g>
+    </svg>
+    <figcaption><b>Figure 4.</b> The order of work. Each phase stands on the one before it, and everything stands on your existing trust layer.</figcaption>
+  </figure>
+
+  <h3>How the phases connect: the finished house</h3>
+  <p class="prose">The metro map shows the <i>order</i>. This picture shows how the pieces <i>stack</i> once they are built. Each floor uses the floors below it.</p>
+
+  <figure>
+    <svg viewBox="0 0 760 510" role="img" aria-label="A house with the foundation at the bottom and six floors, one per phase">
+      <g font-family="system-ui, Segoe UI, sans-serif">
+        <polygon points="380,8 742,90 18,90" fill="#1e293b"/>
+        <text x="380" y="68" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">What you get: answers you can check, forecasts, predictions, alerts</text>
+
+        <g font-size="13">
+          <rect x="40" y="96" width="680" height="52" rx="6" fill="#eff6ff" stroke="#2563eb"/>
+          <rect x="40" y="96" width="170" height="52" rx="6" fill="#2563eb"/>
+          <text x="54" y="116" font-size="11" font-weight="700" fill="#dbeafe">PHASE 5</text><text x="54" y="136" font-weight="700" fill="#fff">Open the doors</text>
+          <text x="226" y="127" fill="#1f2328">Teams share work; Slack, Claude and big databases plug in</text>
+
+          <rect x="40" y="154" width="680" height="52" rx="6" fill="#fff1f2" stroke="#e11d48"/>
+          <rect x="40" y="154" width="170" height="52" rx="6" fill="#e11d48"/>
+          <text x="54" y="174" font-size="11" font-weight="700" fill="#ffe4e6">PHASE 4</text><text x="54" y="194" font-weight="700" fill="#fff">Business dictionary</text>
+          <text x="226" y="185" fill="#1f2328">One meaning for "revenue" everywhere; automatic alerts</text>
+
+          <rect x="40" y="212" width="680" height="52" rx="6" fill="#fffbeb" stroke="#d97706"/>
+          <rect x="40" y="212" width="170" height="52" rx="6" fill="#d97706"/>
+          <text x="54" y="232" font-size="11" font-weight="700" fill="#fef3c7">PHASE 3</text><text x="54" y="252" font-weight="700" fill="#fff">Clean data + models</text>
+          <text x="226" y="243" fill="#1f2328">Repeatable cleaning; prediction models you can watch</text>
+
+          <rect x="40" y="270" width="680" height="52" rx="6" fill="#ecfdf5" stroke="#059669"/>
+          <rect x="40" y="270" width="170" height="52" rx="6" fill="#059669"/>
+          <text x="54" y="290" font-size="11" font-weight="700" fill="#d1fae5">PHASE 2</text><text x="54" y="310" font-weight="700" fill="#fff">Science toolbox</text>
+          <text x="226" y="301" fill="#1f2328">Statistics, forecasts, and a locked room for custom code</text>
+
+          <rect x="40" y="328" width="680" height="52" rx="6" fill="#f5f3ff" stroke="#7c3aed"/>
+          <rect x="40" y="328" width="170" height="52" rx="6" fill="#7c3aed"/>
+          <text x="54" y="348" font-size="11" font-weight="700" fill="#ede9fe">PHASE 1</text><text x="54" y="368" font-weight="700" fill="#fff">Analyst loop</text>
+          <text x="226" y="359" fill="#1f2328">Plans, acts, checks its work, and asks you when unsure</text>
+
+          <rect x="40" y="386" width="680" height="52" rx="6" fill="#f0f9ff" stroke="#0284c7"/>
+          <rect x="40" y="386" width="170" height="52" rx="6" fill="#0284c7"/>
+          <text x="54" y="406" font-size="11" font-weight="700" fill="#e0f2fe">PHASE 0</text><text x="54" y="426" font-weight="700" fill="#fff">Fix the leaks</text>
+          <text x="226" y="417" fill="#1f2328">Honest, complete numbers; private mode that really works</text>
+
+          <rect x="20" y="444" width="720" height="56" rx="6" fill="#334155"/>
+          <text x="380" y="467" text-anchor="middle" font-size="12" font-weight="700" fill="#cbd5e1">FOUNDATION (ALREADY BUILT)</text>
+          <text x="380" y="487" text-anchor="middle" fill="#fff">data versions &middot; SQL safety check &middot; privacy modes &middot; checked sales report</text>
+        </g>
+      </g>
+    </svg>
+    <figcaption><b>Figure 5.</b> Why the order matters: the analyst loop (Phase 1) is where every later tool plugs in. Models (Phase 3) need clean data and the toolbox. Alerts (Phase 4) run the toolbox on a schedule using shared definitions. Sharing (Phase 5) exposes all of it.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================ PHASE 0 ============================ -->
+<section id="phase-0" class="phase" style="--c: var(--p0)">
+  <div class="tag">Phase 0 &middot; Fix the leaks</div>
+  <h2>Make what exists honest and useful</h2>
+  <div class="box analogy prose"><b>Analyst analogy:</b> before teaching new skills, fix the habits that can mislead you today, like reading only part of a report without saying so.</div>
+
+  <div class="grid2">
+    <div class="ba before"><div class="lbl">Before</div>The table says <code>Total rows: 10,000</code>. The real answer had 2.3 million rows, but the query was quietly capped.</div>
+    <div class="ba after"><div class="lbl">After</div>The table says <code>Showing 10,000 of 2,341,556 rows</code>, and charts summarize all the data instead of the first 500 rows.</div>
+    <div class="ba before"><div class="lbl">Before</div>"Local only" mode uses a stand-in AI, so private data only gets basic counts.</div>
+    <div class="ba after"><div class="lbl">After</div>"Local only" can use an <span class="term" tabindex="0" data-tip="An AI model that runs on your own computer or server (for example with Ollama), so data never leaves your machine.">AI running on your computer</span>, so private data gets real analysis without leaving your machine.</div>
+    <div class="ba before"><div class="lbl">Before</div>The data health check only counts rows, blanks and duplicates.</div>
+    <div class="ba after"><div class="lbl">After</div>It also shows value ranges, outliers, numbers stored as text and unusual columns, using a well-known checklist.<sup><a href="#src-24">[24]</a></sup></div>
+  </div>
+
+  <div class="prose">
+    <h3>Also in this phase</h3>
+    <ul class="plain">
+      <li>Faster runs: reuse the saved table layout instead of rescanning all data every time.</li>
+      <li>More chart types (box plots, heatmaps, maps) and switching chart type without asking the AI again.</li>
+      <li>Suggested follow-up questions, and a simple SQL editor for people who know SQL.</li>
+      <li>Cost tracking per AI provider, and a proper job queue so long analyses survive restarts.</li>
+    </ul>
+  </div>
+  <div class="win"><b>After this phase you can:</b> trust that what you see is complete, and use private mode for real work.</div>
+  <p class="why prose"><b>Why first:</b> these are mostly small changes, they fix correctness problems, and every later phase depends on honest results.</p>
+  <details>
+    <summary>Technical names (for talking to developers)</summary>
+    Detect the query limit by fetching limit + 1 rows; downsample in SQL before plotting; mark self-hosted providers as "local-safe" in <span class="mono">privacy.py</span>; use DuckDB <span class="mono">SUMMARIZE</span> for profiling; cache schema per dataset version; request strict JSON-schema output from the model; add a worker queue (Celery, RQ or similar) and Docker Compose.
+  </details>
+</section>
+
+<!-- ============================ PHASE 1 ============================ -->
+<section id="phase-1" class="phase" style="--c: var(--p1)">
+  <div class="tag">Phase 1 &middot; Analyst loop</div>
+  <h2>Teach it to think in steps and double-check</h2>
+  <div class="box analogy prose"><b>Analyst analogy:</b> the junior analyst learns to take one step, look at the result, adjust, and double-check before handing you an answer. When your question is vague, they ask.</div>
+
+  <figure>
+    <svg viewBox="0 0 900 330" role="img" aria-label="The analyst loop in the center, connected to six tools">
+      <g font-family="system-ui, Segoe UI, sans-serif">
+        <g stroke="#c4b5fd" stroke-width="3">
+          <line x1="450" y1="165" x2="450" y2="36"/><line x1="450" y1="165" x2="730" y2="97"/>
+          <line x1="450" y1="165" x2="730" y2="233"/><line x1="450" y1="165" x2="450" y2="294"/>
+          <line x1="450" y1="165" x2="170" y2="233"/><line x1="450" y1="165" x2="170" y2="97"/>
+        </g>
+        <line x1="450" y1="165" x2="642" y2="300" stroke="#059669" stroke-width="2" stroke-dasharray="6 5"/>
+        <circle cx="450" cy="165" r="64" fill="#7c3aed"/>
+        <text x="450" y="160" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">Analyst</text>
+        <text x="450" y="181" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">loop</text>
+        <g font-size="14" text-anchor="middle" fill="#1f2328">
+          <rect x="365" y="14" width="170" height="44" rx="10" fill="#fff" stroke="#7c3aed"/><text x="450" y="41">Run safe SQL</text>
+          <rect x="645" y="75" width="170" height="44" rx="10" fill="#fff" stroke="#7c3aed"/><text x="730" y="102">Look at the data</text>
+          <rect x="645" y="211" width="170" height="44" rx="10" fill="#fff" stroke="#7c3aed"/><text x="730" y="238">Ask you a question</text>
+          <rect x="365" y="272" width="170" height="44" rx="10" fill="#fff" stroke="#7c3aed"/><text x="450" y="299">Check its own work</text>
+          <rect x="85" y="211" width="170" height="44" rx="10" fill="#fff" stroke="#7c3aed"/><text x="170" y="238">Make a chart</text>
+          <rect x="85" y="75" width="170" height="44" rx="10" fill="#fff" stroke="#7c3aed"/><text x="170" y="102">Remember findings</text>
+          <rect x="640" y="280" width="250" height="40" rx="10" fill="#f6fffb" stroke="#059669" stroke-dasharray="6 5"/><text x="765" y="305" font-size="13" fill="#047857">Phase 2 plugs more tools in here</text>
+        </g>
+      </g>
+    </svg>
+    <figcaption><b>Figure 6.</b> The loop is a hub. Each capability is a <span class="term" tabindex="0" data-tip="A single ability the AI can call, like running SQL or drawing a chart. The AI decides which tool to use; the tool's code does the work.">tool</span> the loop can call. New features in later phases are simply new tools.</figcaption>
+  </figure>
+
+  <div class="prose">
+    <h3>What gets built</h3>
+    <ul class="plain">
+      <li><b>The loop itself,</b> with limits on steps, time and cost, and a <b>Quick</b> or <b>Deep</b> setting (products like ThoughtSpot offer the same choice<sup><a href="#src-17">[17]</a></sup>).</li>
+      <li><b>Clarifying questions:</b> "Last month or last quarter?" shown as buttons you can click.</li>
+      <li><b>A privacy filter</b> that decides what the AI may see after each step (see <a href="#safety">Safety rails</a>).</li>
+      <li><b>Self-checks:</b> did a join accidentally double the rows? Every number in the summary is linked to the table cell it came from, plus an <b>Assumptions</b> box ("I used order_date and ignored blank amounts").</li>
+      <li><b>Real memory</b> of findings instead of a 300-character note.</li>
+      <li><b>An exam for the AI:</b> 30 to 50 questions with known answers, rerun after every change, so quality never drops without anyone noticing. Developers call this an <span class="term" tabindex="0" data-tip="A fixed set of test questions with known correct answers, run automatically after each change to measure whether the AI got better or worse.">evaluation harness</span>.</li>
+    </ul>
+  </div>
+  <div class="win"><b>After this phase you can:</b> ask vague or multi-part questions and get a checked answer that shows its assumptions.</div>
+  <p class="why prose"><b>Why now:</b> every later feature becomes a tool plugged into this loop. Building the exam at the same time protects quality from here on.</p>
+  <details>
+    <summary>Technical names</summary>
+    Plan-act-observe-verify controller; tool registry with typed Pydantic inputs and outputs; <span class="mono">ask_user</span> tool; per-mode observation policy; verifier with row-count and join fan-out checks plus an LLM judge; claim-to-evidence mapping reused from <span class="mono">verified_report.py</span>; structured findings memory; step tracing.
+  </details>
+</section>
+
+<!-- ============================ PHASE 2 ============================ -->
+<section id="phase-2" class="phase" style="--c: var(--p2)">
+  <div class="tag">Phase 2 &middot; Science toolbox</div>
+  <h2>Give it a scientific calculator and a locked lab</h2>
+  <div class="box analogy prose"><b>Analyst analogy:</b> the analyst gets a calculator full of proven methods. They decide <i>which</i> button to press; the calculator does the maths (Big idea 2).</div>
+
+  <p class="prose">Each tile is a business question and the method that answers it.</p>
+  <div class="grid4">
+    <div class="tile"><div class="q">Is the difference real?</div><div class="m"><span class="term" tabindex="0" data-tip="A standard method for deciding whether a difference (for example between two regions) is likely real or could just be random luck.">Hypothesis test</span></div></div>
+    <div class="tile"><div class="q">Why did it change?</div><div class="m">Driver analysis: which region or product caused the drop</div></div>
+    <div class="tile"><div class="q">What happens next?</div><div class="m"><span class="term" tabindex="0" data-tip="Predicting future values of a number over time, such as next month's sales, with a range showing how uncertain the prediction is.">Forecasting</span> with a likely range</div></div>
+    <div class="tile"><div class="q">Anything unusual?</div><div class="m"><span class="term" tabindex="0" data-tip="Automatically finding values that are far outside the normal pattern, such as a sudden spike in refunds.">Anomaly detection</span></div></div>
+    <div class="tile"><div class="q">Any natural groups?</div><div class="m">Segmentation: customer groups that behave alike</div></div>
+    <div class="tile"><div class="q">Did the change work?</div><div class="m"><span class="term" tabindex="0" data-tip="Comparing two versions (A and B) of something, like two prices, to see which performs better, using statistics to rule out luck.">A/B test</span> analysis</div></div>
+    <div class="tile"><div class="q">Does it hold up?</div><div class="m">Robustness check: redo it slightly differently and compare</div></div>
+    <div class="tile hatch"><div class="q">Anything else?</div><div class="m">Custom Python in a <span class="term" tabindex="0" data-tip="A sealed, locked-down environment where code can run without internet access and without touching the rest of the system, with time and memory limits.">sandbox</span> (locked room)</div></div>
+  </div>
+
+  <div class="prose">
+    <h3>Why the robustness check matters</h3>
+    <p>A 2026 study gave the same data to many AI "analysts". Their conclusions varied widely and often flipped between runs.<sup><a href="#src-7">[7]</a></sup> Re-running a key conclusion with reasonable alternatives, and saying whether it holds, is a cheap defense.</p>
+    <h3>The locked room (sandbox)</h3>
+    <p>Some questions need custom code. That code runs in a sealed room: no internet, time and memory limits, read-only access to your data. Results from custom code are labeled differently from the tested methods. Services such as E2B provide this kind of room.<sup><a href="#src-18">[18]</a></sup> One warning from the research: a popular shortcut (running Python inside Pyodide) is <i>not</i> safe enough, and its authors shut down their project for that reason.<sup><a href="#src-19">[19]</a></sup></p>
+    <p>A <b>notebook view</b> also arrives here: every step the AI took becomes an editable, rerunnable cell, like Julius and Hex offer.<sup><a href="#src-21">[21]</a></sup><sup><a href="#src-20">[20]</a></sup></p>
+  </div>
+  <div class="win"><b>After this phase you can:</b> ask "is this real?", "why did it change?" and "what happens next?", and get answers backed by proven methods.</div>
+  <p class="why prose"><b>Why here:</b> it needs the loop from Phase 1, and it is the fastest way to go "beyond SQL" while keeping results repeatable.</p>
+  <details>
+    <summary>Technical names</summary>
+    New step and artifact types for: Welch t-test, Mann-Whitney, ANOVA, chi-square, correlation with confidence intervals, effect sizes, multiple-comparison correction (scipy, statsmodels, pingouin); regression with diagnostics; period-over-period contribution analysis; IQR and Isolation Forest anomalies; k-means or HDBSCAN; CUPED and sequential testing; forecasting with statsforecast baselines and Chronos-Bolt or TimesFM; pluggable sandbox (Docker for development, gVisor or self-hosted E2B for production).
+  </details>
+</section>
+
+<!-- ============================ PHASE 3 ============================ -->
+<section id="phase-3" class="phase" style="--c: var(--p3)">
+  <div class="tag">Phase 3 &middot; Clean data + models</div>
+  <h2>Clean the kitchen, then cook</h2>
+  <div class="box analogy prose"><b>Analyst analogy:</b> good predictions need clean ingredients. The analyst learns to clean data the same way every time, then to build prediction models, and to keep an eye on them after they go live.</div>
+
+  <figure>
+    <svg viewBox="0 0 940 300" role="img" aria-label="Eight-step cycle from raw data through cleaning, model training, prediction and drift monitoring, looping back to retraining">
+      <defs>
+        <marker id="aA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b45309"/></marker>
+      </defs>
+      <g font-family="system-ui, Segoe UI, sans-serif" font-size="13" text-anchor="middle" fill="#1f2328">
+        <rect x="20" y="40" width="185" height="60" rx="10" fill="#fff" stroke="#d97706"/><text x="112" y="66" font-weight="700">1. Raw upload</text><text x="112" y="86" fill="#5b6470">messy spreadsheet</text>
+        <rect x="245" y="40" width="185" height="60" rx="10" fill="#fff" stroke="#d97706"/><text x="337" y="66" font-weight="700">2. Cleaning recipe</text><text x="337" y="86" fill="#5b6470">saved steps, reusable</text>
+        <rect x="470" y="40" width="185" height="60" rx="10" fill="#fff" stroke="#d97706"/><text x="562" y="66" font-weight="700">3. Checked version</text><text x="562" y="86" fill="#5b6470">rules passed, you approve</text>
+        <rect x="695" y="40" width="185" height="60" rx="10" fill="#fffbeb" stroke="#d97706" stroke-width="2"/><text x="787" y="66" font-weight="700">4. Train models</text><text x="787" y="86" fill="#5b6470">try many, rank them</text>
+
+        <rect x="695" y="180" width="185" height="60" rx="10" fill="#fff" stroke="#d97706"/><text x="787" y="206" font-weight="700">5. Explain</text><text x="787" y="226" fill="#5b6470">which columns matter</text>
+        <rect x="470" y="180" width="185" height="60" rx="10" fill="#fff" stroke="#d97706"/><text x="562" y="206" font-weight="700">6. Save the model</text><text x="562" y="226" fill="#5b6470">linked to data version</text>
+        <rect x="245" y="180" width="185" height="60" rx="10" fill="#fff" stroke="#d97706"/><text x="337" y="206" font-weight="700">7. Predict new data</text><text x="337" y="226" fill="#5b6470">each new upload</text>
+        <rect x="20" y="180" width="185" height="60" rx="10" fill="#fff" stroke="#d97706"/><text x="112" y="206" font-weight="700">8. Watch for drift</text><text x="112" y="226" fill="#5b6470">has the world changed?</text>
+
+        <g stroke="#b45309" stroke-width="2.2" fill="none" marker-end="url(#aA)">
+          <line x1="207" y1="70" x2="242" y2="70"/><line x1="432" y1="70" x2="467" y2="70"/><line x1="657" y1="70" x2="692" y2="70"/>
+          <line x1="787" y1="102" x2="787" y2="177"/>
+          <line x1="693" y1="210" x2="658" y2="210"/><line x1="468" y1="210" x2="433" y2="210"/><line x1="243" y1="210" x2="208" y2="210"/>
+          <path d="M112,242 L112,282 L918,282 L918,70 L883,70" stroke-dasharray="7 5"/>
+        </g>
+        <text x="520" y="274" fill="#b45309" font-weight="700">retrain when the data drifts</text>
+      </g>
+    </svg>
+    <figcaption><b>Figure 7.</b> The model lifecycle. Steps 1 to 3 reuse your existing "review, then confirm" flow. Step 6 is easy for InsightForge because every dataset version already has a fixed ID.</figcaption>
+  </figure>
+
+  <div class="prose">
+    <h3>What gets built</h3>
+    <ul class="plain">
+      <li><b>Cleaning recipes:</b> fix types, parse dates, remove duplicates, join tables, add calculated columns. Each run creates a new version you review, so nothing changes behind your back.</li>
+      <li><b>Validation rules</b> checked on every upload: "order ID is never blank", "price is above zero".</li>
+      <li><b>"Predict this column" wizard:</b> the app tries many models and shows a ranked leaderboard. This is called <span class="term" tabindex="0" data-tip="Automated machine learning: software that tries many model types and settings for you and ranks them by accuracy.">AutoML</span>. A newer model called TabPFN beat four hours of tuned models in about three seconds on small tables (up to 10,000 rows).<sup><a href="#src-11">[11]</a></sup></li>
+      <li><b>Explanations:</b> which columns drive the predictions, using a method called <span class="term" tabindex="0" data-tip="A standard method that shows how much each column pushed a prediction up or down, for the whole model or for a single row.">SHAP</span>.</li>
+      <li><b>Monitoring:</b> alert when new data stops looking like the data the model learned from. This is called <span class="term" tabindex="0" data-tip="When new data slowly stops looking like the data a model was trained on (for example customer behavior changes), so the model becomes less accurate.">drift</span>; tools like Evidently detect it.<sup><a href="#src-14">[14]</a></sup></li>
+    </ul>
+    <p>AI agents are getting good at this work: the best agents on the MLE-bench benchmark now earn a medal in about 64% of Kaggle competitions, up from 16.9% when it launched.<sup><a href="#src-13">[13]</a></sup></p>
+  </div>
+  <div class="win"><b>After this phase you can:</b> predict things like "which customers will stop buying" and know when the prediction stops being reliable.</div>
+  <p class="why prose"><b>Why here:</b> models need clean data and the sandbox from Phase 2. Linking models to data versions keeps your trust promise.</p>
+  <details>
+    <summary>Technical names</summary>
+    Recipe engine compiled to DuckDB SQL producing draft versions; validation contracts (Pandera or Great Expectations style); join-key discovery; FLAML, AutoGluon, TabPFN (check its license); leakage detection; ROC, precision-recall, calibration; SHAP and permutation importance; model registry tied to dataset version IDs; batch scoring and a predict endpoint; Evidently drift reports.
+  </details>
+</section>
+
+<!-- ============================ PHASE 4 ============================ -->
+<section id="phase-4" class="phase" style="--c: var(--p4)">
+  <div class="tag">Phase 4 &middot; Business dictionary</div>
+  <h2>One meaning for every business word, then automatic alerts</h2>
+  <div class="box analogy prose"><b>Analyst analogy:</b> the analyst gets the company dictionary, so "revenue" means the same thing to everyone. Then they watch your key numbers every morning and warn you when something looks wrong.</div>
+
+  <figure>
+    <svg viewBox="0 0 900 250" role="img" aria-label="Three teams define revenue differently; a metric dictionary gives one definition used by chat, reports and alerts">
+      <defs>
+        <marker id="aR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e11d48"/></marker>
+      </defs>
+      <g font-family="system-ui, Segoe UI, sans-serif" font-size="13" fill="#1f2328">
+        <rect x="10" y="18" width="240" height="54" rx="27" fill="#fff" stroke="#cbd5e1"/><text x="130" y="50" text-anchor="middle">Sales: "revenue includes tax"</text>
+        <rect x="10" y="98" width="240" height="54" rx="27" fill="#fff" stroke="#cbd5e1"/><text x="130" y="130" text-anchor="middle">Finance: "minus refunds"</text>
+        <rect x="10" y="178" width="240" height="54" rx="27" fill="#fff" stroke="#cbd5e1"/><text x="130" y="210" text-anchor="middle">Ops: "only paid orders"</text>
+
+        <rect x="320" y="50" width="260" height="150" rx="14" fill="#fff1f2" stroke="#e11d48" stroke-width="2"/>
+        <text x="450" y="80" text-anchor="middle" font-size="15" font-weight="700" fill="#be123c">Metric dictionary</text>
+        <text x="340" y="108">Revenue =</text>
+        <text x="340" y="130">paid orders, minus refunds,</text>
+        <text x="340" y="152">before tax</text>
+        <text x="340" y="180" fill="#5b6470">Approved by: finance lead</text>
+
+        <rect x="650" y="18" width="240" height="54" rx="10" fill="#fff" stroke="#e11d48"/><text x="770" y="50" text-anchor="middle">Chat answers</text>
+        <rect x="650" y="98" width="240" height="54" rx="10" fill="#fff" stroke="#e11d48"/><text x="770" y="130" text-anchor="middle">Checked reports</text>
+        <rect x="650" y="178" width="240" height="54" rx="10" fill="#fff" stroke="#e11d48"/><text x="770" y="210" text-anchor="middle">Automatic alerts</text>
+
+        <g stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#aR)">
+          <path d="M252,45 Q290,60 317,95"/><line x1="252" y1="125" x2="317" y2="125"/><path d="M252,205 Q290,190 317,155"/>
+        </g>
+        <g stroke="#e11d48" stroke-width="2" fill="none" marker-end="url(#aR)">
+          <path d="M583,95 Q615,60 647,45"/><line x1="583" y1="125" x2="647" y2="125"/><path d="M583,155 Q615,190 647,205"/>
+        </g>
+      </g>
+    </svg>
+    <figcaption><b>Figure 8.</b> The <span class="term" tabindex="0" data-tip="Also called a semantic layer: a written list of business definitions (what 'revenue' or 'active customer' means) that every query, chart and alert uses.">metric dictionary</span> (developers say "semantic layer"). Write a definition once and every answer uses it.</figcaption>
+  </figure>
+
+  <div class="prose">
+    <p><b>Why it matters so much:</b> on a realistic business SQL benchmark, the best agent in the original study solved only 21% of tasks.<sup><a href="#src-4">[4]</a></sup> A 2026 paper reports 94% on a version of the same benchmark by letting the AI ask the metric dictionary instead of writing raw SQL.<sup><a href="#src-5">[5]</a></sup> (Different setups and years, so treat it as a strong direction, not a head-to-head score.) Analysts agree: 65% say AI works best when business logic is defined centrally.<sup><a href="#src-9">[9]</a></sup></p>
+    <h3>Then: numbers that watch themselves</h3>
+  </div>
+  <div class="chips">
+    <span class="chip">You follow "weekly revenue"</span><span class="arrow">&rarr;</span>
+    <span class="chip">Checked every morning</span><span class="arrow">&rarr;</span>
+    <span class="chip">Unusual drop found</span><span class="arrow">&rarr;</span>
+    <span class="chip">Driver analysis: "North region, product X"</span><span class="arrow">&rarr;</span>
+    <span class="chip hot">Slack or email alert with the reason</span>
+  </div>
+  <div class="prose">
+    <p>This is how Tableau Pulse works.<sup><a href="#src-16">[16]</a></sup> Also in this phase: a library of approved question-and-SQL examples the AI learns from (Snowflake's approach<sup><a href="#src-15">[15]</a></sup>), turning your single sales report into checked reports for <i>any</i> metric, and an "approved data only" mode for business users (Hex's approach<sup><a href="#src-20">[20]</a></sup>).</p>
+  </div>
+  <div class="win"><b>After this phase you can:</b> trust that "revenue" means one thing everywhere, and hear about problems before you go looking.</div>
+  <p class="why prose"><b>Why here:</b> alerts reuse the Phase 2 toolbox on a schedule. If your users are business people rather than data scientists, you could build this before Phase 3.</p>
+  <details>
+    <summary>Technical names</summary>
+    YAML semantic model (entities, dimensions, measures, metrics, relationships, synonyms) compatible with Apache Ossie (formerly Open Semantic Interchange) and dbt; metric queries compiled deterministically to SQL; verified query repository; endorsements; local value index for filter matching; metric following with threshold, anomaly and trend-change checks; digest delivery.
+  </details>
+</section>
+
+<!-- ============================ PHASE 5 ============================ -->
+<section id="phase-5" class="phase" style="--c: var(--p5)">
+  <div class="tag">Phase 5 &middot; Open the doors</div>
+  <h2>Let teams in, and plug into the tools people already use</h2>
+  <div class="box analogy prose"><b>Analyst analogy:</b> the analyst joins the team: shares work, takes comments, gets approvals, and answers questions wherever people already are, such as Slack or an AI assistant.</div>
+
+  <figure>
+    <svg viewBox="0 0 900 330" role="img" aria-label="InsightForge in the center connected to teammates, Slack, AI assistants through MCP, big databases, dashboards and an API">
+      <g font-family="system-ui, Segoe UI, sans-serif">
+        <g stroke="#bfdbfe" stroke-width="3">
+          <line x1="450" y1="165" x2="450" y2="36"/><line x1="450" y1="165" x2="720" y2="97"/>
+          <line x1="450" y1="165" x2="720" y2="233"/><line x1="450" y1="165" x2="450" y2="294"/>
+          <line x1="450" y1="165" x2="180" y2="233"/><line x1="450" y1="165" x2="180" y2="97"/>
+        </g>
+        <circle cx="450" cy="165" r="68" fill="#2563eb"/>
+        <text x="450" y="171" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">InsightForge</text>
+        <g font-size="14" text-anchor="middle" fill="#1f2328">
+          <rect x="345" y="14" width="210" height="44" rx="10" fill="#fff" stroke="#2563eb"/><text x="450" y="41">Teammates with roles</text>
+          <rect x="615" y="75" width="210" height="44" rx="10" fill="#fff" stroke="#2563eb"/><text x="720" y="102">Slack, email, Teams</text>
+          <rect x="615" y="211" width="210" height="44" rx="10" fill="#fff" stroke="#2563eb"/><text x="720" y="238">Claude, ChatGPT (MCP)</text>
+          <rect x="345" y="272" width="210" height="44" rx="10" fill="#fff" stroke="#2563eb"/><text x="450" y="299">Snowflake, BigQuery</text>
+          <rect x="75" y="211" width="210" height="44" rx="10" fill="#fff" stroke="#2563eb"/><text x="180" y="238">Dashboards, share links</text>
+          <rect x="75" y="75" width="210" height="44" rx="10" fill="#fff" stroke="#2563eb"/><text x="180" y="102">API for developers</text>
+        </g>
+      </g>
+    </svg>
+    <figcaption><b>Figure 9.</b> InsightForge becomes a hub. <span class="term" tabindex="0" data-tip="Model Context Protocol: a standard plug that lets AI assistants like Claude or ChatGPT use outside tools. With an MCP server, those assistants could query InsightForge's checked metrics directly.">MCP</span> is a standard plug that lets AI assistants use outside tools; companies like MotherDuck already offer one for their data.<sup><a href="#src-25">[25]</a></sup></figcaption>
+  </figure>
+
+  <div class="prose">
+    <ul class="plain">
+      <li><b>Teams:</b> organizations, roles (admin, editor, viewer), sign-in with your company account, audit logs.</li>
+      <li><b>Sharing:</b> dashboards, read-only links, comments on results, approval steps for metrics and models.</li>
+      <li><b>More data:</b> big company databases, cloud storage, and business apps; analysis of text columns and maps.</li>
+    </ul>
+  </div>
+  <div class="win"><b>After this phase you can:</b> run InsightForge as a team, and ask it questions from the tools you already use every day.</div>
+  <p class="why prose"><b>Why last:</b> sharing is most valuable once there are trustworthy metrics, models and alerts worth sharing.</p>
+  <details>
+    <summary>Technical names</summary>
+    Organizations and RBAC, OIDC or SAML single sign-on, audit logs, retention cleanup; dashboards and parameterized apps; MCP server and client; REST API and Python SDK; Snowflake, BigQuery, Databricks and SQL Server connectors; S3, GCS and ADLS with Parquet, Iceberg and Delta; SaaS ingestion via dlt or Airbyte; AI SQL functions gated by privacy mode; DuckDB spatial, fts and vss extensions.
+  </details>
+</section>
+
+<!-- ============================ SAFETY ============================ -->
+<section id="safety">
+  <h2>4. Two safety rails that run through every phase</h2>
+
+  <h3>Rail 1: what the AI is allowed to see</h3>
+  <div class="prose">
+    <p>A loop only works if the AI can look at results. Your three privacy modes decide how much it sees. Here is the same small result table as the AI would see it in each mode.</p>
+  </div>
+  <div class="modes">
+    <div class="mode">
+      <h4>Local model</h4>
+      <div class="sees">Sees everything, but the AI runs on your own machine, so nothing leaves it.</div>
+      <table class="mini frame"><tr><th>region</th><th>revenue</th></tr><tr><td>North</td><td>48,210</td></tr><tr><td>South</td><td>39,775</td></tr></table>
+    </div>
+    <div class="mode">
+      <h4>Schema only</h4>
+      <div class="sees">Sees column names, types, row counts and errors. Never the values.</div>
+      <table class="mini"><tr><th>region</th><th>revenue</th></tr><tr><td class="blur">North</td><td class="blur">48,210</td></tr><tr><td class="blur">South</td><td class="blur">39,775</td></tr></table>
+      <p style="margin:6px 0 0;color:#5b6470">2 rows, 2 columns</p>
+    </div>
+    <div class="mode">
+      <h4>Full (you agreed)</h4>
+      <div class="sees">A cloud AI sees values, up to a limit. You must explicitly agree first.</div>
+      <table class="mini"><tr><th>region</th><th>revenue</th></tr><tr><td>North</td><td>48,210</td></tr><tr><td>South</td><td>39,775</td></tr></table>
+    </div>
+  </div>
+  <p class="meta prose">Example numbers. The same rules must also cover cloud sandboxes, AI functions on text columns, and anything exposed through MCP, not only the prompt.</p>
+
+  <h3>Rail 2: how much to trust each result</h3>
+  <p class="prose">Every result should show where it came from, so you know how much checking it needs.</p>
+  <div class="ladder">
+    <div class="rung" style="background:#15803d;width:100%"><span><b>Certified metric</b></span><span>approved definition + automatic checks</span></div>
+    <div class="rung" style="background:#059669;width:90%"><span><b>Tested method</b></span><span>statistics code with assumption checks</span></div>
+    <div class="rung" style="background:#d97706;width:80%"><span><b>Exploratory SQL</b></span><span>AI-written, safety-checked</span></div>
+    <div class="rung" style="background:#b91c1c;width:70%"><span><b>Free-form code</b></span><span>sandbox; review before trusting</span></div>
+  </div>
+  <p class="meta prose">Most trust at the top. Only 3% of analysts in a 2026 survey wanted fully self-driving AI; most wanted to stay in the loop.<sup><a href="#src-9">[9]</a></sup> Top trust requests from data leaders were audit trails and repeatable results.<sup><a href="#src-10">[10]</a></sup></p>
+</section>
+
+<!-- ============================ DECIDE ============================ -->
+<section id="decide">
+  <h2>5. The one decision only you can make</h2>
+  <div class="box decide prose">
+    <p style="margin-top:0"><b>Who is the main user?</b> The answer changes the order of Phases 3 and 4.</p>
+    <ul class="plain" style="margin-bottom:12px">
+      <li><b>Business people</b> (owners, operations, finance): do Phase 4 (dictionary and alerts) before Phase 3 (models).</li>
+      <li><b>Data scientists:</b> keep the order; notebooks, the sandbox and models matter most.</li>
+    </ul>
+    <p style="margin-bottom:0"><b>Also worth knowing:</b> your project guide (<span class="mono">AGENTS.md</span>) currently focuses on the <i>Verified Spreadsheet Report</i> for small-business teams and defers dashboards. This roadmap is the broader "full data science" path you asked about. They fit together: Phases 0, 1 and 4 directly strengthen the report product, while Phases 2 and 3 add the science.</p>
+  </div>
+</section>
+
+<!-- ============================ QUIZ ============================ -->
+<section id="quiz" class="quiz">
+  <h2>6. Check your understanding</h2>
+  <p class="prose" style="font-family:var(--serif)">Answer from memory first; recalling is what makes it stick. You get feedback instantly.</p>
+
+  <div class="qq" data-q>
+    <div class="qt">1. Why does InsightForge need a loop instead of one plan?</div>
+    <button data-ok="0">So it can answer questions much more cheaply</button>
+    <button data-ok="1">So it can check results and fix mistakes</button>
+    <button data-ok="0">So it can skip the safety check step</button>
+    <div class="fb">A loop lets the AI look at each result, notice problems and adjust, like a human analyst. That is what raised scores for DS-STAR and Data Interpreter (Big idea 1).</div>
+  </div>
+
+  <div class="qq" data-q>
+    <div class="qt">2. Under "the AI chooses, tested code calculates", who computes the numbers?</div>
+    <button data-ok="1">Tested code such as a statistics library</button>
+    <button data-ok="0">The AI model reading the data directly</button>
+    <button data-ok="0">The user typing numbers into the chat</button>
+    <div class="fb">The AI only picks the method and columns. Proven code does the maths, and the summary may only quote numbers from a result card (Big idea 2).</div>
+  </div>
+
+  <div class="qq" data-q>
+    <div class="qt">3. What problem does the metric dictionary (semantic layer) solve?</div>
+    <button data-ok="0">Charts load faster on slow internet connections</button>
+    <button data-ok="0">Uploaded files take less disk space overall</button>
+    <button data-ok="1">Everyone means the same thing by revenue</button>
+    <div class="fb">One written definition, used by chat, reports and alerts alike (Phase 4, Figure 8).</div>
+  </div>
+
+  <div class="qq" data-q>
+    <div class="qt">4. In schema-only privacy mode, what can the AI see after a step?</div>
+    <button data-ok="0">Every row of data in full detail</button>
+    <button data-ok="1">Column names and counts but no values</button>
+    <button data-ok="0">Nothing at all, not even column names</button>
+    <div class="fb">It sees the shape of the result (names, types, row counts, errors) so it can still correct itself, but never the values (Safety rail 1).</div>
+  </div>
+
+  <div class="qq" data-q>
+    <div class="qt">5. Why does Phase 0 ("fix the leaks") come first?</div>
+    <button data-ok="0">Users asked for a darker color theme</button>
+    <button data-ok="1">Current results can be silently cut off</button>
+    <button data-ok="0">The database needs to be replaced entirely</button>
+    <div class="fb">Queries are capped at 10,000 rows and some charts at 500, without warning. Everything later depends on honest, complete results.</div>
+  </div>
+
+  <div class="qq" data-q>
+    <div class="qt">6. In Phase 3, what does "drift" mean?</div>
+    <button data-ok="0">A model that trains itself without any data</button>
+    <button data-ok="0">A chart that moves when you scroll down</button>
+    <button data-ok="1">New data slowly stops looking like training data</button>
+    <div class="fb">When the world changes, a model trained on old data gets less accurate. Watching for drift tells you when to retrain (Figure 7, step 8).</div>
+  </div>
+
+  <div class="qq" data-q>
+    <div class="qt">7. Which kind of result deserves the most trust?</div>
+    <button data-ok="0">Free-form code the AI wrote in sandbox</button>
+    <button data-ok="1">A certified metric with approved definition checks</button>
+    <button data-ok="0">Exploratory SQL the AI wrote just now</button>
+    <div class="fb">Certified metrics sit at the top of the trust ladder: an approved definition plus automatic checks (Safety rail 2).</div>
+  </div>
+
+  <p class="score" id="score">Score: 0 / 7</p>
+
+  <h3>Recall challenge</h3>
+  <p class="prose" style="font-family:var(--serif)">Without scrolling up, try to name the six phases in order. Then check yourself.</p>
+  <button class="btn" id="reveal-btn" type="button">Show the answer</button>
+  <div class="reveal box shortcut" id="reveal">
+    <b>0</b> Fix the leaks &rarr; <b>1</b> Analyst loop &rarr; <b>2</b> Science toolbox &rarr; <b>3</b> Clean data + models &rarr; <b>4</b> Business dictionary &rarr; <b>5</b> Open the doors. Come back in a few days and try again; spacing out practice builds long-term memory.
+  </div>
+</section>
+
+<!-- ============================ NEXT ============================ -->
+<section>
+  <h2>7. What to read, and what to ask</h2>
+  <div class="box shortcut prose">
+    <b>One thing to read next:</b> Google's short blog post <a href="https://research.google/blog/ds-star-a-state-of-the-art-versatile-data-science-agent/">"DS-STAR: A state-of-the-art versatile data science agent"</a>. It explains the plan, code, check loop behind Phase 1 with clear diagrams, and it is the single most important idea in this roadmap.
+  </div>
+  <div class="box ask prose">
+    <b>Ask your agent follow-up questions.</b> Anything unclear? Ask in the chat, for example: "Explain Phase 2 with an example from my sales data", "What would Phase 0 change in the code?", or "Make a detailed plan for Phase 1". I am your teacher here and can go as deep or as simple as you like.
+  </div>
+</section>
+
+<!-- ============================ GLOSSARY ============================ -->
+<section id="glossary">
+  <h2>Glossary</h2>
+  <dl class="gloss">
+    <dt>A/B test</dt><dd>Comparing two versions of something (like two prices) to see which performs better, using statistics to rule out luck.</dd>
+    <dt>Agent</dt><dd>An AI that can take actions (run queries, draw charts) in several steps, not just write text.</dd>
+    <dt>AI model (LLM)</dt><dd>The text AI, such as GPT or Llama, that reads your question and writes plans and SQL.</dd>
+    <dt>Anomaly detection</dt><dd>Automatically finding values far outside the normal pattern.</dd>
+    <dt>AutoML</dt><dd>Software that tries many prediction models for you and ranks them by accuracy.</dd>
+    <dt>Deterministic</dt><dd>Always gives the same output for the same input. Tested code is deterministic; AI models are not.</dd>
+    <dt>Drift</dt><dd>New data slowly stops looking like the data a model learned from, so predictions get worse.</dd>
+    <dt>DuckDB</dt><dd>The fast analytics database inside InsightForge that stores your tables and runs SQL.</dd>
+    <dt>Evaluation harness</dt><dd>A fixed exam of questions with known answers, rerun after every change to catch quality drops.</dd>
+    <dt>Evidence</dt><dd>A link from a number in a summary back to the exact table cell it came from.</dd>
+    <dt>Forecasting</dt><dd>Predicting future values over time, with a range showing uncertainty.</dd>
+    <dt>Hypothesis test</dt><dd>A standard method for deciding whether a difference is likely real or just chance.</dd>
+    <dt>Local model</dt><dd>An AI that runs on your own computer (for example with Ollama), so data never leaves it.</dd>
+    <dt>MCP</dt><dd>Model Context Protocol: a standard plug that lets AI assistants like Claude use outside tools.</dd>
+    <dt>Metric dictionary (semantic layer)</dt><dd>Written business definitions, such as what "revenue" means, used by every query and chart.</dd>
+    <dt>Privacy mode</dt><dd>InsightForge's per-dataset setting for what may be sent to an AI: local, schema only, or full.</dd>
+    <dt>Safety check (SQL guard)</dt><dd>Code that inspects every query and blocks anything that is not read-only.</dd>
+    <dt>Sandbox</dt><dd>A sealed environment where code runs without internet and with strict limits.</dd>
+    <dt>Segmentation</dt><dd>Splitting customers or items into groups that behave alike (also called clustering).</dd>
+    <dt>SHAP</dt><dd>A method that shows how much each column pushed a prediction up or down.</dd>
+    <dt>Tool</dt><dd>One ability the AI can call, like "run SQL". The AI chooses the tool; the tool's code does the work.</dd>
+    <dt>Version (dataset version)</dt><dd>A frozen, fingerprinted copy of your data at one point in time, so results can be reproduced.</dd>
+  </dl>
+</section>
+
+<!-- ============================ SOURCES ============================ -->
+<section id="sources">
+  <h2>Sources</h2>
+  <ol class="src">
+    <li id="src-1">Google Research, <a href="https://research.google/blog/ds-star-a-state-of-the-art-versatile-data-science-agent/">DS-STAR: a state-of-the-art versatile data science agent</a>.</li>
+    <li id="src-2">Hong et al., <a href="https://arxiv.org/abs/2402.18679">Data Interpreter: An LLM Agent for Data Science</a>.</li>
+    <li id="src-3">Rahman et al., <a href="https://arxiv.org/abs/2510.04023">LLM-Based Data Science Agents: A Survey</a> (45 agents reviewed).</li>
+    <li id="src-4"><a href="https://spider2-sql.github.io/">Spider 2.0</a>: realistic business text-to-SQL benchmark.</li>
+    <li id="src-5"><a href="https://arxiv.org/html/2606.31041v1">A Semantic-Layer-Mediated Agent for Natural Language to SQL</a> (2026).</li>
+    <li id="src-6"><a href="https://export.arxiv.org/pdf/2608.07437">Fisher-R1 and P-Bench: reliable hypothesis testing with LLM agents</a> (2026).</li>
+    <li id="src-7"><a href="https://www.arxiv.org/pdf/2602.18710">Many AI analysts on the same data reach different conclusions</a> (2026).</li>
+    <li id="src-8">Databox, <a href="https://databox.com/research-reports/using-ai-you-dont-trust">Using AI you don't trust</a> (2026).</li>
+    <li id="src-9">Alteryx, <a href="https://www.prnewswire.com/news-releases/65-of-analysts-say-ai-works-best-when-the-logic-is-managed-at-the-business-level-alteryx-research-finds-302776773.html">State of Data Analysts in the Age of AI</a> (2026).</li>
+    <li id="src-10">insightsoftware, <a href="https://insightsoftware.com/blog/why-dont-data-leaders-trust-ai-and-other-insights-from-our-2026-ai-survey/">Why don't data leaders trust AI?</a> (2026).</li>
+    <li id="src-11">Hollmann et al., <a href="https://www.nature.com/articles/s41586-024-08328-6">Accurate predictions on small data with a tabular foundation model</a>, Nature.</li>
+    <li id="src-12">AWS, <a href="https://aws.amazon.com/blogs/machine-learning/fast-and-accurate-zero-shot-forecasting-with-chronos-bolt-and-autogluon/">Zero-shot forecasting with Chronos-Bolt</a>.</li>
+    <li id="src-13">OpenAI, <a href="https://github.com/openai/mle-bench/">MLE-bench leaderboard</a>.</li>
+    <li id="src-14"><a href="https://github.com/evidentlyai/evidently">Evidently</a>: open-source drift and model monitoring.</li>
+    <li id="src-15">Snowflake, <a href="https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-analyst/verified-query-repository">Verified Query Repository</a>.</li>
+    <li id="src-16">Tableau, <a href="https://help.tableau.com/current/online/en-us/pulse_insights_platform_insight_types.htm">Pulse insight types</a>.</li>
+    <li id="src-17">ThoughtSpot, <a href="https://docs.thoughtspot.com/cloud/26.8.0.cl/spotter-research-mode">Spotter search and deep analysis modes</a>.</li>
+    <li id="src-18"><a href="https://e2b.dev/">E2B</a>: sandboxes for AI-generated code.</li>
+    <li id="src-19">Pydantic, <a href="https://github.com/pydantic/mcp-run-python">mcp-run-python retirement notice</a>.</li>
+    <li id="src-20">Hex, <a href="https://learn.hex.tech/docs/explore-data/threads">Threads and endorsed data</a>.</li>
+    <li id="src-21">Julius, <a href="https://julius.ai/docs/get-started/tools">Tools and capabilities</a>.</li>
+    <li id="src-22">Pecan, <a href="https://www.pecan.ai/blog/chatgpt-for-data-science-risks/">ChatGPT for data analysis: where it breaks</a>.</li>
+    <li id="src-23">Matt Pocock, <a href="https://github.com/mattpocock/skills/blob/main/skills/productivity/teach/SKILL.md">teach skill</a> (the teaching approach used for this page).</li>
+    <li id="src-24">YData, <a href="https://docs.profiling.ydata.ai/latest/getting-started/concepts/">Profiling alerts checklist</a>.</li>
+    <li id="src-25">MotherDuck, <a href="https://motherduck.com/docs/sql-reference/mcp/">MCP server</a>.</li>
+    <li id="src-26">Adyen and Hugging Face, <a href="https://arxiv.org/html/2506.23719">DABstep benchmark</a>.</li>
+  </ol>
+</section>
+
+<footer>
+  Lesson 0001 &middot; InsightForge data science roadmap &middot; 2026-09-27. Built with the structure of Matt Pocock's <a href="https://github.com/mattpocock/skills/blob/main/skills/productivity/teach/SKILL.md">teach</a> skill: mission first, pictures before details, citations, a glossary, and practice with instant feedback.
+</footer>
+</main>
+
+<script>
+  (function () {
+    var bar = document.getElementById("progress");
+    function onScroll() {
+      var h = document.documentElement;
+      var max = h.scrollHeight - h.clientHeight;
+      bar.style.width = (max > 0 ? (h.scrollTop / max) * 100 : 0) + "%";
+    }
+    document.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+
+    var score = 0;
+    var total = document.querySelectorAll("[data-q]").length;
+    var scoreEl = document.getElementById("score");
+    document.querySelectorAll("[data-q]").forEach(function (q) {
+      var buttons = q.querySelectorAll("button");
+      buttons.forEach(function (b) {
+        b.addEventListener("click", function () {
+          var correct = b.getAttribute("data-ok") === "1";
+          if (correct) score += 1;
+          buttons.forEach(function (other) {
+            other.disabled = true;
+            if (other.getAttribute("data-ok") === "1") other.classList.add("right");
+          });
+          if (!correct) b.classList.add("wrong");
+          q.classList.add("done");
+          scoreEl.textContent = "Score: " + score + " / " + total;
+        });
+      });
+    });
+
+    var btn = document.getElementById("reveal-btn");
+    var reveal = document.getElementById("reveal");
+    btn.addEventListener("click", function () {
+      var shown = reveal.classList.toggle("show");
+      btn.textContent = shown ? "Hide the answer" : "Show the answer";
+    });
+  })();
+</script>
+</body>
+</html>
