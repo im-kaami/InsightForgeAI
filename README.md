@@ -141,9 +141,27 @@ Provider presets:
 
 ## What is sent to the LLM
 
-InsightForge sends the discovered table and column names, data types, non-sensitive sample values, the user question, and prior turns' goals and summaries. Summary requests include up to `LLM_SUMMARY_MAX_ROWS` rows from each result table. Set `LLM_SEND_SAMPLE_VALUES=false` to omit all schema sample values.
+| Mode | Outbound data |
+| --- | --- |
+| `local` | No LLM requests. Exploratory chat uses local generic planning and summaries. |
+| `schema_only` | Sends table/column identifiers, types, and current/prior questions. Result values, statistics, previous answers, and schema samples stay local. Questions can still contain data typed by the user. |
+| `full` | Explicitly allows schema samples, result rows, statistics, and conversation history. These can contain sensitive data. |
 
-Sensitive columns are detected from column names and their samples are redacted before prompts are built. This is a heuristic, not a complete data-loss-prevention system; users must review classifications and source data.
+Sensitive-column classification is a name-based heuristic, not a complete data-loss-prevention system. Saved verified reports never call the LLM regardless of mode.
+
+UI file uploads are staged and require preview and confirmation. The legacy upload API auto-confirms unless `review=true`; initial public URL imports and Add Source retain auto-confirm behavior, while manual URL refresh creates a draft. Structural profiling is bounded by function limits and does not certify accuracy or comprehensively detect outliers. A live database query is not a guarantee of source freshness.
+
+## Verified spreadsheet reports
+
+The web file-upload workflow stages immutable drafts. Review inferred columns, source fingerprints, previews, and quality counts before confirmation. Replacements are complete source sets; earlier confirmed versions remain available for reproducible reruns. Public URL and Google Sheets sources can be refreshed manually one source at a time, producing another draft that must be reviewed.
+
+Approved sales reports use saved definitions and deterministic DuckDB calculations rather than a paid LLM. Supported assumptions are explicit row/order/date mappings, ISO/day-first/month-first text dates, decimal amounts, optional total refund and total cost mappings, one currency or a mapped currency column, up to two approved one-to-one joins, and up to five literal AND filters. Net sales, gross profit, margin, comparisons, checks, SQL, and evidence come from the backend report engine; the frontend never recalculates them.
+
+Privacy defaults to local-only. Schema-only planning sends names, types, and questions while values remain local. Full cloud analysis must be explicitly acknowledged and may send questions, result rows, statistics, and summaries containing sensitive data. Saved verified reports stay local regardless of this setting.
+
+Source freshness is recorded as unknown unless the source is a live connection. Import timestamps do not prove freshness, and live queries are unsnapshotted and do not certify freshness. Quality profiles are exact structural counts within bounded profiling limits, not a complete DLP system, anomaly model, or certification of source accuracy. Draft files consume storage until the dataset is deleted; automatic retention cleanup is not implemented yet.
+
+The in-process scheduler continues to run exploratory goals. It is not durable verified-report automation and does not provide delivery guarantees or automatic approval/promotion.
 
 ## Safety
 

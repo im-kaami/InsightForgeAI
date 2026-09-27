@@ -1,7 +1,9 @@
 from pathlib import Path
 
+import pandas as pd
+
 from insightforge.core.catalog import DataCatalog
-from insightforge.ingest import load_any
+from insightforge.ingest import DataSource, load_any, load_source
 
 WORKBOOK = Path(__file__).parent / "fixtures" / "workbook.xlsx"
 
@@ -17,6 +19,26 @@ def test_loads_nonempty_workbook_sheets_and_renames_columns():
         assert any("Empty" in note for note in result.notes)
         columns = catalog.query("SELECT * FROM workbook__orders LIMIT 1").columns
         assert "col_0" in columns
+    finally:
+        catalog.close()
+
+
+def test_excel_preserves_blank_rows_and_text_columns(tmp_path):
+    path = tmp_path / "preserved.xlsx"
+    pd.DataFrame({"id": ["001", None, "002"], "value": [1, None, 2]}).to_excel(
+        path, index=False
+    )
+    catalog = DataCatalog()
+    try:
+        source = DataSource(
+            kind="excel",
+            location=str(path),
+            options={"text_columns": ["id"], "preserve_rows": True},
+        )
+        load_source(source, catalog)
+        frame = catalog.query("SELECT * FROM preserved")
+        assert len(frame) == 3
+        assert frame["id"].iloc[0] == "001"
     finally:
         catalog.close()
 

@@ -69,6 +69,36 @@ async def test_upload_schema_preview_and_owner_scope(client, auth_headers):
     ).status_code == 404
 
 
+async def test_url_routes_reject_local_and_database_sources(
+    client, auth_headers, hr_dataset, monkeypatch
+):
+    from insightforge.services import datasets as dataset_service
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("loader must not be called")
+
+    monkeypatch.setattr(dataset_service, "load_source", forbidden)
+    for location in ("/tmp/private.csv", "sqlite:///private.db"):
+        response = await client.post(
+            "/api/datasets/from-url",
+            headers=auth_headers,
+            json={"url": location, "name": "Blocked"},
+        )
+        assert response.status_code == 400
+        added = await client.post(
+            f"/api/datasets/{hr_dataset['id']}/sources",
+            headers=auth_headers,
+            json={"url": location},
+        )
+        assert added.status_code == 400
+    unsupported = await client.post(
+        f"/api/datasets/{hr_dataset['id']}/sources",
+        headers=auth_headers,
+        files=[("files", ("source.db", b"not a database", "application/octet-stream"))],
+    )
+    assert unsupported.status_code == 400
+
+
 async def test_from_url(client, auth_headers):
     with respx.mock:
         respx.get("https://example.com/data.csv").mock(

@@ -13,9 +13,19 @@ def load_file(source: DataSource, catalog: DataCatalog) -> LoadResult:
     if not path.exists():
         raise IngestError(f"Local source does not exist: {source.location}")
     escaped = _sql_path(source.location)
+    header = int(source.options.get("header", 0))
+    types = source.options.get("text_columns", [])
+
+    def quote_value(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    options = f", header=true, skip={header}"
+    if types:
+        entries = ", ".join(f"{quote_value(name)}: 'VARCHAR'" for name in types)
+        options += f", types={{{entries}}}"
     readers = {
-        "csv": f"read_csv_auto('{escaped}')",
-        "tsv": f"read_csv('{escaped}', delim='\\t', header=true)",
+        "csv": f"read_csv_auto('{escaped}'{options})",
+        "tsv": f"read_csv('{escaped}', delim='\\t'{options})",
         "parquet": f"read_parquet('{escaped}')",
         "json": f"read_json_auto('{escaped}')",
     }

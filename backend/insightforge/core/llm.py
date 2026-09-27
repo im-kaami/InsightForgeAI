@@ -109,9 +109,7 @@ class OpenAICompatibleClient:
             parsed = extract_json(response.text)
             if parsed is not None:
                 logging.getLogger("insightforge").warning(
-                    "LLM returned non-strict JSON; extracted embedded object "
-                    "(first 200 chars: %r)",
-                    response.text[:200],
+                    "LLM returned non-strict JSON; extracted embedded object",
                 )
         if parsed is None:
             raise LLMJSONError("LLM response did not contain valid JSON")

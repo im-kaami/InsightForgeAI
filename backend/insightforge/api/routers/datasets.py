@@ -1,27 +1,54 @@
+import json
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from sqlalchemy import select
+from pydantic import TypeAdapter, ValidationError
+from sqlalchemy import delete, func, select
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from insightforge.api.deps import CurrentUser, Db, StorageDep
-from insightforge.api.schemas import ConnectionDatasetCreate, DatasetOut, URLDatasetCreate
+from insightforge.api.schemas import (
+    ConnectionDatasetCreate,
+    DatasetOut,
+    ImportOptions,
+    PrivacyUpdate,
+    URLDatasetCreate,
+    VersionConfirm,
+    VersionOut,
+)
 from insightforge.config import get_settings
+from insightforge.core.profiling import DataProfile
+from insightforge.core.schema import SchemaInfo
 from insightforge.core.sql_guard import guard_sql
-from insightforge.db.models import Connection, Dataset, User
-from insightforge.ingest import IngestError, detect_source, parse_db_uri
+from insightforge.db.models import (
+    ChatSession,
+    Connection,
+    Dataset,
+    DatasetVersion,
+    ReportDefinition,
+    Run,
+    Schedule,
+    User,
+)
+from insightforge.ingest import IngestError, detect_source, parse_db_uri, public_source
 from insightforge.services.crypto import decrypt, encrypt
 from insightforge.services.datasets import (
+    activate_version,
     add_source,
     create_dataset_from_connection,
-    create_dataset_from_files,
     create_dataset_from_url,
+    ensure_current_version,
+    list_versions,
     open_catalog,
+    refresh_url_dataset,
+    stage_files,
 )
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
+_OPTIONS = TypeAdapter(list[ImportOptions])
 
 
 async def _stream_upload(file: UploadFile, storage: StorageDep) -> Path:
@@ -43,15 +70,51 @@ async def _stream_upload(file: UploadFile, storage: StorageDep) -> Path:
         raise
 
 
-def output(dataset: Dataset) -> DatasetOut:
+def _options(value: str | None, count: int) -> list[ImportOptions] | None:
+    if value is None:
+        return None
+    try:
+        parsed = _OPTIONS.validate_json(value)
+    except ValidationError as error:
+        raise HTTPException(422, "Invalid import options") from error
+    if len(parsed) != count:
+        raise HTTPException(422, "Import options must match the uploaded files")
+    return parsed
+
+
+def _utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def output(dataset: Dataset, review_version_id: str | None = None) -> DatasetOut:
     return DatasetOut(
         id=dataset.id,
         name=dataset.name,
         kind=dataset.kind,
         tables=dataset.tables_json,
-        schema=dataset.schema_json,
+        schema=SchemaInfo.model_validate(dataset.schema_json or {"tables": []}),
         sources=dataset.sources_json,
+        current_version_id=dataset.current_version_id,
+        llm_policy=dataset.llm_policy,
+        profile=DataProfile.model_validate(dataset.profile_json) if dataset.profile_json else None,
+        review_version_id=review_version_id,
         created_at=dataset.created_at,
+    )
+
+
+def version_output(version: DatasetVersion) -> VersionOut:
+    return VersionOut(
+        id=version.id,
+        dataset_id=version.dataset_id,
+        base_version_id=version.base_version_id,
+        state=version.state,
+        sources=version.sources_json,
+        schema=SchemaInfo.model_validate(version.schema_json),
+        profile=DataProfile.model_validate(version.profile_json),
+        created_at=_utc(version.created_at),
+        confirmed_at=_utc(version.confirmed_at),
     )
 
 
@@ -64,6 +127,32 @@ def owned(db: Db, user: User, dataset_id: str) -> Dataset:
     return dataset
 
 
+def owned_version(db: Db, user: User, dataset: Dataset, version_id: str) -> DatasetVersion:
+    version = db.scalar(
+        select(DatasetVersion).where(
+            DatasetVersion.id == version_id,
+            DatasetVersion.dataset_id == dataset.id,
+            DatasetVersion.owner_id == user.id,
+        )
+    )
+    if not version:
+        raise HTTPException(404, "Dataset version not found")
+    return version
+
+
+def latest_draft_id(db: Db, dataset: Dataset) -> str | None:
+    return db.scalar(
+        select(DatasetVersion.id)
+        .where(
+            DatasetVersion.dataset_id == dataset.id,
+            DatasetVersion.owner_id == dataset.owner_id,
+            DatasetVersion.state == "draft",
+        )
+        .order_by(DatasetVersion.created_at.desc())
+        .limit(1)
+    )
+
+
 def connection_uri(db: Db, dataset: Dataset) -> str | None:
     connection = db.get(Connection, dataset.connection_id) if dataset.connection_id else None
     return decrypt(connection.encrypted_uri) if connection else None
@@ -71,7 +160,20 @@ def connection_uri(db: Db, dataset: Dataset) -> str | None:
 
 @router.get("", response_model=list[DatasetOut])
 def list_datasets(db: Db, user: CurrentUser):
-    return [output(item) for item in db.scalars(select(Dataset).where(Dataset.owner_id == user.id))]
+    drafts: dict[str, str] = {}
+    for dataset_id, version_id in db.execute(
+        select(DatasetVersion.dataset_id, DatasetVersion.id)
+        .where(
+            DatasetVersion.owner_id == user.id,
+            DatasetVersion.state == "draft",
+        )
+        .order_by(DatasetVersion.created_at.desc())
+    ):
+        drafts.setdefault(dataset_id, version_id)
+    return [
+        output(item, review_version_id=drafts.get(item.id))
+        for item in db.scalars(select(Dataset).where(Dataset.owner_id == user.id))
+    ]
 
 
 @router.post("/upload", response_model=DatasetOut, status_code=201)
@@ -81,12 +183,19 @@ async def upload_dataset(
     user: CurrentUser,
     storage: StorageDep,
     name: Annotated[str | None, Form()] = None,
+    review: Annotated[bool, Form()] = False,
+    options_json: Annotated[str | None, Form()] = None,
 ):
     values: list[tuple[str, Path]] = []
     try:
         for file in files:
             values.append((file.filename or "upload", await _stream_upload(file, storage)))
-        return output(create_dataset_from_files(db, user, values, name))
+        dataset, version = stage_files(
+            db, user, values, name, options=_options(options_json, len(values))
+        )
+        if review:
+            return output(dataset, review_version_id=version.id)
+        return output(activate_version(db, dataset, version, None))
     except IngestError as error:
         raise HTTPException(400, str(error)) from error
     finally:
@@ -105,9 +214,7 @@ def from_url(body: URLDatasetCreate, db: Db, user: CurrentUser):
 
 
 @router.post("/from-connection", response_model=DatasetOut, status_code=201)
-def from_connection(
-    body: ConnectionDatasetCreate, db: Db, user: CurrentUser
-):
+def from_connection(body: ConnectionDatasetCreate, db: Db, user: CurrentUser):
     connection = None
     if body.connection_id:
         connection = db.scalar(
@@ -133,6 +240,89 @@ def from_connection(
         raise HTTPException(400, str(error)) from error
 
 
+@router.get("/{dataset_id}/versions", response_model=list[VersionOut])
+def versions(dataset_id: str, db: Db, user: CurrentUser):
+    dataset = owned(db, user, dataset_id)
+    if dataset.connection_id:
+        raise HTTPException(422, "Live connection datasets do not have immutable versions")
+    return [version_output(item) for item in list_versions(db, dataset)]
+
+
+@router.post("/{dataset_id}/versions", response_model=VersionOut, status_code=201)
+async def replace_version(
+    dataset_id: str,
+    db: Db,
+    files: Annotated[list[UploadFile], File()],
+    user: CurrentUser,
+    storage: StorageDep,
+    options_json: Annotated[str | None, Form()] = None,
+):
+    dataset = owned(db, user, dataset_id)
+    if dataset.connection_id:
+        raise HTTPException(422, "Live connection datasets do not have immutable versions")
+    values: list[tuple[str, Path]] = []
+    try:
+        for file in files:
+            values.append((file.filename or "upload", await _stream_upload(file, storage)))
+        _, version = stage_files(
+            db, user, values, None, dataset=dataset, options=_options(options_json, len(values))
+        )
+        return version_output(version)
+    except IngestError as error:
+        raise HTTPException(400, str(error)) from error
+    finally:
+        for _, path in values:
+            path.unlink(missing_ok=True)
+
+
+@router.post("/{dataset_id}/versions/{version_id}/confirm", response_model=DatasetOut)
+def confirm_version(
+    dataset_id: str,
+    version_id: str,
+    body: VersionConfirm,
+    db: Db,
+    user: CurrentUser,
+):
+    dataset = owned(db, user, dataset_id)
+    version = owned_version(db, user, dataset, version_id)
+    return output(activate_version(db, dataset, version, body.expected_current_version_id))
+
+
+@router.post("/{dataset_id}/refresh", response_model=DatasetOut)
+def refresh_dataset(dataset_id: str, db: Db, user: CurrentUser):
+    dataset = owned(db, user, dataset_id)
+    try:
+        version = refresh_url_dataset(db, user, dataset)
+    except IngestError as error:
+        raise HTTPException(422, str(error)) from error
+    return output(dataset, review_version_id=version.id)
+
+
+@router.patch("/{dataset_id}/privacy", response_model=DatasetOut)
+def update_privacy(
+    dataset_id: str,
+    body: PrivacyUpdate,
+    db: Db,
+    user: CurrentUser,
+):
+    dataset = owned(db, user, dataset_id)
+    active = db.scalar(
+        select(func.count())
+        .select_from(Run)
+        .join(ChatSession, ChatSession.id == Run.session_id)
+        .where(
+            ChatSession.dataset_id == dataset.id,
+            Run.status.in_(("pending", "running")),
+        )
+    )
+    if active:
+        raise HTTPException(409, "Wait for active analyses to finish before changing privacy")
+    dataset.llm_policy = body.mode
+    db.commit()
+    db.refresh(dataset)
+    return output(dataset)
+
+
 @router.post("/{dataset_id}/sources", response_model=DatasetOut)
 async def add_dataset_source(
     dataset_id: str,
@@ -142,28 +332,42 @@ async def add_dataset_source(
     storage: StorageDep,
 ):
     dataset = owned(db, user, dataset_id)
+    temp_path: Path | None = None
     try:
         if request.headers.get("content-type", "").startswith("multipart/"):
             form = await request.form()
-            upload = next((value for value in form.values() if isinstance(value, StarletteUploadFile)), None)
+            upload = next(
+                (value for value in form.values() if isinstance(value, StarletteUploadFile)), None
+            )
             if not upload:
                 raise HTTPException(400, "A file is required")
             temp_path = await _stream_upload(upload, storage)
-            path = storage.save_upload_path(
-                user.id, dataset.id, upload.filename or "upload", temp_path
-            )
-            source = detect_source(str(path))
+            suffix = Path(upload.filename or "upload").suffix
+            if suffix:
+                renamed = temp_path.with_suffix(suffix)
+                temp_path.replace(renamed)
+                temp_path = renamed
+            source = detect_source(str(temp_path), name=Path(upload.filename or "upload").stem)
+            if source.kind not in {"csv", "tsv", "parquet", "json", "excel"}:
+                raise IngestError("Only CSV, TSV, Parquet, JSON and Excel uploads are supported")
+            source.options["original_filename"] = Path(upload.filename or "upload").name
         else:
             body = await request.json()
-            source = detect_source(body["url"])
+            source = public_source(body["url"])
         return output(add_source(db, dataset, source, connection_uri(db, dataset)))
     except IngestError as error:
         raise HTTPException(400, str(error)) from error
+    finally:
+        if temp_path:
+            temp_path.unlink(missing_ok=True)
 
 
 @router.get("/{dataset_id}", response_model=DatasetOut)
 def get_dataset(dataset_id: str, db: Db, user: CurrentUser):
-    return output(owned(db, user, dataset_id))
+    dataset = owned(db, user, dataset_id)
+    if not dataset.connection_id:
+        ensure_current_version(db, dataset)
+    return output(dataset, review_version_id=latest_draft_id(db, dataset))
 
 
 @router.get("/{dataset_id}/schema")
@@ -178,15 +382,31 @@ def preview(
     db: Db,
     user: CurrentUser,
     limit: int = 50,
+    version_id: str | None = None,
 ):
     dataset = owned(db, user, dataset_id)
-    if table not in dataset.tables_json:
+    if version_id is None and not dataset.connection_id:
+        ensure_current_version(db, dataset)
+    if version_id:
+        version = owned_version(db, user, dataset, version_id)
+        tables = [item["name"] for item in version.schema_json["tables"]]
+    else:
+        tables = dataset.tables_json
+    if table not in tables:
         raise HTTPException(404, "Table not found")
     quoted = ".".join(f'"{part.replace(chr(34), chr(34) * 2)}"' for part in table.split("."))
-    catalog = open_catalog(dataset, connection_uri(db, dataset), for_run=True)
+    catalog = open_catalog(
+        dataset,
+        connection_uri(db, dataset),
+        for_run=True,
+        version_id=version_id,
+    )
     try:
         frame = catalog.query(guard_sql(f"SELECT * FROM {quoted} LIMIT {min(limit, 200)}"))
-        return {"columns": list(frame.columns), "rows": frame.to_dict(orient="records")}
+        return {
+            "columns": list(frame.columns),
+            "rows": json.loads(frame.to_json(orient="records", date_format="iso")),
+        }
     finally:
         catalog.close()
 
@@ -199,6 +419,33 @@ def delete_dataset(
     storage: StorageDep,
 ):
     dataset = owned(db, user, dataset_id)
+    scheduled = db.scalar(
+        select(func.count()).select_from(Schedule).where(Schedule.dataset_id == dataset.id)
+    )
+    if scheduled:
+        raise HTTPException(409, "Remove dataset schedules before deleting it")
+    active = db.scalar(
+        select(func.count())
+        .select_from(Run)
+        .join(ChatSession, Run.session_id == ChatSession.id)
+        .where(
+            ChatSession.dataset_id == dataset.id,
+            Run.status.in_(("pending", "running")),
+        )
+    )
+    if active:
+        raise HTTPException(409, "Wait for active analyses before deleting the dataset")
+    session_ids = list(db.scalars(select(ChatSession.id).where(ChatSession.dataset_id == dataset.id)))
+    db.execute(delete(ReportDefinition).where(ReportDefinition.dataset_id == dataset.id))
+    db.execute(delete(DatasetVersion).where(DatasetVersion.dataset_id == dataset.id))
+    if session_ids:
+        run_ids = list(db.scalars(select(Run.id).where(Run.session_id.in_(session_ids))))
+        if run_ids:
+            from insightforge.db.models import Artifact
+
+            db.execute(delete(Artifact).where(Artifact.run_id.in_(run_ids)))
+            db.execute(delete(Run).where(Run.id.in_(run_ids)))
+        db.execute(delete(ChatSession).where(ChatSession.id.in_(session_ids)))
     db.delete(dataset)
     db.commit()
     storage.delete_dataset(user.id, dataset.id)

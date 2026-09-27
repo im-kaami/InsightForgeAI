@@ -6,8 +6,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
 
-from insightforge.db.models import Run, Schedule
+from insightforge.db.models import Dataset, Run, Schedule
 from insightforge.db.session import SessionLocal, configure
+from insightforge.services.datasets import ensure_current_version
 from insightforge.services.runs import execute_run
 
 
@@ -65,11 +66,15 @@ class SchedulerService:
             schedule = db.get(Schedule, schedule_id)
             if not schedule or not schedule.enabled:
                 return None
+            dataset = db.get(Dataset, schedule.dataset_id)
+            version = ensure_current_version(db, dataset)
             run = Run(
                 session_id=schedule.session_id,
                 owner_id=schedule.owner_id,
                 goal=schedule.goal,
                 status="pending",
+                dataset_version_id=version.id if version else None,
+                request_json={"kind": "exploratory", "privacy_mode": dataset.llm_policy},
             )
             db.add(run)
             db.flush()

@@ -18,12 +18,28 @@ class Storage:
         return path
 
     def save_upload_path(
-        self, user_id: str, dataset_id: str, filename: str, temp_path: Path
+        self,
+        user_id: str,
+        dataset_id: str,
+        filename: str,
+        temp_path: Path,
+        version_id: str | None = None,
     ) -> Path:
-        destination = self.dataset_dir(user_id, dataset_id) / "uploads" / Path(filename).name
+        directory = (
+            self.version_dir(user_id, dataset_id, version_id)
+            if version_id
+            else self.dataset_dir(user_id, dataset_id)
+        )
+        destination = directory / "uploads" / Path(filename).name
         destination.unlink(missing_ok=True)
         shutil.move(str(temp_path), destination)
         return destination
+
+    def version_dir(self, user_id: str, dataset_id: str, version_id: str) -> Path:
+        path = self.dataset_dir(user_id, dataset_id) / "versions" / version_id
+        for child in (path / "uploads", path / "downloads"):
+            child.mkdir(parents=True, exist_ok=True)
+        return path
 
     def run_dir(self, user_id: str, run_id: str) -> Path:
         path = self.root / "users" / user_id / "runs" / run_id

@@ -36,16 +36,27 @@ from insightforge.core.planner import (
     validate_plan,
 )
 from insightforge.core.plotter import PlotError, figure_to_png, make_figure
+from insightforge.core.privacy import PrivacyMode, PromptPolicy
+from insightforge.core.profiling import DataProfile, profile_catalog
 from insightforge.core.schema import ColumnInfo, SchemaInfo, TableInfo
 from insightforge.core.sensitivity import SENSITIVE_PATTERNS, classify_column
 from insightforge.core.sql_guard import SQLGuardError, guard_sql
 from insightforge.core.summarizer import Summarizer
+from insightforge.core.verified_report import (
+    ReportPeriod,
+    ReportValidationError,
+    SalesDefinition,
+    VerifiedSalesResult,
+    calculate_sales_report,
+    validate_definition,
+)
 
 __all__ = [
     "Artifact",
     "ColumnInfo",
     "ConversationMemory",
     "DataCatalog",
+    "DataProfile",
     "ErrorArtifact",
     "Executor",
     "FakeLLMClient",
@@ -56,12 +67,17 @@ __all__ = [
     "OpenAICompatibleClient",
     "Plan",
     "PlanValidationError",
+    "PrivacyMode",
+    "PromptPolicy",
     "Planner",
     "PlotArtifact",
     "PlotError",
     "PlotStep",
     "QueryTimeoutError",
+    "ReportPeriod",
+    "ReportValidationError",
     "RunResult",
+    "SalesDefinition",
     "SENSITIVE_PATTERNS",
     "SQLGuardError",
     "SchemaInfo",
@@ -73,12 +89,15 @@ __all__ = [
     "TableInfo",
     "TextArtifact",
     "Turn",
+    "VerifiedSalesResult",
     "build_llm",
+    "calculate_sales_report",
     "classify_column",
     "describe_error",
     "extract_json",
     "llm_mode",
     "offline_fake_llm",
+    "profile_catalog",
     "resolved_base_url",
     "resolved_model",
     "fallback_plan",
@@ -86,5 +105,6 @@ __all__ = [
     "guard_sql",
     "make_figure",
     "sanitize_identifier",
+    "validate_definition",
     "validate_plan",
 ]

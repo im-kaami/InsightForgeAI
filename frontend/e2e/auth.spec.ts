@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -30,9 +30,14 @@ test("register, ask a question, see results", async ({ page }, testInfo) => {
     await page
       .locator('input[type="file"]')
       .setInputFiles(resolve("../backend/tests/fixtures/hr.csv"));
-    await page.getByRole("button", { name: "Upload" }).click();
+    await page.getByRole("button", { name: "Preview import" }).click();
+    await expect(page.getByRole("heading", { name: "Review import" })).toBeVisible();
+    await page.getByLabel("I reviewed the import preview").check();
+    await page.getByRole("button", { name: "Confirm import" }).click();
 
-    const datasetRow = page.getByRole("row").filter({ hasText: "hr" });
+    const datasetRow = page.getByRole("row").filter({
+      has: page.getByRole("button", { name: "Ask" }),
+    });
     await expect(datasetRow).toBeVisible({ timeout: 15_000 });
     await datasetRow.getByRole("button", { name: "Ask" }).click();
 
@@ -72,6 +77,153 @@ test("register, ask a question, see results", async ({ page }, testInfo) => {
       contentType: "text/plain",
     });
   }
+});
+
+test("double-clicking Ask creates one session", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  await page.goto("/register");
+  await page.locator("#email").fill(`ask-guard-${Date.now()}@example.com`);
+  await page.locator("#password").fill("password123");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/datasets$/, { timeout: 15_000 });
+  await page.getByRole("button", { name: "Add data" }).click();
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles(resolve("../backend/tests/fixtures/hr.csv"));
+  await page.getByRole("button", { name: "Preview import" }).click();
+  await page.getByLabel("I reviewed the import preview").check();
+  await page.getByRole("button", { name: "Confirm import" }).click();
+  let creates = 0;
+  await page.route("**/api/sessions", async (route) => {
+    if (route.request().method() === "POST") {
+      creates += 1;
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+    }
+    await route.fallback();
+  });
+  const ask = page.getByRole("button", { name: "Ask" });
+  await expect(ask).toBeVisible({ timeout: 15_000 });
+  const navigationStarted = Date.now();
+  await ask.dblclick();
+  await expect(page).toHaveURL(/\/sessions\/[a-f0-9]+$/, { timeout: 15_000 });
+  await expect(page.getByPlaceholder("Ask a question about this dataset...")).toBeVisible();
+  console.log(JSON.stringify({ phase: "ask", elapsed_ms: Date.now() - navigationStarted }));
+  expect(creates).toBe(1);
+  await expect(page.getByText(/Jest worker encountered/i)).toHaveCount(0);
+  expect(consoleErrors).toEqual([]);
+});
+
+test("draft Review and detail Start analysis create one session", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  await page.goto("/register");
+  await page.locator("#email").fill(`review-guard-${Date.now()}@example.com`);
+  await page.locator("#password").fill("password123");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/datasets$/, { timeout: 15_000 });
+  await page.getByRole("button", { name: "Add data" }).click();
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles(resolve("../backend/tests/fixtures/hr.csv"));
+  await page.getByRole("button", { name: "Preview import" }).click();
+  await expect(page.getByRole("heading", { name: "Review import" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Confirm import" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const navigationStarted = Date.now();
+  await page.getByRole("button", { name: "Review" }).click();
+  await expect(page).toHaveURL(/\/datasets\/[a-f0-9]+$/, { timeout: 15_000 });
+  await expect(page.getByText("Version history")).toBeVisible();
+  console.log(JSON.stringify({ phase: "review", elapsed_ms: Date.now() - navigationStarted }));
+  await page.getByRole("button", { name: "Review" }).click();
+  await expect(page.getByRole("heading", { name: "Review import" })).toBeVisible();
+  await page.getByLabel("I reviewed the import preview").check();
+  await page.getByRole("button", { name: "Confirm import" }).click();
+  let creates = 0;
+  await page.route("**/api/sessions", async (route) => {
+    if (route.request().method() === "POST") {
+      creates += 1;
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+    }
+    await route.fallback();
+  });
+  const askStarted = Date.now();
+  await page.getByRole("button", { name: "Start analysis" }).dblclick();
+  await expect(page).toHaveURL(/\/sessions\/[a-f0-9]+$/, { timeout: 15_000 });
+  await expect(page.getByPlaceholder("Ask a question about this dataset...")).toBeVisible();
+  console.log(JSON.stringify({ phase: "ask", elapsed_ms: Date.now() - askStarted }));
+  expect(creates).toBe(1);
+  await expect(page.getByText(/Jest worker encountered/i)).toHaveCount(0);
+  expect(consoleErrors).toEqual([]);
+});
+
+test("Ask unlocks after a failed session request", async ({ page }) => {
+  await page.goto("/register");
+  await page.locator("#email").fill(`retry-guard-${Date.now()}@example.com`);
+  await page.locator("#password").fill("password123");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/datasets$/, { timeout: 15_000 });
+  await page.getByRole("button", { name: "Add data" }).click();
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles(resolve("../backend/tests/fixtures/hr.csv"));
+  await page.getByRole("button", { name: "Preview import" }).click();
+  await page.getByLabel("I reviewed the import preview").check();
+  await page.getByRole("button", { name: "Confirm import" }).click();
+  let failed = false;
+  await page.route("**/api/sessions", async (route) => {
+    if (route.request().method() === "POST" && !failed) {
+      failed = true;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: '{"detail":"Temporary session failure"}',
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  const ask = page.getByRole("button", { name: "Ask" });
+  await expect(ask).toBeVisible({ timeout: 15_000 });
+  await ask.click();
+  await expect(page.getByText("Temporary session failure")).toBeVisible();
+  await expect(ask).toBeEnabled();
+  await page.unroute("**/api/sessions");
+  await ask.click();
+  await expect(page).toHaveURL(/\/sessions\/[a-f0-9]+$/, { timeout: 15_000 });
+  await expect(page.getByPlaceholder("Ask a question about this dataset...")).toBeVisible();
+});
+
+test("polling recovers when the run event stream fails", async ({ page }) => {
+  await page.goto("/register");
+  await page.locator("#email").fill(`stream-${Date.now()}@example.com`);
+  await page.locator("#password").fill("password123");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/datasets$/, { timeout: 15_000 });
+  await page.getByRole("button", { name: "Add data" }).click();
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles(resolve("../backend/tests/fixtures/hr.csv"));
+  await page.getByRole("button", { name: "Preview import" }).click();
+  await page.getByLabel("I reviewed the import preview").check();
+  await page.getByRole("button", { name: "Confirm import" }).click();
+  const datasetRow = page.getByRole("row").filter({
+    has: page.getByRole("button", { name: "Ask" }),
+  });
+  await expect(datasetRow).toBeVisible({ timeout: 15_000 });
+  await datasetRow.getByRole("button", { name: "Ask" }).click();
+  await expect(page).toHaveURL(/\/sessions\/[a-f0-9]+$/, { timeout: 15_000 });
+  await page.route("**/api/runs/*/events", (route) => route.abort());
+  const composer = page.getByPlaceholder("Ask a question about this dataset...");
+  await composer.fill("Profile departments");
+  await composer.press("Enter");
+  await expect(page.getByText("completed", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("run-card")).toHaveCount(1);
 });
 
 test("register rejects short password without submitting", async ({ page }) => {

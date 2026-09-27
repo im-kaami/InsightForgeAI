@@ -1,4 +1,15 @@
-from insightforge.db.models import Artifact, Base, ChatSession, Connection, Dataset, Run, Schedule, User
+from insightforge.db.models import (
+    Artifact,
+    Base,
+    ChatSession,
+    Connection,
+    Dataset,
+    DatasetVersion,
+    ReportDefinition,
+    Run,
+    Schedule,
+    User,
+)
 from insightforge.db.session import SessionLocal, get_db, init_db
 
 __all__ = [
@@ -7,6 +18,8 @@ __all__ = [
     "ChatSession",
     "Connection",
     "Dataset",
+    "DatasetVersion",
+    "ReportDefinition",
     "Run",
     "Schedule",
     "SessionLocal",

@@ -55,7 +55,11 @@ export function DataTable({
             {visible.map((row, index) => (
               <TableRow key={index}>
                 {columns.map((column) => (
-                  <TableCell key={column}>{String(row[column] ?? "")}</TableCell>
+                  <TableCell key={column}>
+                    {row[column] === null || row[column] === undefined
+                      ? "Not available"
+                      : String(row[column])}
+                  </TableCell>
                 ))}
               </TableRow>
             ))}

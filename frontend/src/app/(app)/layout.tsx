@@ -49,10 +49,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </nav>
           <div className="mt-auto space-y-3 pt-8">
             {healthQuery.data?.llm === "fake" ? (
-              <Badge variant="outline">Offline mode – set LLM_API_KEY</Badge>
+              <Badge variant="outline">Configured model: offline</Badge>
             ) : healthQuery.data ? (
               <p className="px-1 text-xs text-muted-foreground">
-                {healthQuery.data.provider} · {healthQuery.data.model}
+                Configured model: {healthQuery.data.provider} · {healthQuery.data.model}
               </p>
             ) : null}
             <div className="rounded-lg border p-3 text-xs text-muted-foreground">

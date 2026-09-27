@@ -6,6 +6,7 @@ from insightforge.ingest.base import (
     detect_source,
     load_any,
     load_source,
+    public_source,
     table_name_for,
 )
 from insightforge.ingest.database import load_database, parse_db_uri, redact_uri
@@ -32,6 +33,7 @@ __all__ = [
     "load_url",
     "parse_db_uri",
     "parse_gsheet",
+    "public_source",
     "redact_uri",
     "table_name_for",
     "validate_public_url",

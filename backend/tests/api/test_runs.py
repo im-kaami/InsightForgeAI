@@ -11,6 +11,12 @@ async def _wait(client, headers, run_id):
 
 
 async def test_runs_events_memory_and_reports(client, auth_headers, hr_dataset, app):
+    privacy = await client.patch(
+        f"/api/datasets/{hr_dataset['id']}/privacy",
+        headers=auth_headers,
+        json={"mode": "full", "acknowledged": True},
+    )
+    assert privacy.status_code == 200, privacy.text
     session = await client.post(
         "/api/sessions",
         headers=auth_headers,

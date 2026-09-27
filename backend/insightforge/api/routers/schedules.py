@@ -8,6 +8,7 @@ from insightforge.api.deps import CurrentUser, Db
 from insightforge.api.routers.sessions import run_output
 from insightforge.api.schemas import ScheduleCreate, ScheduleOut, ScheduleUpdate
 from insightforge.db.models import ChatSession, Dataset, Run, Schedule, User
+from insightforge.services.datasets import ensure_current_version
 from insightforge.services.runs import execute_run
 from insightforge.services.scheduler import schedule_timezone, scheduler
 
@@ -106,11 +107,15 @@ def delete_schedule(schedule_id: str, db: Db, user: CurrentUser):
 @router.post("/{schedule_id}/run-now")
 def run_now(schedule_id: str, db: Db, user: CurrentUser):
     schedule = owned(db, user, schedule_id)
+    dataset = db.get(Dataset, schedule.dataset_id)
+    version = ensure_current_version(db, dataset)
     run = Run(
         session_id=schedule.session_id,
         owner_id=user.id,
         goal=schedule.goal,
         status="pending",
+        dataset_version_id=version.id if version else None,
+        request_json={"kind": "exploratory", "privacy_mode": dataset.llm_policy},
     )
     db.add(run)
     db.flush()

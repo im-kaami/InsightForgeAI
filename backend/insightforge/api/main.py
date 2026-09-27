@@ -4,10 +4,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
-from insightforge.api.routers import auth, connections, datasets, runs, schedules, sessions
-from insightforge.api.schemas import HealthOut
+from insightforge.api.routers import auth, connections, datasets, runs, schedules, sessions, verified_reports
+from insightforge.api.schemas import HealthOut, ImportOptions
 from insightforge.config import get_settings, validate_settings
 from insightforge.core.llm import build_llm, llm_mode, resolved_model
 from insightforge.db.models import Run
@@ -74,8 +75,23 @@ def create_app() -> FastAPI:
         sessions.router,
         runs.router,
         schedules.router,
+        verified_reports.router,
     ):
         application.include_router(router, prefix="/api")
+
+    def openapi_schema():
+        if application.openapi_schema:
+            return application.openapi_schema
+        schema = get_openapi(
+            title=application.title,
+            version=application.version,
+            routes=application.routes,
+        )
+        schema["components"]["schemas"]["ImportOptions"] = ImportOptions.model_json_schema()
+        application.openapi_schema = schema
+        return schema
+
+    application.openapi = openapi_schema
 
     @application.exception_handler(DatasetBusyError)
     async def dataset_busy(_request: Request, error: DatasetBusyError):

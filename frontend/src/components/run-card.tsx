@@ -18,8 +18,22 @@ import { StepTimeline } from "@/components/step-timeline";
 import { api, ApiError, runs, type Run } from "@/lib/api";
 import type { RunEvent } from "@/lib/sse";
 
+const verificationLabels: Record<string, string> = {
+  exploratory: "Exploratory analysis",
+  checks_passed: "Calculation checks passed",
+  needs_review: "Needs review",
+  blocked: "Blocked by validation",
+};
+
 export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] }) {
   const artifacts = run.artifacts ?? [];
+  const provenance = (run.provenance ?? {}) as Record<string, unknown>;
+  const evidence = (provenance.evidence ?? []) as Record<string, unknown>[];
+  const checks = (provenance.checks ?? []) as Record<string, unknown>[];
+  const metricDefinitions = (provenance.metric_definitions ?? {}) as Record<string, unknown>;
+  const notices = Array.from(
+    new Set([...(run.warnings ?? []), run.fallback_reason].filter(Boolean) as string[]),
+  );
   async function downloadCsv(position: number, name: string) {
     try {
       await api.downloadBlob(`/runs/${run.id}/artifacts/${position}/csv`, `${name}.csv`);
@@ -42,17 +56,22 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
     }
   }
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="run-card">
       <div className="ml-auto max-w-2xl rounded-2xl bg-primary px-4 py-3 text-sm text-primary-foreground">
         {run.goal}
       </div>
       <Card>
         <CardHeader className="flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-base">Analysis</CardTitle>
+            <CardTitle className="text-base">
+              {run.definition_id ? "Approved sales report" : "Exploratory analysis"}
+            </CardTitle>
             <div className="mt-1 flex gap-2">
               {run.used_fallback_plan && <Badge variant="secondary">profiling plan</Badge>}
               <Badge variant="outline">{run.status}</Badge>
+              <Badge variant="outline">
+                {verificationLabels[run.verification_status] ?? run.verification_status}
+              </Badge>
             </div>
           </div>
           {run.status === "completed" && (
@@ -77,11 +96,26 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
         </CardHeader>
         <CardContent className="space-y-5">
           <StepTimeline events={events} />
+          {run.error && (
+            <div role="alert" className="rounded border border-destructive/30 p-3 text-sm">
+              <Badge variant="destructive">Error</Badge>
+              <p className="mt-2">{run.error}</p>
+            </div>
+          )}
+          {notices.map((warning) => (
+            <div key={warning} className="rounded border border-amber-500/30 p-3 text-sm">
+              {warning}
+            </div>
+          ))}
           {artifacts.map((artifact, index) => {
             const item = artifact as Record<string, unknown>;
             if (item.type === "table")
               return (
-                <section key={index} className="space-y-2">
+                <section
+                  key={index}
+                  id={`artifact-${run.id}-${String(item.name)}`}
+                  className="space-y-2"
+                >
                   <h3 className="font-medium">{String(item.name)}</h3>
                   <DataTable
                     columns={(item.columns as string[]) ?? []}
@@ -112,7 +146,11 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
               return <Markdown key={index}>{String(item.text ?? "")}</Markdown>;
             if (item.type === "error")
               return (
-                <div key={index} className="rounded border border-destructive/30 p-3 text-sm">
+                <div
+                  key={index}
+                  role="alert"
+                  className="rounded border border-destructive/30 p-3 text-sm"
+                >
                   <Badge variant="destructive">Error</Badge>
                   <p className="mt-2">{String(item.message)}</p>
                 </div>
@@ -123,6 +161,79 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
             !artifacts.some((item) => (item as Record<string, unknown>).type === "text") && (
               <Markdown>{run.summary}</Markdown>
             )}
+          <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+            <span>Source version: {run.dataset_version_id ?? "Not available"}</span>
+            <span>
+              Definition: {run.definition_id ?? "Not available"}
+              {provenance.definition_version ? ` · v${String(provenance.definition_version)}` : ""}
+            </span>
+            <span>Imported at: {String(provenance.imported_at ?? "Not available")}</span>
+            <span>Freshness: {String(provenance.source_freshness ?? "Not available")}</span>
+            <span>Privacy: {String(provenance.privacy_mode ?? "Not available")}</span>
+            <span>
+              Engine:{" "}
+              {String(provenance.engine_version ?? provenance.engine_kind ?? "Not available")}
+            </span>
+          </div>
+          {(evidence.length > 0 ||
+            checks.length > 0 ||
+            Object.keys(metricDefinitions).length > 0) && (
+            <details className="rounded border p-3">
+              <summary className="font-medium">Evidence and definitions</summary>
+              <div className="mt-3 space-y-4 text-sm">
+                {checks.map((check, index) => (
+                  <div key={`${String(check.code)}-${index}`}>
+                    <Badge variant={check.passed ? "secondary" : "destructive"}>
+                      {check.passed ? "passed" : "failed"}
+                    </Badge>{" "}
+                    {String(check.message ?? check.code)}
+                  </div>
+                ))}
+                {Object.entries(metricDefinitions).map(([name, definition]) => (
+                  <p key={name}>
+                    <strong>{name}:</strong> {String(definition)}
+                  </p>
+                ))}
+                <div className="space-y-2">
+                  {evidence.map((entry) => {
+                    const value = entry.value === null ? "Not available" : String(entry.value);
+                    return (
+                      <div
+                        key={String(entry.id)}
+                        data-testid={`evidence-${String(entry.id)}`}
+                        className="rounded bg-muted p-2"
+                      >
+                        <a
+                          className="font-mono underline"
+                          href={`#artifact-${run.id}-${String(entry.artifact)}`}
+                        >
+                          {String(entry.id)}
+                        </a>{" "}
+                        <span>{value}</span>
+                        <span className="ml-2 text-muted-foreground">
+                          {String(entry.artifact)}, row {String(entry.row)}, column{" "}
+                          {String(entry.column)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <pre className="overflow-auto text-xs">
+                  {JSON.stringify(
+                    {
+                      period: provenance.period,
+                      joins: (provenance.definition as Record<string, unknown> | undefined)?.joins,
+                      filters: (provenance.definition as Record<string, unknown> | undefined)
+                        ?.filters,
+                      sources: provenance.sources,
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </div>
+            </details>
+          )}
           <p className="text-xs text-muted-foreground">
             Tokens:{" "}
             {Object.values(run.token_usage ?? {})

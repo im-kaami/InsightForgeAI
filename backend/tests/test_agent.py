@@ -31,7 +31,7 @@ def test_agent_end_to_end_and_follow_up_memory(catalog):
     }
     llm = FakeLLMClient([json.dumps(plan), "Average salary varies by department."])
     memory = ConversationMemory()
-    agent = InsightForgeAgent(llm)
+    agent = InsightForgeAgent(llm, privacy_mode="full")
 
     events = []
     result = agent.run("Compare average salary by department", catalog, memory, on_event=events.append)

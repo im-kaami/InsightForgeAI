@@ -13,8 +13,8 @@ async def app(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{(tmp_path / 'app.db').as_posix()}")
     monkeypatch.setenv("STORAGE_DIR", str(tmp_path / "storage"))
     monkeypatch.setenv("LLM_PROVIDER", "fake")
-    monkeypatch.setenv("JWT_SECRET", "test")
-    monkeypatch.setenv("APP_SECRET", "test")
+    monkeypatch.setenv("JWT_SECRET", "test-jwt-secret-with-at-least-32-characters")
+    monkeypatch.setenv("APP_SECRET", "test-app-secret-with-at-least-32-characters")
     monkeypatch.setenv("SCHEDULER_ENABLED", "false")
     get_settings.cache_clear()
     from insightforge.api.main import create_app

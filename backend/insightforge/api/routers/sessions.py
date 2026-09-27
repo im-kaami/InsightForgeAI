@@ -6,8 +6,17 @@ from sqlalchemy import delete, func, select
 from insightforge.api.deps import BusDep, CurrentUser, Db, LLMDep
 from insightforge.api.schemas import RunCreate, RunOut, SessionCreate, SessionOut
 from insightforge.config import get_settings
-from insightforge.db.models import Artifact, ChatSession, Dataset, Run, User
+from insightforge.db.models import (
+    Artifact,
+    ChatSession,
+    Dataset,
+    ReportDefinition,
+    Run,
+    Schedule,
+    User,
+)
 from insightforge.db.session import SessionLocal
+from insightforge.services.datasets import ensure_current_version
 from insightforge.services.runs import start_run
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -28,6 +37,12 @@ def run_output(db: Db, run: Run) -> RunOut:
         timings=run.timings_json or {},
         token_usage=run.token_usage_json or {},
         used_fallback_plan=run.used_fallback_plan,
+        dataset_version_id=run.dataset_version_id,
+        definition_id=run.definition_id,
+        provenance=run.provenance_json or {},
+        verification_status=run.verification_status,
+        warnings=run.warnings_json or [],
+        fallback_reason=run.fallback_reason,
         error=run.error,
         created_at=run.created_at,
         finished_at=run.finished_at,
@@ -132,10 +147,23 @@ def list_session_runs(session_id: str, db: Db, user: CurrentUser):
 @router.delete("/{session_id}", status_code=204)
 def delete_session(session_id: str, db: Db, user: CurrentUser):
     session = owned(db, user, session_id)
+    scheduled = db.scalar(
+        select(func.count()).select_from(Schedule).where(Schedule.session_id == session.id)
+    )
+    if scheduled:
+        raise HTTPException(409, "Remove session schedules before deleting it")
+    active = db.scalar(
+        select(func.count())
+        .select_from(Run)
+        .where(Run.session_id == session.id, Run.status.in_(("pending", "running")))
+    )
+    if active:
+        raise HTTPException(409, "Wait for active analyses before deleting the session")
     run_ids = list(db.scalars(select(Run.id).where(Run.session_id == session.id)))
     if run_ids:
         db.execute(delete(Artifact).where(Artifact.run_id.in_(run_ids)))
         db.execute(delete(Run).where(Run.id.in_(run_ids)))
+    db.execute(delete(ReportDefinition).where(ReportDefinition.session_id == session.id))
     db.delete(session)
     db.commit()
 
@@ -153,6 +181,10 @@ async def create_run(
     llm: LLMDep,
 ):
     session = owned(db, user, session_id)
+    dataset = db.get(Dataset, session.dataset_id)
+    version = ensure_current_version(db, dataset)
+    if not dataset.connection_id and version is None:
+        raise HTTPException(409, "Review and confirm the imported version first")
     active = db.scalar(
         select(func.count())
         .select_from(Run)
@@ -160,7 +192,15 @@ async def create_run(
     )
     if active >= get_settings().max_concurrent_runs_per_user:
         raise HTTPException(429, "Too many analyses running; wait for one to finish")
-    run = Run(session_id=session.id, owner_id=user.id, goal=body.goal, status="pending")
+    run = Run(
+        session_id=session.id,
+        owner_id=user.id,
+        goal=body.goal,
+        status="pending",
+        dataset_version_id=version.id if version else None,
+        request_json={"kind": "exploratory", "privacy_mode": dataset.llm_policy},
+        verification_status="exploratory",
+    )
     db.add(run)
     db.commit()
     db.refresh(run)

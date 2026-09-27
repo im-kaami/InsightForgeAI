@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { AddDataDialog } from "@/components/add-data-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -22,19 +23,37 @@ export default function DatasetsPage() {
   const query = useQuery({ queryKey: ["datasets"], queryFn: datasets.list });
   const client = useQueryClient();
   const router = useRouter();
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [isNavigating, startNavigation] = useTransition();
+  const requestInFlight = useRef(false);
+  const busy = openingId !== null || isNavigating;
   async function ask(id: string, name: string) {
+    if (requestInFlight.current || busy) return;
+    requestInFlight.current = true;
+    setOpeningId(id);
     try {
       const session = await sessions.create(id, name);
-      router.push(`/sessions/${session.id}`);
+      startNavigation(() => router.push(`/sessions/${session.id}`));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not start session");
+    } finally {
+      requestInFlight.current = false;
+      setOpeningId(null);
     }
+  }
+  function review(id: string) {
+    if (requestInFlight.current || busy) return;
+    startNavigation(() => router.push(`/datasets/${id}`));
   }
   async function remove(id: string) {
     if (!confirm("Delete this dataset?")) return;
-    await datasets.remove(id);
-    await client.invalidateQueries({ queryKey: ["datasets"] });
-    toast.success("Dataset deleted");
+    try {
+      await datasets.remove(id);
+      await client.invalidateQueries({ queryKey: ["datasets"] });
+      toast.success("Dataset deleted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete dataset");
+    }
   }
   return (
     <div className="space-y-6">
@@ -45,6 +64,7 @@ export default function DatasetsPage() {
         </div>
         <AddDataDialog onComplete={() => client.invalidateQueries({ queryKey: ["datasets"] })} />
       </header>
+      {busy && <p role="status">Opening analysis...</p>}
       <Card>
         <CardHeader>
           <CardTitle>Your data</CardTitle>
@@ -66,11 +86,17 @@ export default function DatasetsPage() {
                   <TableRow key={dataset.id}>
                     <TableCell>
                       <button
-                        className="font-medium hover:underline"
-                        onClick={() => router.push(`/datasets/${dataset.id}`)}
+                        className="font-medium hover:underline disabled:opacity-50"
+                        disabled={busy}
+                        onClick={() => review(dataset.id)}
                       >
                         {dataset.name}
                       </button>
+                      {dataset.kind !== "connection" && !dataset.current_version_id && (
+                        <Badge className="ml-2" variant="outline">
+                          Review required
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">{dataset.kind}</Badge>
@@ -78,10 +104,25 @@ export default function DatasetsPage() {
                     <TableCell>{dataset.tables.length}</TableCell>
                     <TableCell>{new Date(dataset.created_at).toLocaleDateString()}</TableCell>
                     <TableCell className="flex justify-end gap-2">
-                      <Button size="sm" onClick={() => ask(dataset.id, dataset.name)}>
-                        <MessageSquare className="size-4" />
-                        Ask
-                      </Button>
+                      {dataset.kind !== "connection" && !dataset.current_version_id ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => review(dataset.id)}
+                        >
+                          Review
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => ask(dataset.id, dataset.name)}
+                        >
+                          <MessageSquare className="size-4" />
+                          {openingId === dataset.id ? "Opening..." : "Ask"}
+                        </Button>
+                      )}
                       <Button size="icon-sm" variant="ghost" onClick={() => remove(dataset.id)}>
                         <Trash2 className="size-4" />
                       </Button>

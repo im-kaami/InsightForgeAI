@@ -10,8 +10,9 @@ _MAX_EXCEL_BYTES = 100 * 1024 * 1024
 _UNNAMED_RE = re.compile(r"^Unnamed:\s*(\d+)(?:_level_\d+)?$", re.IGNORECASE)
 
 
-def _clean_columns(frame: pd.DataFrame) -> pd.DataFrame:
-    frame = frame.dropna(how="all").dropna(axis=1, how="all")
+def _clean_columns(frame: pd.DataFrame, preserve_rows: bool = False) -> pd.DataFrame:
+    if not preserve_rows:
+        frame = frame.dropna(how="all").dropna(axis=1, how="all")
     columns: list[str] = []
     for index, column in enumerate(frame.columns):
         value = str(column)
@@ -30,12 +31,14 @@ def load_excel(source: DataSource, catalog: DataCatalog) -> LoadResult:
         raise IngestError("Excel source exceeds the 100 MB size limit")
     selected = source.options.get("sheets")
     sheet_name: list[str] | None = list(selected) if selected else None
+    dtype = {name: "string" for name in source.options.get("text_columns", [])} or None
     try:
         sheets = pd.read_excel(
             path,
             sheet_name=sheet_name,
             header=source.options.get("header", 0),
             skiprows=source.options.get("skiprows"),
+            dtype=dtype,
             engine="openpyxl" if path.suffix.lower() != ".xls" else None,
         )
     except ImportError as error:
@@ -52,7 +55,9 @@ def load_excel(source: DataSource, catalog: DataCatalog) -> LoadResult:
     tables: list[str] = []
     notes: list[str] = []
     for sheet, raw_frame in sheets.items():
-        frame = _clean_columns(raw_frame)
+        frame = _clean_columns(
+            raw_frame, preserve_rows=bool(source.options.get("preserve_rows", False))
+        )
         if frame.empty:
             notes.append(f"skipped empty sheet `{sheet}`")
             continue

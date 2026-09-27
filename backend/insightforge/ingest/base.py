@@ -99,6 +99,15 @@ def detect_source(
     return _local_source(kind, location, name, options)
 
 
+def public_source(location: str, **kwargs: Any) -> DataSource:
+    if urlparse(location).scheme.lower() not in {"http", "https"}:
+        raise IngestError("A public HTTP(S) URL is required")
+    source = detect_source(location, **kwargs)
+    if source.kind not in {"url", "gsheet"}:
+        raise IngestError("A public HTTP(S) URL is required")
+    return source
+
+
 def load_source(source: DataSource, catalog: DataCatalog) -> LoadResult:
     if source.kind in {"csv", "tsv", "parquet", "json"}:
         from insightforge.ingest.files import load_file

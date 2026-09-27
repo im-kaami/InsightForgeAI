@@ -9,6 +9,7 @@ from insightforge.core.executor import Executor
 from insightforge.core.llm import LLMClient
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Planner
+from insightforge.core.privacy import PrivacyMode, PromptPolicy
 from insightforge.core.summarizer import Summarizer
 
 
@@ -21,13 +22,15 @@ class InsightForgeAgent:
         query_timeout: float | None = None,
         summary_max_rows: int = 20,
         schema_sample_rows: int = 3,
+        privacy_mode: PrivacyMode = "schema_only",
     ):
-        self.planner = Planner(llm)
-        self.summarizer = Summarizer(llm, max_rows=summary_max_rows)
+        self.policy = PromptPolicy(privacy_mode)
+        self.planner = Planner(llm, privacy_mode=privacy_mode)
+        self.summarizer = Summarizer(llm, max_rows=summary_max_rows, privacy_mode=privacy_mode)
         self.artifact_dir = artifact_dir
         self.render_png = render_png
         self.query_timeout = query_timeout
-        self.schema_sample_rows = schema_sample_rows
+        self.schema_sample_rows = 0 if privacy_mode == "schema_only" else schema_sample_rows
 
     def run(
         self,

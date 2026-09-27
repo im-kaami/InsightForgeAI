@@ -46,8 +46,25 @@ class Dataset(Base):
     connection_id: Mapped[str | None] = mapped_column(ForeignKey("connections.id"), nullable=True)
     schema_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     tables_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    current_version_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    profile_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    llm_policy: Mapped[str] = mapped_column(String(20), default="local", server_default="local")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class DatasetVersion(Base):
+    __tablename__ = "dataset_versions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("datasets.id"), index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    base_version_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    state: Mapped[str] = mapped_column(String(20), default="draft")
+    sources_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    schema_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    profile_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ChatSession(Base):
@@ -71,9 +88,31 @@ class Run(Base):
     timings_json: Mapped[dict[str, float]] = mapped_column(JSON, default=dict)
     token_usage_json: Mapped[dict[str, int]] = mapped_column(JSON, default=dict)
     used_fallback_plan: Mapped[bool] = mapped_column(Boolean, default=False)
+    dataset_version_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    definition_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    request_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    provenance_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    verification_status: Mapped[str] = mapped_column(
+        String(32), default="exploratory", server_default="exploratory"
+    )
+    warnings_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    fallback_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ReportDefinition(Base):
+    __tablename__ = "report_definitions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("datasets.id"), index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    previous_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    definition_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Artifact(Base):

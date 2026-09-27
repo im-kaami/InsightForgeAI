@@ -6,6 +6,11 @@ export type Connection = components["schemas"]["ConnectionOut"];
 export type Session = components["schemas"]["SessionOut"];
 export type Run = components["schemas"]["RunOut"];
 export type Schedule = components["schemas"]["ScheduleOut"];
+export type DatasetVersion = components["schemas"]["VersionOut"];
+export type DataProfile = components["schemas"]["DataProfile"];
+export type ImportOptions = components["schemas"]["ImportOptions"];
+export type SalesDefinition = components["schemas"]["SalesDefinition"];
+export type ReportDefinition = components["schemas"]["DefinitionOut"];
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -16,6 +21,20 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
+}
+
+function errorMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        const value = item as { loc?: unknown[]; msg?: string };
+        const location = value.loc?.slice(1).join(".");
+        return `${location ? `${location}: ` : ""}${value.msg ?? fallback}`;
+      })
+      .join("; ");
+  }
+  return fallback;
 }
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -32,7 +51,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       if (!location.pathname.startsWith("/login"))
         window.location.assign(new URL("/login", window.location.origin));
     }
-    throw new ApiError(response.status, body.detail ?? response.statusText);
+    throw new ApiError(response.status, errorMessage(body.detail, response.statusText));
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
@@ -53,12 +72,32 @@ export const auth = {
 export const datasets = {
   list: () => apiFetch<Dataset[]>("/datasets"),
   get: (id: string) => apiFetch<Dataset>(`/datasets/${id}`),
-  upload: (files: File[], name?: string) => {
+  upload: (files: File[], name?: string, options?: ImportOptions[], review = false) => {
     const body = new FormData();
     files.forEach((file) => body.append("files", file));
     if (name) body.append("name", name);
+    if (options) body.append("options_json", JSON.stringify(options));
+    if (review) body.append("review", "true");
     return apiFetch<Dataset>("/datasets/upload", { method: "POST", body });
   },
+  versions: (id: string) => apiFetch<DatasetVersion[]>(`/datasets/${id}/versions`),
+  replaceVersion: (id: string, files: File[], options?: ImportOptions[]) => {
+    const body = new FormData();
+    files.forEach((file) => body.append("files", file));
+    if (options) body.append("options_json", JSON.stringify(options));
+    return apiFetch<DatasetVersion>(`/datasets/${id}/versions`, { method: "POST", body });
+  },
+  confirmVersion: (id: string, version: DatasetVersion) =>
+    apiFetch<Dataset>(
+      `/datasets/${id}/versions/${version.id}/confirm`,
+      json({ confirmed: true, expected_current_version_id: version.base_version_id }),
+    ),
+  setPrivacy: (id: string, mode: Dataset["llm_policy"]) =>
+    apiFetch<Dataset>(`/datasets/${id}/privacy`, {
+      method: "PATCH",
+      body: JSON.stringify({ mode, acknowledged: true }),
+    }),
+  refresh: (id: string) => apiFetch<Dataset>(`/datasets/${id}/refresh`, { method: "POST" }),
   fromUrl: (url: string, name?: string, sheets?: string[]) =>
     apiFetch<Dataset>("/datasets/from-url", json({ url, name, sheets })),
   fromConnection: (value: {
@@ -74,10 +113,12 @@ export const datasets = {
     body.append("files", source);
     return apiFetch<Dataset>(`/datasets/${id}/sources`, { method: "POST", body });
   },
-  preview: (id: string, table: string) =>
-    apiFetch<{ columns: string[]; rows: Record<string, unknown>[] }>(
-      `/datasets/${id}/preview?table=${encodeURIComponent(table)}&limit=50`,
-    ),
+  preview: (id: string, table: string, versionId?: string) => {
+    const version = versionId ? `&version_id=${encodeURIComponent(versionId)}` : "";
+    return apiFetch<{ columns: string[]; rows: Record<string, unknown>[] }>(
+      `/datasets/${id}/preview?table=${encodeURIComponent(table)}&limit=50${version}`,
+    );
+  },
   remove: (id: string) => apiFetch<void>(`/datasets/${id}`, { method: "DELETE" }),
 };
 
@@ -104,7 +145,7 @@ export async function downloadBlob(path: string, filename: string) {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, body.detail ?? response.statusText);
+    throw new ApiError(response.status, errorMessage(body.detail, response.statusText));
   }
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
@@ -124,6 +165,14 @@ export const runs = {
   reportUrl: (id: string, format: string) => `${API_BASE}/runs/${id}/report?format=${format}`,
   downloadReport: (id: string, format: string) =>
     downloadBlob(`/runs/${id}/report?format=${format}`, `insightforge-${id}.${format}`),
+};
+
+export const verifiedReports = {
+  list: (datasetId: string) => apiFetch<ReportDefinition[]>(`/datasets/${datasetId}/reports`),
+  create: (datasetId: string, body: components["schemas"]["DefinitionCreate"]) =>
+    apiFetch<ReportDefinition>(`/datasets/${datasetId}/reports`, json(body)),
+  run: (datasetId: string, definitionId: string, body: components["schemas"]["ReportRunCreate"]) =>
+    apiFetch<Run>(`/datasets/${datasetId}/reports/${definitionId}/runs`, json(body)),
 };
 
 export const schedules = {

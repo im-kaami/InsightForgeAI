@@ -1,7 +1,11 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from insightforge.core.profiling import DataProfile
+from insightforge.core.schema import SchemaInfo
+from insightforge.core.verified_report import ReportPeriod, SalesDefinition
 
 
 class APIModel(BaseModel):
@@ -31,13 +35,69 @@ class HealthOut(BaseModel):
     model: str
 
 
+class ImportOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    table_name: str | None = Field(default=None, max_length=100)
+    header_row: int = Field(default=1, ge=1, le=100)
+    text_columns: list[str] = Field(default_factory=list, max_length=100)
+    sheets: list[str] | None = None
+
+
+class VersionOut(APIModel):
+    id: str
+    dataset_id: str
+    base_version_id: str | None
+    state: str
+    sources: list[dict[str, Any]]
+    schema_: SchemaInfo = Field(alias="schema")
+    profile: DataProfile
+    created_at: datetime
+    confirmed_at: datetime | None
+
+
+class VersionConfirm(BaseModel):
+    confirmed: Literal[True]
+    expected_current_version_id: str | None = None
+
+
+class PrivacyUpdate(BaseModel):
+    mode: Literal["local", "schema_only", "full"]
+    acknowledged: Literal[True]
+
+
+class DefinitionCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    definition: SalesDefinition
+    approved: Literal[True]
+    previous_id: str | None = None
+
+
+class DefinitionOut(APIModel):
+    id: str
+    dataset_id: str
+    session_id: str
+    name: str
+    version: int
+    previous_id: str | None
+    definition: SalesDefinition
+    approved_at: datetime
+
+
+class ReportRunCreate(ReportPeriod):
+    version_id: str
+
+
 class DatasetOut(APIModel):
     id: str
     name: str
     kind: str
     tables: list[str]
-    schema_: dict[str, Any] = Field(alias="schema")
+    schema_: SchemaInfo = Field(alias="schema")
     sources: list[dict[str, Any]]
+    current_version_id: str | None = None
+    llm_policy: Literal["local", "schema_only", "full"] = "local"
+    profile: DataProfile | None = None
+    review_version_id: str | None = None
     created_at: datetime
 
 
@@ -59,6 +119,12 @@ class RunOut(APIModel):
     timings: dict[str, float] = Field(default_factory=dict)
     token_usage: dict[str, int] = Field(default_factory=dict)
     used_fallback_plan: bool = False
+    dataset_version_id: str | None = None
+    definition_id: str | None = None
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    verification_status: str = "exploratory"
+    warnings: list[str] = Field(default_factory=list)
+    fallback_reason: str | None = None
     error: str | None = None
     created_at: datetime
     finished_at: datetime | None = None
