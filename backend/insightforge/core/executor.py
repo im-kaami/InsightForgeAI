@@ -21,6 +21,7 @@ from insightforge.core.plotter import figure_to_png, make_figure
 from insightforge.core.schema import SchemaInfo
 from insightforge.core.sql_guard import GuardedQuery, guard_query
 from insightforge.core.summarizer import Summarizer
+from insightforge.core.trace import Tracer
 
 
 def truncation_note(retrieved: int, full_row_count: int | None) -> str:
@@ -62,6 +63,7 @@ class Executor:
         self.last_results: dict[str, pd.DataFrame] = {}
         self.last_row_counts: dict[str, list[int]] = {}
         self.summary_from_model = False
+        self.tracer = Tracer()
 
     def _run_sql(self, query: str) -> tuple[GuardedQuery, pd.DataFrame]:
         guarded = guard_query(query, self.result_limit)
@@ -89,6 +91,7 @@ class Executor:
         self, step: PlotStep, frame: pd.DataFrame, source: tuple[GuardedQuery, bool, int | None]
     ) -> Artifact:
         guarded, truncated, full_row_count = source
+        started = time.perf_counter()
         try:
             full_query = self._source_query(guarded.full_sql) if truncated and guarded.full_sql else None
             chart = prepare_chart_data(step, frame, full_query, full_row_count)
@@ -99,6 +102,7 @@ class Executor:
             if self.render_png and self.artifact_dir:
                 path = figure_to_png(figure, self.artifact_dir / f"{sanitize_identifier(step.name)}.png")
                 png_path = str(path) if path else None
+            self.tracer.record(step.name, "chart", started, chart=step.kind, points=len(chart.frame))
             return PlotArtifact(
                 name=step.name,
                 kind=step.kind,
@@ -108,6 +112,7 @@ class Executor:
                 png_path=png_path,
             )
         except Exception as error:
+            self.tracer.record(step.name, "chart", started, ok=False, error=str(error)[:300])
             return ErrorArtifact(name=step.name, action=step.action, message=str(error))
 
     def _emit(self, event: dict[str, Any]) -> None:
@@ -143,20 +148,20 @@ class Executor:
             started = time.perf_counter()
             self._emit({"type": "step_start", "name": step.name, "action": step.action})
             if isinstance(step, SqlStep):
+                repaired_sql = False
                 try:
                     guarded, frame = self._run_sql(step.query)
                 except Exception as first_error:
                     try:
                         repaired = self.planner.repair_sql(step, str(first_error), schema)
                         guarded, frame = self._run_sql(repaired.query)
+                        repaired_sql = True
                     except Exception as second_error:
+                        message = f"{first_error}; repair failed: {second_error}"
                         artifacts.append(
-                            ErrorArtifact(
-                                name=step.name,
-                                action=step.action,
-                                message=f"{first_error}; repair failed: {second_error}",
-                            )
+                            ErrorArtifact(name=step.name, action=step.action, message=message)
                         )
+                        self.tracer.record(step.name, "sql", started, ok=False, error=message[:300])
                         timings[step.name] = time.perf_counter() - started
                         self._emit(
                             {
@@ -167,6 +172,15 @@ class Executor:
                         )
                         continue
                 truncated, full_row_count = self._full_row_count(guarded, frame)
+                self.tracer.record(
+                    step.name,
+                    "sql",
+                    started,
+                    rows=len(frame),
+                    truncated=truncated,
+                    full_row_count=full_row_count,
+                    repaired=repaired_sql,
+                )
                 results[step.name] = frame
                 self.last_row_counts[step.name] = [len(frame)] + (
                     [full_row_count] if full_row_count is not None else []

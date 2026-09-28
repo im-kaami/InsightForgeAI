@@ -62,6 +62,28 @@ function cutOffRun(sessionId: string) {
           kind: "cell",
         },
       ],
+      trace: [
+        {
+          step: "plan",
+          kind: "model",
+          started_ms: 0,
+          duration_ms: 4200,
+          ok: true,
+          details: {
+            model: "qwen3:4b",
+            shared: "everything, to a model on this computer",
+            prompt_tokens: 812,
+          },
+        },
+        {
+          step: "orders",
+          kind: "sql",
+          started_ms: 4300,
+          duration_ms: 35,
+          ok: true,
+          details: { rows: 10000, truncated: true, full_row_count: 2341556 },
+        },
+      ],
       checks: [
         {
           code: "summary_numbers",
@@ -161,6 +183,13 @@ test("cut-off results, chart notes and the local model are explained", async ({ 
   );
   await expect(page.getByTestId("assumptions")).toContainText(
     "orders: reads orders; uses every row (no filter).",
+  );
+  await page.getByText("Run trace", { exact: true }).click();
+  await expect(page.getByTestId("run-trace")).toContainText(
+    "model: qwen3:4b · shared: everything, to a model on this computer · prompt tokens: 812",
+  );
+  await expect(page.getByTestId("run-trace")).toContainText(
+    "rows: 10000 · truncated: true · full row count: 2341556",
   );
   await page.getByText("Evidence and definitions", { exact: true }).click();
   await expect(page.getByTestId("evidence-N1")).toContainText(

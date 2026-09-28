@@ -13,6 +13,7 @@ from insightforge.core.planner import Planner
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
 from insightforge.core.schema import SchemaInfo
 from insightforge.core.summarizer import Summarizer
+from insightforge.core.trace import Tracer
 
 
 def without_samples(schema: SchemaInfo) -> SchemaInfo:
@@ -68,6 +69,9 @@ class InsightForgeAgent:
                     pass
 
         started = time.perf_counter()
+        tracer = Tracer()
+        self.planner.tracer = tracer
+        self.summarizer.tracer = tracer
         if schema is None:
             schema = catalog.introspect(sample_rows=self.schema_sample_rows)
         elif self.schema_sample_rows == 0:
@@ -91,6 +95,7 @@ class InsightForgeAgent:
             on_event=on_event,
             query_timeout=self.query_timeout,
         )
+        executor.tracer = tracer
         artifacts, timings, token_usage, summary = executor.execute(
             goal, plan, schema, memory
         )
@@ -109,11 +114,21 @@ class InsightForgeAgent:
         if text_artifacts:
             summary = text_artifacts[-1].text
             if executor.summary_from_model:
+                check_started = time.perf_counter()
                 ignore = {claim.value for claim in extract_numbers(goal)}
                 for table in tables:
                     ignore |= sql_literals(table.sql)
                 number_check, evidence = check_numbers(
                     summary, executor.last_results, executor.last_row_counts, ignore
+                )
+                tracer.record(
+                    "summary_numbers",
+                    "check",
+                    check_started,
+                    ok=not number_check.unmatched,
+                    checked=number_check.checked,
+                    matched=number_check.matched,
+                    unmatched=number_check.unmatched,
                 )
         else:
             summary, response = self.summarizer.summarize(goal, {}, memory=memory)
@@ -138,4 +153,5 @@ class InsightForgeAgent:
             number_check=number_check,
             evidence=evidence,
             assumptions=assumptions,
+            trace=tracer.events,
         )

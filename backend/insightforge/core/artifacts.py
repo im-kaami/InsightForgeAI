@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from insightforge.core.evidence import EvidenceItem, NumberCheck
 from insightforge.core.planner import Plan
+from insightforge.core.trace import TraceEvent
 
 
 class TableArtifact(BaseModel):
@@ -59,3 +60,4 @@ class RunResult(BaseModel):
     number_check: NumberCheck | None = None
     evidence: list[EvidenceItem] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
+    trace: list[TraceEvent] = Field(default_factory=list)

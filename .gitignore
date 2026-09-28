@@ -6,6 +6,7 @@ __pycache__/
 .pytest_tmp/
 .ruff_cache/
 .venv/
+backend/evals/results/
 
 # Runtime data
 storage/

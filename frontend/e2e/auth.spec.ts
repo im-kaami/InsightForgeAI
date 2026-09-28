@@ -46,7 +46,7 @@ test("register, ask a question, see results", async ({ page }, testInfo) => {
     await expect(page.getByText("completed", { exact: true })).toBeVisible({
       timeout: 60_000,
     });
-    await expect(page.locator("table").last()).toBeVisible();
+    await expect(page.locator("section[id^='artifact-'] table").last()).toBeVisible();
     await expect(page.getByRole("button", { name: "Download CSV" }).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: /summary/i }).last()).toBeVisible();
     await expect(page.locator(".js-plotly-plot svg.main-svg").first()).toBeVisible({

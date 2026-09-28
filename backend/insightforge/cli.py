@@ -1,6 +1,7 @@
 import argparse
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,8 @@ from insightforge.core.agent import InsightForgeAgent
 from insightforge.core.artifacts import ErrorArtifact, PlotArtifact, TableArtifact, TextArtifact
 from insightforge.core.catalog import DataCatalog
 from insightforge.core.executor import truncation_note
-from insightforge.core.llm import build_llm, offline_fake_llm
+from insightforge.core.llm import build_llm, build_local_llm, llm_mode, offline_fake_llm, resolved_model
+from insightforge.evals import DEFAULT_SUITE, CaseResult, compare, load_report, load_suite, run_suite
 from insightforge.ingest import IngestError, load_any
 
 
@@ -32,6 +34,14 @@ def _parser() -> argparse.ArgumentParser:
     schema = commands.add_parser("schema", help="Print a data source schema")
     schema.add_argument("source")
     schema.add_argument("--name")
+
+    evaluate = commands.add_parser("eval", help="Score the analyst on reference questions")
+    evaluate.add_argument("--model", choices=["offline", "local", "cloud"], default="offline")
+    evaluate.add_argument("--suite", type=Path, default=DEFAULT_SUITE)
+    evaluate.add_argument("--case", dest="cases", action="append")
+    evaluate.add_argument("--out", type=Path)
+    evaluate.add_argument("--baseline", type=Path)
+    evaluate.add_argument("--max-drop", type=float, default=0.05)
     return parser
 
 
@@ -135,9 +145,62 @@ def _schema(args: argparse.Namespace) -> int:
         catalog.close()
 
 
+def _eval_agent_factory(model: str) -> Callable[[], InsightForgeAgent]:
+    settings = get_settings()
+    if model == "offline":
+        return lambda: InsightForgeAgent(offline_fake_llm(), privacy_mode="full")
+    if model == "local":
+        local = build_local_llm(settings)
+        if local is None:
+            raise SystemExit(
+                "Set LOCAL_LLM_MODEL (and a localhost LOCAL_LLM_BASE_URL) to evaluate a local model"
+            )
+        return lambda: InsightForgeAgent(offline_fake_llm(), privacy_mode="local", local_llm=local)
+    cloud = build_llm(settings)
+    if llm_mode(cloud) == "fake":
+        raise SystemExit("No cloud model is configured; set LLM_API_KEY or LLM_BASE_URL")
+    print(
+        f"Note: the evaluation datasets are synthetic; questions and results are sent to "
+        f"{settings.llm_provider} ({resolved_model(settings)})."
+    )
+    return lambda: InsightForgeAgent(cloud, privacy_mode="full")
+
+
+def _eval(args: argparse.Namespace) -> int:
+    suite = load_suite(args.suite)
+    make_agent = _eval_agent_factory(args.model)
+    label = {
+        "offline": "offline",
+        "local": f"local: {get_settings().local_llm_model}",
+        "cloud": f"cloud: {resolved_model(get_settings())}",
+    }[args.model]
+
+    def show(result: CaseResult) -> None:
+        status = "PASS" if result.passed else "FAIL"
+        print(f"{status} {result.id} ({result.seconds:.1f}s): {result.reason}", flush=True)
+
+    report = run_suite(suite, make_agent, label, args.cases, show)
+    stamp = report.started_at.strftime("%Y%m%d-%H%M%S")
+    out = args.out or suite.base_dir / "results" / f"{args.model}-{stamp}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(report.to_json(), encoding="utf-8")
+    print(f"\n{json.dumps(report.summary, indent=2)}\nReport: {out}")
+    if not args.baseline:
+        return 0
+    comparison = compare(report, load_report(args.baseline))
+    print(f"Accuracy change against the baseline: {comparison.accuracy_delta:+.1%}")
+    if comparison.regressions:
+        print(f"Now failing: {', '.join(comparison.regressions)}")
+    if comparison.fixes:
+        print(f"Now passing: {', '.join(comparison.fixes)}")
+    return 1 if comparison.accuracy_delta < -args.max_drop else 0
+
+
 def _run(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        if args.command == "eval":
+            return _eval(args)
         return _ask(args) if args.command == "ask" else _schema(args)
     except IngestError as error:
         print(f"Ingestion error: {error}", file=sys.stderr)

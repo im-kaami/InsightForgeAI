@@ -1,0 +1,253 @@
+{
+  "name": "insightforge-core",
+  "version": 1,
+  "datasets": {
+    "hr": { "employees": "../tests/fixtures/hr.csv" },
+    "shop": { "orders": "data/orders.csv", "customers": "data/customers.csv" }
+  },
+  "cases": [
+    {
+      "id": "hr-headcount",
+      "dataset": "hr",
+      "question": "How many employees are there?",
+      "expect": { "type": "value", "sql": "SELECT COUNT(*) FROM employees" }
+    },
+    {
+      "id": "hr-avg-salary",
+      "dataset": "hr",
+      "question": "What is the average salary?",
+      "expect": { "type": "value", "sql": "SELECT AVG(salary) FROM employees" }
+    },
+    {
+      "id": "hr-avg-salary-by-department",
+      "dataset": "hr",
+      "question": "What is the average salary by department?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT department, AVG(salary) FROM employees GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "hr-top-department-salary",
+      "dataset": "hr",
+      "question": "Which department has the highest average salary?",
+      "expect": {
+        "type": "top",
+        "sql": "SELECT department FROM employees GROUP BY 1 ORDER BY AVG(salary) DESC LIMIT 1"
+      }
+    },
+    {
+      "id": "hr-headcount-by-location",
+      "dataset": "hr",
+      "question": "How many employees work in each location?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT location, COUNT(*) FROM employees GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "hr-max-salary",
+      "dataset": "hr",
+      "question": "What is the highest salary?",
+      "expect": { "type": "value", "sql": "SELECT MAX(salary) FROM employees" }
+    },
+    {
+      "id": "hr-min-salary-engineering",
+      "dataset": "hr",
+      "question": "What is the lowest salary in the Engineering department?",
+      "expect": {
+        "type": "value",
+        "sql": "SELECT MIN(salary) FROM employees WHERE department = 'Engineering'"
+      }
+    },
+    {
+      "id": "hr-avg-performance-by-department",
+      "dataset": "hr",
+      "question": "What is the average performance score in each department?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT department, AVG(performance_score) FROM employees GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "hr-hires-by-year",
+      "dataset": "hr",
+      "question": "How many people were hired in each year?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT CAST(year(CAST(hire_date AS DATE)) AS VARCHAR), COUNT(*) FROM employees GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "hr-remote-count",
+      "dataset": "hr",
+      "question": "How many employees work remotely?",
+      "expect": { "type": "value", "sql": "SELECT COUNT(*) FROM employees WHERE location = 'Remote'" }
+    },
+    {
+      "id": "hr-top-performance-department",
+      "dataset": "hr",
+      "question": "Which department has the best average performance score?",
+      "expect": {
+        "type": "top",
+        "sql": "SELECT department FROM employees GROUP BY 1 ORDER BY AVG(performance_score) DESC LIMIT 1"
+      }
+    },
+    {
+      "id": "hr-salary-above-100k",
+      "dataset": "hr",
+      "question": "How many employees earn more than 100,000?",
+      "expect": { "type": "value", "sql": "SELECT COUNT(*) FROM employees WHERE salary > 100000" }
+    },
+    {
+      "id": "hr-total-payroll",
+      "dataset": "hr",
+      "question": "What is the total payroll, the sum of all salaries?",
+      "expect": { "type": "value", "sql": "SELECT SUM(salary) FROM employees" }
+    },
+    {
+      "id": "hr-payroll-by-department",
+      "dataset": "hr",
+      "question": "What is the total salary cost per department?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT department, SUM(salary) FROM employees GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "hr-distinct-job-titles",
+      "dataset": "hr",
+      "question": "How many distinct job titles are there?",
+      "expect": { "type": "value", "sql": "SELECT COUNT(DISTINCT job_title) FROM employees" }
+    },
+    {
+      "id": "shop-completed-revenue",
+      "dataset": "shop",
+      "question": "What is the total amount of completed orders?",
+      "expect": { "type": "value", "sql": "SELECT SUM(amount) FROM orders WHERE status = 'completed'" }
+    },
+    {
+      "id": "shop-orders-by-status",
+      "dataset": "shop",
+      "question": "How many orders are there in each status?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT status, COUNT(*) FROM orders GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "shop-revenue-by-category",
+      "dataset": "shop",
+      "question": "What is the total amount of completed orders by category?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT category, SUM(amount) FROM orders WHERE status = 'completed' GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "shop-top-category",
+      "dataset": "shop",
+      "question": "Which category has the highest total amount of completed orders?",
+      "expect": {
+        "type": "top",
+        "sql": "SELECT category FROM orders WHERE status = 'completed' GROUP BY 1 ORDER BY SUM(amount) DESC LIMIT 1"
+      }
+    },
+    {
+      "id": "shop-avg-order-by-region",
+      "dataset": "shop",
+      "question": "What is the average order amount in each region, across all orders?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT region, AVG(amount) FROM orders GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "shop-refund-share",
+      "dataset": "shop",
+      "question": "What share of all orders were refunded?",
+      "expect": {
+        "type": "value",
+        "sql": "SELECT AVG(CASE WHEN status = 'refunded' THEN 1.0 ELSE 0.0 END) FROM orders",
+        "either_percent": true
+      }
+    },
+    {
+      "id": "shop-customers-by-segment",
+      "dataset": "shop",
+      "question": "How many customers are in each segment?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT segment, COUNT(*) FROM customers GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "shop-revenue-by-segment",
+      "dataset": "shop",
+      "question": "What is the total amount of completed orders for each customer segment?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT c.segment, SUM(o.amount) FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.status = 'completed' GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "shop-top-country",
+      "dataset": "shop",
+      "question": "Customers from which country placed the most orders?",
+      "expect": {
+        "type": "top",
+        "sql": "SELECT c.country FROM orders o JOIN customers c ON o.customer_id = c.customer_id GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 1"
+      }
+    },
+    {
+      "id": "shop-avg-completed-order",
+      "dataset": "shop",
+      "question": "What is the average amount of a completed order?",
+      "expect": { "type": "value", "sql": "SELECT AVG(amount) FROM orders WHERE status = 'completed'" }
+    },
+    {
+      "id": "shop-largest-order",
+      "dataset": "shop",
+      "question": "What is the largest single order amount?",
+      "expect": { "type": "value", "sql": "SELECT MAX(amount) FROM orders" }
+    },
+    {
+      "id": "shop-orders-per-customer",
+      "dataset": "shop",
+      "question": "On average, how many orders has each customer who ordered placed?",
+      "expect": {
+        "type": "value",
+        "sql": "SELECT COUNT(*) * 1.0 / COUNT(DISTINCT customer_id) FROM orders"
+      }
+    },
+    {
+      "id": "shop-cancelled-by-region",
+      "dataset": "shop",
+      "question": "How many cancelled orders are there in each region?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT region, COUNT(*) FROM orders WHERE status = 'cancelled' GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "shop-top-customer",
+      "dataset": "shop",
+      "question": "Which customer has spent the most on completed orders?",
+      "expect": {
+        "type": "top",
+        "sql": "SELECT customer_id FROM orders WHERE status = 'completed' GROUP BY 1 ORDER BY SUM(amount) DESC LIMIT 1"
+      }
+    }
+  ]
+}

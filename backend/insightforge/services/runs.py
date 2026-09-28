@@ -299,6 +299,7 @@ def execute_run(
                 "assumptions": result.assumptions,
                 "evidence": [item.model_dump(mode="json") for item in result.evidence],
                 "number_check": check.model_dump(mode="json") if check else None,
+                "trace": [event.model_dump(mode="json") for event in result.trace],
                 "checks": (
                     [
                         {

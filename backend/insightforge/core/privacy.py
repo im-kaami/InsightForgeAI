@@ -26,6 +26,14 @@ class PromptPolicy:
     def values_visible_to_model(self) -> bool:
         return self.mode == "full" or (self.mode == "local" and self.local_model)
 
+    @property
+    def shared_with_model(self) -> str:
+        if self.mode == "local":
+            return "everything, to a model on this computer" if self.local_model else "nothing (offline)"
+        if self.mode == "schema_only":
+            return "table and column names, types and the question only"
+        return "samples, result values, statistics and conversation history"
+
     def schema_text(self, schema: SchemaInfo) -> str:
         if self.mode in {"full", "local"}:
             return schema.to_prompt()

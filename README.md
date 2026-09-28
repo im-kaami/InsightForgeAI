@@ -161,6 +161,22 @@ If the AI returns a plan with invalid steps, InsightForge lists the problems and
 
 Every number in an AI-written summary is checked against the results with fixed code. A number counts as matched when it equals, at the precision written, a table cell, a column total, or a row count; the match is recorded as evidence that links to the cell. Numbers that can't be found are listed in a run warning, and the run is marked **Needs review**. Numbers taken from the question or the SQL, small counts, and years are not checked. Each exploratory run also gets an **Assumptions** list, generated from the executed SQL: the tables read, joins, filters, groupings and calculations, row limits, cut-off results, and how many values were missing in the columns used. Reports and exports include both.
 
+Each exploratory run stores a **run trace**: every model call (plan, plan repair, SQL repair, summary), query, chart, and number check, with timings. Model calls record the model used, what it was allowed to see (for example "table and column names, types and the question only"), the prompt size and token counts. Prompts and data values are not stored. The trace appears in the run card under **Run trace** and in report exports.
+
+### Evaluation
+
+`insightforge eval` scores the analyst on 29 reference questions over two synthetic datasets: the HR fixture, and a shop with orders and customers. The questions are in `backend/evals/suite.json`, and fixed SQL computes each correct answer, so the answers never come from an AI. A question passes when a result table contains the expected value, every expected row, or the expected winner as its first row.
+
+```bash
+cd backend
+.venv/Scripts/insightforge.exe eval --model local                          # LOCAL_LLM_MODEL through Ollama
+.venv/Scripts/insightforge.exe eval --model cloud                          # the configured provider; sends the synthetic data
+.venv/Scripts/insightforge.exe eval --model local --case hr-headcount      # a single question
+.venv/Scripts/insightforge.exe eval --model local --baseline evals/baselines/local-qwen3-4b.json
+```
+
+Reports are written to `backend/evals/results/` (not committed). The output shows accuracy, fallback rate, error rate, how many summary numbers were found in the results, average time, and tokens. With `--baseline`, it lists questions that now fail or now pass, and exits with code 1 when accuracy drops by more than `--max-drop` (default 0.05). Run it after changing prompts, models, the planner, or the executor.
+
 The data health check reports, for each column:
 
 - Numbers: range, median, quartiles, a 10-bin distribution, outliers (1.5 × interquartile range), and skew.

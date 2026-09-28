@@ -37,6 +37,7 @@ export const test = base.extend<{ isolatedApi: void }>({
         });
       }
       await use();
+      await context.unrouteAll({ behavior: "ignoreErrors" });
     },
     { auto: true },
   ],

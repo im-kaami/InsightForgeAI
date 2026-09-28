@@ -3,9 +3,10 @@ from typing import Any
 
 import pandas as pd
 
-from insightforge.core.llm import LLMClient, LLMResponse, describe_error
+from insightforge.core.llm import LLMClient, LLMResponse, describe_error, llm_mode
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
+from insightforge.core.trace import Tracer, model_label, prompt_chars
 
 
 def _cell(value: Any) -> str:
@@ -74,6 +75,18 @@ class Summarizer:
         self.policy = PromptPolicy(privacy_mode, local_model=local_llm is not None)
         self.llm = self.policy.client(llm, local_llm)
         self.max_rows = max_rows
+        self.tracer = Tracer()
+
+    def _span(self, messages: list[dict[str, str]]):
+        return self.tracer.span(
+            "summary",
+            "model",
+            model=model_label(self.llm),
+            shared="nothing (offline)"
+            if llm_mode(self.llm) == "fake"
+            else self.policy.shared_with_model,
+            prompt_chars=prompt_chars(messages),
+        )
 
     def build_context(
         self,
@@ -127,15 +140,19 @@ class Summarizer:
             return "\n\n".join(lines), None
         context = self.build_context(goal, tables, focus, memory, notes)
         if self.policy.mode == "local":
+            local_messages = [
+                {"role": "system", "content": LOCAL_SUMMARY_PROMPT},
+                {"role": "user", "content": context},
+            ]
             try:
-                raw, response = self.llm.chat_json(
-                    [
-                        {"role": "system", "content": LOCAL_SUMMARY_PROMPT},
-                        {"role": "user", "content": context},
-                    ],
-                    schema=LOCAL_SUMMARY_SCHEMA,
-                )
-                return _render_structured_summary(raw), response
+                with self._span(local_messages) as details:
+                    raw, response = self.llm.chat_json(local_messages, schema=LOCAL_SUMMARY_SCHEMA)
+                    details.update(
+                        prompt_tokens=response.prompt_tokens,
+                        completion_tokens=response.completion_tokens,
+                    )
+                    text = _render_structured_summary(raw)
+                return text, response
             except Exception as exc:
                 return _raw_tables(tables, notes, describe_error(exc)), None
         messages = [
@@ -153,7 +170,11 @@ class Summarizer:
             {"role": "user", "content": context},
         ]
         try:
-            response = self.llm.chat(messages)
+            with self._span(messages) as details:
+                response = self.llm.chat(messages)
+                details.update(
+                    prompt_tokens=response.prompt_tokens, completion_tokens=response.completion_tokens
+                )
             return response.text, response
         except Exception as exc:
             return _raw_tables(tables, notes, describe_error(exc)), None

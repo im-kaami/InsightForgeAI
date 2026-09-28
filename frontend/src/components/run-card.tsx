@@ -32,6 +32,13 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
   const checks = (provenance.checks ?? []) as Record<string, unknown>[];
   const metricDefinitions = (provenance.metric_definitions ?? {}) as Record<string, unknown>;
   const assumptions = (provenance.assumptions ?? []) as string[];
+  const trace = (provenance.trace ?? []) as {
+    step: string;
+    kind: string;
+    duration_ms: number;
+    ok: boolean;
+    details: Record<string, unknown>;
+  }[];
   const numberCheck = provenance.number_check as
     { checked: number; matched: number; unmatched: string[] } | null | undefined;
   const notices = Array.from(
@@ -284,6 +291,46 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
                   )}
                 </pre>
               </div>
+            </details>
+          )}
+          {trace.length > 0 && (
+            <details className="rounded border p-3" data-testid="run-trace">
+              <summary className="font-medium">Run trace</summary>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Each model call, query, chart and check in order. Prompts and data values are not
+                stored; &ldquo;shared&rdquo; says what the model was allowed to see.
+              </p>
+              <table className="mt-2 w-full text-left text-xs">
+                <thead>
+                  <tr className="text-muted-foreground">
+                    <th className="py-1 pr-2 font-normal">Step</th>
+                    <th className="py-1 pr-2 font-normal">Type</th>
+                    <th className="py-1 pr-2 font-normal">Time</th>
+                    <th className="py-1 font-normal">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trace.map((event, index) => (
+                    <tr key={`${event.step}-${index}`} className="border-t align-top">
+                      <td className="py-1 pr-2 font-mono">{event.step}</td>
+                      <td className="py-1 pr-2">
+                        {event.kind}
+                        {event.ok ? "" : " (failed)"}
+                      </td>
+                      <td className="py-1 pr-2">{(event.duration_ms / 1000).toFixed(2)} s</td>
+                      <td className="py-1 break-words">
+                        {Object.entries(event.details)
+                          .filter(([, value]) => value !== null && value !== undefined)
+                          .map(
+                            ([key, value]) =>
+                              `${key.replaceAll("_", " ")}: ${Array.isArray(value) ? value.join(", ") : String(value)}`,
+                          )
+                          .join(" · ")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </details>
           )}
           <p className="text-xs text-muted-foreground">

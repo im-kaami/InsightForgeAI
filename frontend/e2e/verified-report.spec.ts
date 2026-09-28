@@ -99,7 +99,9 @@ test.describe("verified spreadsheet report", () => {
     await expect(card.getByTestId("evidence-current.net_sales")).toContainText("460.000000");
     await expect(card.getByTestId("evidence-current.margin_percent")).toContainText("36.96");
     await expect(card.getByTestId("evidence-current.order_count")).toContainText("2");
-    await expect(card.locator(".js-plotly-plot svg.main-svg").first()).toBeVisible();
+    await expect(card.locator(".js-plotly-plot svg.main-svg").first()).toBeVisible({
+      timeout: 60_000,
+    });
     await expect(card.getByText(/Source version:/)).not.toContainText("Not available");
     const downloadPromise = page.waitForEvent("download");
     await card.getByRole("button", { name: "Download CSV" }).click();

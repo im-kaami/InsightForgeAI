@@ -1,10 +1,14 @@
+import json
+
 import pandas as pd
 
+from insightforge.core.agent import InsightForgeAgent
 from insightforge.core.artifacts import ErrorArtifact, PlotArtifact, TableArtifact
 from insightforge.core.catalog import DataCatalog
 from insightforge.core.executor import Executor
 from insightforge.core.llm import FakeLLMClient
 from insightforge.core.planner import Plan, Planner, PlotStep, SqlStep, SummaryStep
+from insightforge.core.privacy import PromptPolicy
 from insightforge.core.summarizer import Summarizer
 
 
@@ -88,6 +92,54 @@ def test_executor_adds_a_chart_when_the_plan_has_none(catalog, schema):
     plot = artifacts[1]
     assert (plot.name, plot.kind, plot.title) == ("by_department_chart", "bar", "avg_salary by department")
     assert plot.note == "Chart added automatically because the plan had none."
+
+
+def test_agent_traces_model_calls_queries_charts_and_checks(catalog):
+    plan = {
+        "steps": [
+            {"name": "bad", "action": "sql", "query": "SELECT nope FROM employees"},
+            {
+                "name": "by_dept",
+                "action": "sql",
+                "query": "SELECT department, COUNT(*) AS n FROM employees GROUP BY 1",
+            },
+            {"name": "summary", "action": "summary"},
+        ]
+    }
+
+    def reply(messages):
+        content = messages[0]["content"]
+        if "data-analysis planner" in content:
+            return json.dumps(plan)
+        if "Correct the DuckDB SQL" in content:
+            return json.dumps({"query": "SELECT COUNT(*) AS n FROM employees"})
+        return "There are 60 employees, 12 in each department, and 777 ghosts."
+
+    result = InsightForgeAgent(FakeLLMClient(reply), privacy_mode="full").run("Headcount", catalog)
+    assert [(event.kind, event.step, event.ok) for event in result.trace] == [
+        ("model", "plan", True),
+        ("model", "sql_repair:bad", True),
+        ("sql", "bad", True),
+        ("sql", "by_dept", True),
+        ("chart", "by_dept_chart", True),
+        ("model", "summary", True),
+        ("check", "summary_numbers", False),
+    ]
+    assert result.trace[0].details["shared"] == "nothing (offline)"
+    assert result.trace[2].details == {
+        "rows": 1,
+        "truncated": False,
+        "full_row_count": None,
+        "repaired": True,
+    }
+    assert result.trace[-1].details["unmatched"] == ["777"]
+
+
+def test_trace_describes_what_each_privacy_mode_shares():
+    assert PromptPolicy("schema_only").shared_with_model.startswith("table and column names")
+    assert PromptPolicy("local", local_model=True).shared_with_model == (
+        "everything, to a model on this computer"
+    )
 
 
 def test_executor_does_not_add_charts_to_plans_that_have_one(catalog, schema):

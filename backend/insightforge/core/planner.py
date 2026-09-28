@@ -5,10 +5,11 @@ from typing import Annotated, Any, Literal, get_args
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
 
-from insightforge.core.llm import LLMClient, LLMResponse, describe_error
+from insightforge.core.llm import LLMClient, LLMResponse, describe_error, llm_mode
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
 from insightforge.core.schema import SchemaInfo, TableInfo, is_identifier
+from insightforge.core.trace import Tracer, model_label, prompt_chars
 
 
 class SqlStep(BaseModel):
@@ -290,10 +291,26 @@ class Planner:
         self.last_fallback_reason: str | None = None
         self.last_plan_issues: list[str] = []
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
+        self.tracer = Tracer()
 
-    def _record_usage(self, response: LLMResponse) -> None:
+    def _chat_json(
+        self, purpose: str, messages: list[dict[str, str]], schema: dict[str, Any] | None = None
+    ) -> tuple[Any, LLMResponse]:
+        offline = llm_mode(self.llm) == "fake"
+        with self.tracer.span(
+            purpose,
+            "model",
+            model=model_label(self.llm),
+            shared="nothing (offline)" if offline else self.policy.shared_with_model,
+            prompt_chars=prompt_chars(messages),
+        ) as details:
+            raw, response = self.llm.chat_json(messages, schema=schema)
+            details.update(
+                prompt_tokens=response.prompt_tokens, completion_tokens=response.completion_tokens
+            )
         self.last_usage["prompt_tokens"] += response.prompt_tokens
         self.last_usage["completion_tokens"] += response.completion_tokens
+        return raw, response
 
     def plan(self, goal: str, schema: SchemaInfo, memory: ConversationMemory | None = None) -> Plan:
         self.last_used_fallback = False
@@ -352,8 +369,7 @@ Return a single JSON object with a top-level "steps" array, for example:
             )
         messages = [{"role": "system", "content": system}, {"role": "user", "content": goal}]
         try:
-            raw, response = self.llm.chat_json(messages, schema=PLAN_JSON_SCHEMA)
-            self._record_usage(response)
+            raw, _ = self._chat_json("plan", messages, PLAN_JSON_SCHEMA)
             problems: list[str] = []
             plan: Plan | None
             try:
@@ -392,8 +408,7 @@ Return a single JSON object with a top-level "steps" array, for example:
             },
         ]
         try:
-            fixed, response = self.llm.chat_json(request, schema=PLAN_JSON_SCHEMA)
-            self._record_usage(response)
+            fixed, _ = self._chat_json("plan_repair", request, PLAN_JSON_SCHEMA)
             remaining: list[str] = []
             plan = validate_plan(fixed, schema, remaining)
         except Exception as exc:
@@ -416,8 +431,7 @@ Return a single JSON object with a top-level "steps" array, for example:
                 "content": f"Query:\n{step.query}\n\nError:\n{self.policy.repair_error(error)}",
             },
         ]
-        raw, response = self.llm.chat_json(messages)
-        self._record_usage(response)
+        raw, _ = self._chat_json(f"sql_repair:{step.name}", messages)
         if not isinstance(raw, dict) or not isinstance(raw.get("query"), str):
             raise PlanValidationError("SQL repair response must contain a query string")
         return step.model_copy(update={"query": raw["query"]})
