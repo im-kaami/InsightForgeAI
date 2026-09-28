@@ -59,6 +59,9 @@ class Executor:
         self.query_timeout = query_timeout
         self.result_limit = result_limit
         self.auto_chart = auto_chart
+        self.last_results: dict[str, pd.DataFrame] = {}
+        self.last_row_counts: dict[str, list[int]] = {}
+        self.summary_from_model = False
 
     def _run_sql(self, query: str) -> tuple[GuardedQuery, pd.DataFrame]:
         guarded = guard_query(query, self.result_limit)
@@ -124,6 +127,9 @@ class Executor:
         artifacts: list[Artifact] = []
         timings: dict[str, float] = {}
         results: dict[str, pd.DataFrame] = {}
+        self.last_results = results
+        self.last_row_counts = {}
+        self.summary_from_model = False
         sources: dict[str, tuple[GuardedQuery, bool, int | None]] = {}
         notes: dict[str, str] = {}
         summary = ""
@@ -162,6 +168,9 @@ class Executor:
                         continue
                 truncated, full_row_count = self._full_row_count(guarded, frame)
                 results[step.name] = frame
+                self.last_row_counts[step.name] = [len(frame)] + (
+                    [full_row_count] if full_row_count is not None else []
+                )
                 sources[step.name] = (guarded, truncated, full_row_count)
                 if truncated:
                     notes[step.name] = truncation_note(len(frame), full_row_count)
@@ -200,6 +209,7 @@ class Executor:
                     summary, response = self.summarizer.summarize(
                         goal, results, step.focus, memory, notes
                     )
+                    self.summary_from_model = response is not None
                     if response:
                         summary_usage["prompt_tokens"] += response.prompt_tokens
                         summary_usage["completion_tokens"] += response.completion_tokens

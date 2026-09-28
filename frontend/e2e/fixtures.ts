@@ -28,8 +28,12 @@ export const test = base.extend<{ isolatedApi: void }>({
             return;
           }
           const url = new URL(requested.pathname + requested.search, upstream);
-          const response = await route.fetch({ url: url.toString() });
-          await route.fulfill({ response });
+          try {
+            const response = await route.fetch({ url: url.toString() });
+            await route.fulfill({ response });
+          } catch (error) {
+            if (!/disposed|has been closed/i.test(String(error))) throw error;
+          }
         });
       }
       await use();

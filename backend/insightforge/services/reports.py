@@ -12,6 +12,22 @@ class ReportFormatUnavailable(RuntimeError):
     pass
 
 
+def _evidence_line(item: dict) -> str:
+    if item.get("row") is not None:
+        where = f"row {item.get('row')}, column {item.get('column')}"
+    elif item.get("kind") in {"column_total", "column_average"}:
+        label = "total" if item.get("kind") == "column_total" else "average"
+        where = f"{label} of column {item.get('column')}"
+    else:
+        where = "row count"
+    said = f" (summary says {item['text']})" if item.get("text") else ""
+    return f"{item.get('id')}: {item.get('value')}{said} ({item.get('artifact')}, {where})"
+
+
+def _assumptions(run: Run) -> list[str]:
+    return [str(item) for item in (run.provenance_json or {}).get("assumptions") or []]
+
+
 def _truncation(payload: dict) -> str | None:
     if not payload.get("truncated"):
         return None
@@ -60,6 +76,11 @@ def render_markdown(run: Run, artifacts: list[Artifact]) -> str:
         "## Verification",
         f"Status: `{_safe(run.verification_status)}`",
         *[f"- {_safe(warning)}" for warning in (run.warnings_json or [])],
+        *(
+            ["## Assumptions", *[f"- {_safe(item)}" for item in _assumptions(run)]]
+            if _assumptions(run)
+            else []
+        ),
         "## Results",
     ]
     for artifact in artifacts:
@@ -88,11 +109,7 @@ def render_markdown(run: Run, artifacts: list[Artifact]) -> str:
         ]
     )
     for item in (run.provenance_json or {}).get("evidence", []):
-        lines.append(
-            f"- `{_safe(item.get('id'))}`: {_safe(item.get('value'))} "
-            f"({_safe(item.get('artifact'))}, row {_safe(item.get('row'))}, "
-            f"column {_safe(item.get('column'))})"
-        )
+        lines.append(f"- {_safe(_evidence_line(item))}")
     lines.append("## Plan")
     for step in (run.plan_json or {}).get("steps", []):
         lines.append(f"- **{_safe(step['name'])}** ({_safe(step['action'])})")
@@ -130,6 +147,13 @@ def render_html(run: Run, artifacts: list[Artifact]) -> str:
         "<ul>"
         + "".join(f"<li>{_safe(warning)}</li>" for warning in (run.warnings_json or []))
         + "</ul>",
+        (
+            "<h2>Assumptions</h2><ul>"
+            + "".join(f"<li>{_safe(item)}</li>" for item in _assumptions(run))
+            + "</ul>"
+            if _assumptions(run)
+            else ""
+        ),
         "<h2>Results</h2>",
     ]
     for artifact in artifacts:
@@ -159,7 +183,7 @@ def render_html(run: Run, artifacts: list[Artifact]) -> str:
         ]
     )
     sections.extend(
-        f"<li>{_safe(item.get('id'))}: {_safe(item.get('value'))}</li>"
+        f"<li>{_safe(_evidence_line(item))}</li>"
         for item in (run.provenance_json or {}).get("evidence", [])
     )
     sections.append("</ul><h2>Plan</h2>")

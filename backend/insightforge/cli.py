@@ -82,6 +82,14 @@ def _print_result(result: Any) -> None:
         elif isinstance(artifact, TextArtifact):
             continue
     print(f"\nSummary\n{result.summary}")
+    if result.number_check and result.number_check.checked:
+        print(f"\nNumber check: {result.number_check.message}")
+        if result.number_check.unmatched:
+            print(f"Not found in the results: {', '.join(result.number_check.unmatched)}")
+    if result.assumptions:
+        print("\nAssumptions")
+        for item in result.assumptions:
+            print(f"- {item}")
     print(f"\nTimings: {json.dumps(result.timings, sort_keys=True)}")
     print(f"Tokens: {json.dumps(result.token_usage, sort_keys=True)}")
     print(f"Used fallback plan: {result.used_fallback_plan}")

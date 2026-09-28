@@ -159,6 +159,8 @@ Queries without their own `LIMIT` keep the first 10,000 rows. When a result is c
 
 If the AI returns a plan with invalid steps, InsightForge lists the problems and asks the model once to correct the plan. It no longer drops invalid steps silently: any step that is still invalid appears as a run warning. Local models receive a JSON schema, so Ollama can only produce well-formed plans and summaries. When a plan has no chart, one is added from the shape of the first suitable result, and its note says it was added automatically.
 
+Every number in an AI-written summary is checked against the results with fixed code. A number counts as matched when it equals, at the precision written, a table cell, a column total, or a row count; the match is recorded as evidence that links to the cell. Numbers that can't be found are listed in a run warning, and the run is marked **Needs review**. Numbers taken from the question or the SQL, small counts, and years are not checked. Each exploratory run also gets an **Assumptions** list, generated from the executed SQL: the tables read, joins, filters, groupings and calculations, row limits, cut-off results, and how many values were missing in the columns used. Reports and exports include both.
+
 The data health check reports, for each column:
 
 - Numbers: range, median, quartiles, a 10-bin distribution, outliers (1.5 × interquartile range), and skew.

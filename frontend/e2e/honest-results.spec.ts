@@ -46,8 +46,31 @@ function cutOffRun(sessionId: string) {
     used_fallback_plan: false,
     dataset_version_id: null,
     definition_id: null,
-    provenance: { privacy_mode: "local", model: "local: qwen3:4b" },
-    verification_status: "exploratory",
+    provenance: {
+      privacy_mode: "local",
+      model: "local: qwen3:4b",
+      assumptions: ["orders: reads orders; uses every row (no filter)."],
+      number_check: { checked: 2, matched: 1, unmatched: ["4,500,000"] },
+      evidence: [
+        {
+          id: "N1",
+          text: "20",
+          value: 20,
+          artifact: "orders",
+          row: 2,
+          column: "amount",
+          kind: "cell",
+        },
+      ],
+      checks: [
+        {
+          code: "summary_numbers",
+          passed: false,
+          message: "1 of 2 numbers in the summary were found in the results",
+        },
+      ],
+    },
+    verification_status: "needs_review",
     warnings: [],
     fallback_reason: null,
     error: null,
@@ -133,6 +156,16 @@ test("cut-off results, chart notes and the local model are explained", async ({ 
     "Showing a random sample of 10,000 of 2,341,556 points.",
   );
   await expect(page.getByText("AI model: local: qwen3:4b")).toBeVisible();
+  await expect(page.getByTestId("number-check")).toContainText(
+    "1 of 2 numbers in the summary were found in the results; not found: 4,500,000.",
+  );
+  await expect(page.getByTestId("assumptions")).toContainText(
+    "orders: reads orders; uses every row (no filter).",
+  );
+  await page.getByText("Evidence and definitions", { exact: true }).click();
+  await expect(page.getByTestId("evidence-N1")).toContainText(
+    "\u201c20\u201d = 20orders, row 2, column amount",
+  );
   await expect(page.getByText("Local only: qwen3:4b on this computer")).toBeVisible();
   await expect(page.getByText(/Local only: chat uses qwen3:4b on this computer/)).toBeVisible();
 });

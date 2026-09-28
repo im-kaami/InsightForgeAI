@@ -31,6 +31,9 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
   const evidence = (provenance.evidence ?? []) as Record<string, unknown>[];
   const checks = (provenance.checks ?? []) as Record<string, unknown>[];
   const metricDefinitions = (provenance.metric_definitions ?? {}) as Record<string, unknown>;
+  const assumptions = (provenance.assumptions ?? []) as string[];
+  const numberCheck = provenance.number_check as
+    { checked: number; matched: number; unmatched: string[] } | null | undefined;
   const notices = Array.from(
     new Set([...(run.warnings ?? []), run.fallback_reason].filter(Boolean) as string[]),
   );
@@ -171,6 +174,33 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
             !artifacts.some((item) => (item as Record<string, unknown>).type === "text") && (
               <Markdown>{run.summary}</Markdown>
             )}
+          {numberCheck && numberCheck.checked > 0 && (
+            <p
+              data-testid="number-check"
+              className={
+                numberCheck.unmatched.length > 0
+                  ? "text-sm text-amber-700 dark:text-amber-400"
+                  : "text-sm text-muted-foreground"
+              }
+            >
+              Number check: {numberCheck.matched} of {numberCheck.checked} numbers in the summary
+              were found in the results
+              {numberCheck.unmatched.length > 0
+                ? `; not found: ${numberCheck.unmatched.join(", ")}.`
+                : "."}{" "}
+              See Evidence and definitions below.
+            </p>
+          )}
+          {assumptions.length > 0 && (
+            <section data-testid="assumptions" className="rounded border p-3 text-sm">
+              <h3 className="font-medium">Assumptions</h3>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted-foreground">
+                {assumptions.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </section>
+          )}
           <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
             <span>Source version: {run.dataset_version_id ?? "Not available"}</span>
             <span>
@@ -226,10 +256,15 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
                         >
                           {String(entry.id)}
                         </a>{" "}
+                        {entry.text ? <span>&ldquo;{String(entry.text)}&rdquo; = </span> : null}
                         <span>{value}</span>
                         <span className="ml-2 text-muted-foreground">
-                          {String(entry.artifact)}, row {String(entry.row)}, column{" "}
-                          {String(entry.column)}
+                          {String(entry.artifact)},{" "}
+                          {entry.row !== null && entry.row !== undefined
+                            ? `row ${String(entry.row)}, column ${String(entry.column)}`
+                            : entry.kind === "column_total" || entry.kind === "column_average"
+                              ? `${entry.kind === "column_total" ? "total" : "average"} of column ${String(entry.column)}`
+                              : "row count"}
                         </span>
                       </div>
                     );

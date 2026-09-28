@@ -2,6 +2,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from insightforge.core.evidence import EvidenceItem, NumberCheck
 from insightforge.core.planner import Plan
 
 
@@ -55,3 +56,6 @@ class RunResult(BaseModel):
     used_fallback_plan: bool = False
     fallback_reason: str | None = None
     plan_issues: list[str] = Field(default_factory=list)
+    number_check: NumberCheck | None = None
+    evidence: list[EvidenceItem] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)

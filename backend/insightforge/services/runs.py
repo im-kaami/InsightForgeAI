@@ -268,8 +268,11 @@ def execute_run(
                 else None
             )
             result = agent.run(run.goal, catalog, memory, on_event=publish, schema=saved_schema)
-            needs_review = result.used_fallback_plan or any(
-                artifact.type == "error" for artifact in result.artifacts
+            check = result.number_check
+            needs_review = (
+                result.used_fallback_plan
+                or any(artifact.type == "error" for artifact in result.artifacts)
+                or bool(check and check.unmatched)
             )
             verification_status = "needs_review" if needs_review else "exploratory"
             warnings = [result.fallback_reason] if result.fallback_reason else []
@@ -279,6 +282,11 @@ def execute_run(
                 for artifact in result.artifacts
                 if isinstance(artifact, TableArtifact) and artifact.truncated
             ]
+            if check and check.unmatched:
+                warnings.append(
+                    f"{len(check.unmatched)} number(s) in the summary were not found in the results: "
+                    f"{', '.join(check.unmatched[:8])}. Check them before relying on the summary."
+                )
             run.provenance_json = {
                 "kind": "exploratory",
                 "source_version_id": version.id if version else None,
@@ -288,6 +296,20 @@ def execute_run(
                 "privacy_mode": policy,
                 "model": model,
                 "engine_kind": "exploratory",
+                "assumptions": result.assumptions,
+                "evidence": [item.model_dump(mode="json") for item in result.evidence],
+                "number_check": check.model_dump(mode="json") if check else None,
+                "checks": (
+                    [
+                        {
+                            "code": "summary_numbers",
+                            "passed": not check.unmatched,
+                            "message": check.message,
+                        }
+                    ]
+                    if check and check.checked
+                    else []
+                ),
             }
         run.status = "completed"
         run.plan_json = result.plan.model_dump(mode="json")

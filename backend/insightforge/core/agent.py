@@ -3,8 +3,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from insightforge.core.artifacts import RunResult, TextArtifact
+from insightforge.core.artifacts import RunResult, TableArtifact, TextArtifact
 from insightforge.core.catalog import DataCatalog
+from insightforge.core.evidence import check_numbers, describe_query, extract_numbers, sql_literals
 from insightforge.core.executor import Executor
 from insightforge.core.llm import LLMClient
 from insightforge.core.memory import ConversationMemory
@@ -94,8 +95,26 @@ class InsightForgeAgent:
             goal, plan, schema, memory
         )
         text_artifacts = [artifact for artifact in artifacts if isinstance(artifact, TextArtifact)]
+        tables = [artifact for artifact in artifacts if isinstance(artifact, TableArtifact)]
+        assumptions = [
+            describe_query(table.name, table.sql, schema, executor.result_limit) for table in tables
+        ]
+        for table in tables:
+            if table.truncated:
+                full = f"{table.full_row_count:,}" if table.full_row_count else "an unknown number of"
+                assumptions.append(
+                    f"{table.name}: only the first {table.total_rows:,} of {full} result rows were kept."
+                )
+        number_check, evidence = None, []
         if text_artifacts:
             summary = text_artifacts[-1].text
+            if executor.summary_from_model:
+                ignore = {claim.value for claim in extract_numbers(goal)}
+                for table in tables:
+                    ignore |= sql_literals(table.sql)
+                number_check, evidence = check_numbers(
+                    summary, executor.last_results, executor.last_row_counts, ignore
+                )
         else:
             summary, response = self.summarizer.summarize(goal, {}, memory=memory)
             if response:
@@ -116,4 +135,7 @@ class InsightForgeAgent:
             used_fallback_plan=self.planner.last_used_fallback,
             fallback_reason=self.planner.last_fallback_reason,
             plan_issues=self.planner.last_plan_issues,
+            number_check=number_check,
+            evidence=evidence,
+            assumptions=assumptions,
         )
