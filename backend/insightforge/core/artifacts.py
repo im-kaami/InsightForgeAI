@@ -2,6 +2,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from insightforge.core.checks import ResultFinding
 from insightforge.core.evidence import EvidenceItem, NumberCheck
 from insightforge.core.planner import Plan
 from insightforge.core.trace import TraceEvent
@@ -26,6 +27,7 @@ class PlotArtifact(BaseModel):
     title: str
     figure: dict[str, Any]
     note: str | None = None
+    data_source: str | None = None
     png_path: str | None = None
 
 
@@ -61,3 +63,8 @@ class RunResult(BaseModel):
     evidence: list[EvidenceItem] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
     trace: list[TraceEvent] = Field(default_factory=list)
+    mode: Literal["quick", "deep"] = "quick"
+    rounds: int = 1
+    reviews: list[dict[str, Any]] = Field(default_factory=list)
+    findings: list[ResultFinding] = Field(default_factory=list)
+    deep_notes: list[str] = Field(default_factory=list)

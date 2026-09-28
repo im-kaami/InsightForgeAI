@@ -25,6 +25,7 @@ export default function SessionPage() {
   const client = useQueryClient();
   const [goal, setGoal] = useState("");
   const [sending, setSending] = useState(false);
+  const [mode, setMode] = useState<"quick" | "deep">("quick");
   const [live, setLive] = useState<Record<string, RunEvent[]>>({});
   const [pending, setPending] = useState<Run[]>([]);
   const query = useQuery({
@@ -49,7 +50,7 @@ export default function SessionPage() {
     let createdRunId: string | undefined;
     setGoal("");
     try {
-      const run = await sessions.createRun(id, text);
+      const run = await sessions.createRun(id, text, mode);
       createdRunId = run.id;
       setPending((items) => [...items, run]);
       await client.invalidateQueries({ queryKey: ["session", id] });
@@ -134,9 +135,21 @@ export default function SessionPage() {
               }
             }}
           />
-          <Button className="h-auto" disabled={sending || !goal.trim()} onClick={send}>
-            {sending ? "Analyzing..." : "Send"}
-          </Button>
+          <div className="flex flex-col gap-2">
+            <select
+              aria-label="Analysis mode"
+              title="Deep mode checks each result and lets the AI revise its queries before summarizing"
+              className="h-8 rounded-md border bg-background px-2 text-xs"
+              value={mode}
+              onChange={(event) => setMode(event.target.value as "quick" | "deep")}
+            >
+              <option value="quick">Quick</option>
+              <option value="deep">Deep: check and revise</option>
+            </select>
+            <Button className="flex-1" disabled={sending || !goal.trim()} onClick={send}>
+              {sending ? "Analyzing..." : "Send"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

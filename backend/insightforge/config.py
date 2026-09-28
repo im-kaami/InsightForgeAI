@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     local_llm_max_output_tokens: int = 1024
     local_llm_think: bool = False
     local_llm_timeout_seconds: int = 300
+    deep_max_rounds: int = Field(default=3, ge=1, le=5)
+    deep_max_seconds: int = Field(default=300, ge=10)
+    deep_max_tokens: int = Field(default=40000, ge=1000)
 
     @field_validator("llm_api_key", mode="before")
     @classmethod

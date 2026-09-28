@@ -137,7 +137,8 @@ export const sessions = {
   create: (dataset_id: string, title?: string) =>
     apiFetch<Session>("/sessions", json({ dataset_id, title })),
   remove: (id: string) => apiFetch<void>(`/sessions/${id}`, { method: "DELETE" }),
-  createRun: (id: string, goal: string) => apiFetch<Run>(`/sessions/${id}/runs`, json({ goal })),
+  createRun: (id: string, goal: string, mode: "quick" | "deep" = "quick") =>
+    apiFetch<Run>(`/sessions/${id}/runs`, json({ goal, mode })),
 };
 
 export async function downloadBlob(path: string, filename: string) {

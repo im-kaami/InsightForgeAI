@@ -32,6 +32,12 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
   const checks = (provenance.checks ?? []) as Record<string, unknown>[];
   const metricDefinitions = (provenance.metric_definitions ?? {}) as Record<string, unknown>;
   const assumptions = (provenance.assumptions ?? []) as string[];
+  const reviews = (provenance.reviews ?? []) as {
+    round: number;
+    verdict: string;
+    reason: string;
+    steps: string[];
+  }[];
   const trace = (provenance.trace ?? []) as {
     step: string;
     kind: string;
@@ -78,6 +84,12 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
             </CardTitle>
             <div className="mt-1 flex gap-2">
               {run.used_fallback_plan && <Badge variant="secondary">profiling plan</Badge>}
+              {provenance.mode === "deep" && (
+                <Badge variant="secondary">
+                  Deep · {String(provenance.rounds ?? 1)} round
+                  {Number(provenance.rounds ?? 1) === 1 ? "" : "s"}
+                </Badge>
+              )}
               <Badge variant="outline">{run.status}</Badge>
               <Badge variant="outline">
                 {verificationLabels[run.verification_status] ?? run.verification_status}
@@ -197,6 +209,20 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
                 : "."}{" "}
               See Evidence and definitions below.
             </p>
+          )}
+          {reviews.length > 0 && (
+            <section data-testid="deep-reviews" className="rounded border p-3 text-sm">
+              <h3 className="font-medium">Deep mode reviews</h3>
+              <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-muted-foreground">
+                {reviews.map((review) => (
+                  <li key={review.round}>
+                    {review.verdict === "revise"
+                      ? `Revised ${review.steps.join(", ") || "the analysis"}: ${review.reason}`
+                      : `Accepted: ${review.reason}`}
+                  </li>
+                ))}
+              </ol>
+            </section>
           )}
           {assumptions.length > 0 && (
             <section data-testid="assumptions" className="rounded border p-3 text-sm">

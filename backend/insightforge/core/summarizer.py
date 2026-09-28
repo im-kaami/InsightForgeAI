@@ -48,7 +48,7 @@ def _render_structured_summary(raw: Any) -> str:
     return "\n\n".join(lines)
 
 
-def _pipe_table(df: pd.DataFrame, limit: int) -> str:
+def pipe_table(df: pd.DataFrame, limit: int) -> str:
     frame = df.head(limit)
     columns = [str(column) for column in frame.columns]
     if not columns:
@@ -110,11 +110,11 @@ class Summarizer:
                 rows += (
                     f"\nOnly the first {self.max_rows} rows are listed below; do not count them as totals."
                 )
-            parts.append(f"Table: {name}\n{rows}\n{_pipe_table(df, self.max_rows)}")
+            parts.append(f"Table: {name}\n{rows}\n{pipe_table(df, self.max_rows)}")
             numeric = df.select_dtypes(include="number")
             if not numeric.empty:
                 stats = numeric.describe().loc[["count", "mean", "min", "max"]].round(2)
-                parts.append(f"Numeric summary for {name}:\n{_pipe_table(stats.reset_index(), 20)}")
+                parts.append(f"Numeric summary for {name}:\n{pipe_table(stats.reset_index(), 20)}")
         return "\n\n".join(parts)
 
     def summarize(
@@ -134,7 +134,7 @@ class Summarizer:
             ]
             for name, frame in tables.items():
                 rows = _rows_line(name, frame, notes, "Returned rows")
-                lines.append(f"### {name}\n{rows}\n\n{_pipe_table(frame, 5)}")
+                lines.append(f"### {name}\n{rows}\n\n{pipe_table(frame, 5)}")
             if not tables:
                 lines.append("No result tables were available.")
             return "\n\n".join(lines), None
@@ -192,7 +192,7 @@ def _raw_tables(tables: dict[str, pd.DataFrame], notes: dict[str, str], reason: 
         "## Analysis summary",
     ]
     for name, df in tables.items():
-        lines.append(f"\n### {name}\n{_rows_line(name, df, notes, 'Rows')}\n\n{_pipe_table(df, 5)}")
+        lines.append(f"\n### {name}\n{_rows_line(name, df, notes, 'Rows')}\n\n{pipe_table(df, 5)}")
     if not tables:
         lines.append("\nNo result tables were available.")
     return "\n".join(lines)

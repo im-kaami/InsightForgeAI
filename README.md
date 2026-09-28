@@ -163,6 +163,21 @@ Every number in an AI-written summary is checked against the results with fixed 
 
 Each exploratory run stores a **run trace**: every model call (plan, plan repair, SQL repair, summary), query, chart, and number check, with timings. Model calls record the model used, what it was allowed to see (for example "table and column names, types and the question only"), the prompt size and token counts. Prompts and data values are not stored. The trace appears in the run card under **Run trace** and in report exports.
 
+### Quick and Deep modes
+
+Choose the mode under the chat box, or send `"mode": "deep"` to `POST /api/sessions/{id}/runs`.
+
+- **Quick** (default) plans once, runs the plan, and summarizes.
+- **Deep** runs the plan, then asks the model to review the results before summarizing. The review sees the question and a description of each result. It either accepts the results or supplies corrected or extra SQL steps; a step with the same name replaces the earlier result. Deep mode stops after `DEEP_MAX_ROUNDS` (default 3), `DEEP_MAX_SECONDS` (300), or `DEEP_MAX_TOKENS` (40,000), and records any stop reason as a warning. It needs an AI model; offline mode runs once. Reviews follow the privacy mode: schema-only reviews see row counts, columns, missing-value counts, and findings without data values.
+
+In both modes, fixed code checks every query result:
+
+- **Empty or zero results:** reported as a warning.
+- **Filters that match no rows:** the filter's column is searched for similar values, so `location = 'remote'` suggests `'Remote'`.
+- **Joins with repeated keys on both sides:** these multiply rows.
+
+Filter and join problems mark the run **Needs review**, and appear in the warnings, the checks list, and the trace. Answers show a **Deep · N rounds** badge and the review decisions.
+
 ### Evaluation
 
 `insightforge eval` scores the analyst on 29 reference questions over two synthetic datasets: the HR fixture, and a shop with orders and customers. The questions are in `backend/evals/suite.json`, and fixed SQL computes each correct answer, so the answers never come from an AI. A question passes when a result table contains the expected value, every expected row, or the expected winner as its first row.
@@ -172,6 +187,7 @@ cd backend
 .venv/Scripts/insightforge.exe eval --model local                          # LOCAL_LLM_MODEL through Ollama
 .venv/Scripts/insightforge.exe eval --model cloud                          # the configured provider; sends the synthetic data
 .venv/Scripts/insightforge.exe eval --model local --case hr-headcount      # a single question
+.venv/Scripts/insightforge.exe eval --model local --mode deep              # Deep mode (review and revise)
 .venv/Scripts/insightforge.exe eval --model local --baseline evals/baselines/local-qwen3-4b.json
 ```
 

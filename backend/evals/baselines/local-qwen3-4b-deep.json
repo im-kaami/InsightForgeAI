@@ -1,0 +1,544 @@
+{
+  "suite": "insightforge-core",
+  "suite_version": 1,
+  "model": "local: qwen3:4b (deep)",
+  "started_at": "2026-09-28T21:19:06.830687Z",
+  "cases": [
+    {
+      "id": "hr-headcount",
+      "dataset": "hr",
+      "question": "How many employees are there?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 2,
+      "numbers_matched": 2,
+      "seconds": 60.96,
+      "tokens": 1581,
+      "rounds": 1,
+      "sql": [
+        "SELECT COUNT(*) AS total_employees FROM employees LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-avg-salary",
+      "dataset": "hr",
+      "question": "What is the average salary?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 1,
+      "numbers_matched": 1,
+      "seconds": 46.7,
+      "tokens": 1656,
+      "rounds": 1,
+      "sql": [
+        "SELECT AVG(salary) AS avg_salary FROM employees LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-avg-salary-by-department",
+      "dataset": "hr",
+      "question": "What is the average salary by department?",
+      "passed": true,
+      "reason": "all 5 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 65.17,
+      "tokens": 1955,
+      "rounds": 1,
+      "sql": [
+        "SELECT department, AVG(salary) AS avg_salary FROM employees GROUP BY department LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-top-department-salary",
+      "dataset": "hr",
+      "question": "Which department has the highest average salary?",
+      "passed": true,
+      "reason": "Engineering is listed first",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 61.9,
+      "tokens": 1930,
+      "rounds": 1,
+      "sql": [
+        "SELECT department, AVG(salary) AS avg_salary FROM employees GROUP BY department ORDER BY avg_salary DESC LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-headcount-by-location",
+      "dataset": "hr",
+      "question": "How many employees work in each location?",
+      "passed": true,
+      "reason": "all 5 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 3,
+      "numbers_matched": 3,
+      "seconds": 45.44,
+      "tokens": 1705,
+      "rounds": 1,
+      "sql": [
+        "SELECT location, COUNT(*) AS employee_count FROM employees GROUP BY location LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-max-salary",
+      "dataset": "hr",
+      "question": "What is the highest salary?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 2,
+      "numbers_matched": 1,
+      "seconds": 48.14,
+      "tokens": 1640,
+      "rounds": 1,
+      "sql": [
+        "SELECT MAX(salary) AS max_salary FROM employees LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-min-salary-engineering",
+      "dataset": "hr",
+      "question": "What is the lowest salary in the Engineering department?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 1,
+      "numbers_matched": 1,
+      "seconds": 51.0,
+      "tokens": 1666,
+      "rounds": 1,
+      "sql": [
+        "SELECT MIN(salary) AS lowest_salary FROM employees WHERE department = 'Engineering' LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-avg-performance-by-department",
+      "dataset": "hr",
+      "question": "What is the average performance score in each department?",
+      "passed": true,
+      "reason": "all 5 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 52.7,
+      "tokens": 1855,
+      "rounds": 1,
+      "sql": [
+        "SELECT department, AVG(performance_score) AS avg_performance FROM employees GROUP BY department LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-hires-by-year",
+      "dataset": "hr",
+      "question": "How many people were hired in each year?",
+      "passed": true,
+      "reason": "all 8 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 0,
+      "numbers_matched": 0,
+      "seconds": 61.15,
+      "tokens": 2149,
+      "rounds": 1,
+      "sql": [
+        "SELECT DATE_TRUNC('YEAR', hire_date) AS hire_year, COUNT(*) AS count_hired FROM employees GROUP BY hire_year ORDER BY hire_year LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-remote-count",
+      "dataset": "hr",
+      "question": "How many employees work remotely?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 1,
+      "numbers_matched": 1,
+      "seconds": 88.68,
+      "tokens": 2696,
+      "rounds": 3,
+      "sql": [
+        "SELECT DISTINCT location FROM employees LIMIT 10000",
+        "SELECT COUNT(*) AS remote_count FROM employees WHERE location LIKE '%Remote%' OR location = 'remote' LIMIT 10000",
+        "SELECT DISTINCT location FROM employees LIMIT 10000",
+        "SELECT COUNT(*) AS remote_count FROM employees WHERE LOWER(location) LIKE '%remote%' LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-top-performance-department",
+      "dataset": "hr",
+      "question": "Which department has the best average performance score?",
+      "passed": true,
+      "reason": "Engineering is listed first",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 63.47,
+      "tokens": 1920,
+      "rounds": 1,
+      "sql": [
+        "SELECT department, AVG(performance_score) AS avg_performance FROM employees GROUP BY department ORDER BY avg_performance DESC LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-salary-above-100k",
+      "dataset": "hr",
+      "question": "How many employees earn more than 100,000?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 1,
+      "numbers_matched": 1,
+      "seconds": 39.83,
+      "tokens": 1679,
+      "rounds": 1,
+      "sql": [
+        "SELECT COUNT(*) AS high_salary_count FROM employees WHERE salary > 100000 LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-total-payroll",
+      "dataset": "hr",
+      "question": "What is the total payroll, the sum of all salaries?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 2,
+      "numbers_matched": 1,
+      "seconds": 37.11,
+      "tokens": 1695,
+      "rounds": 1,
+      "sql": [
+        "SELECT SUM(salary) AS total_payroll FROM employees LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-payroll-by-department",
+      "dataset": "hr",
+      "question": "What is the total salary cost per department?",
+      "passed": true,
+      "reason": "all 5 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 6,
+      "numbers_matched": 5,
+      "seconds": 43.39,
+      "tokens": 1870,
+      "rounds": 1,
+      "sql": [
+        "SELECT department, SUM(salary) AS total_salary FROM employees GROUP BY department LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-distinct-job-titles",
+      "dataset": "hr",
+      "question": "How many distinct job titles are there?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 2,
+      "numbers_matched": 2,
+      "seconds": 37.22,
+      "tokens": 1639,
+      "rounds": 1,
+      "sql": [
+        "SELECT COUNT(DISTINCT job_title) FROM employees LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-completed-revenue",
+      "dataset": "shop",
+      "question": "What is the total amount of completed orders?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 1,
+      "numbers_matched": 1,
+      "seconds": 45.6,
+      "tokens": 1877,
+      "rounds": 1,
+      "sql": [
+        "SELECT SUM(amount) AS total_amount FROM orders WHERE status = 'completed' LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-orders-by-status",
+      "dataset": "shop",
+      "question": "How many orders are there in each status?",
+      "passed": true,
+      "reason": "all 3 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 3,
+      "numbers_matched": 3,
+      "seconds": 36.87,
+      "tokens": 1900,
+      "rounds": 1,
+      "sql": [
+        "SELECT status, COUNT(*) AS order_count FROM orders GROUP BY status LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-revenue-by-category",
+      "dataset": "shop",
+      "question": "What is the total amount of completed orders by category?",
+      "passed": true,
+      "reason": "all 5 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 41.84,
+      "tokens": 2092,
+      "rounds": 1,
+      "sql": [
+        "SELECT category, SUM(amount) AS total_amount FROM orders WHERE status = 'completed' GROUP BY category LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-top-category",
+      "dataset": "shop",
+      "question": "Which category has the highest total amount of completed orders?",
+      "passed": true,
+      "reason": "Toys is listed first",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 58.36,
+      "tokens": 2130,
+      "rounds": 1,
+      "sql": [
+        "SELECT category, SUM(amount) AS total_amount FROM orders WHERE status = 'completed' GROUP BY category ORDER BY total_amount DESC LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-avg-order-by-region",
+      "dataset": "shop",
+      "question": "What is the average order amount in each region, across all orders?",
+      "passed": true,
+      "reason": "all 4 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 52.94,
+      "tokens": 2067,
+      "rounds": 1,
+      "sql": [
+        "SELECT region, AVG(amount) AS avg_amount FROM orders GROUP BY region LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-refund-share",
+      "dataset": "shop",
+      "question": "What share of all orders were refunded?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 3,
+      "numbers_matched": 3,
+      "seconds": 53.76,
+      "tokens": 1943,
+      "rounds": 1,
+      "sql": [
+        "SELECT COUNT(*) AS total_refunded, COUNT(*) * 100.0 / (SELECT COUNT(*) FROM orders) AS refund_share FROM orders WHERE status = 'refunded' LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-customers-by-segment",
+      "dataset": "shop",
+      "question": "How many customers are in each segment?",
+      "passed": true,
+      "reason": "all 3 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 2,
+      "numbers_matched": 2,
+      "seconds": 50.18,
+      "tokens": 1907,
+      "rounds": 1,
+      "sql": [
+        "SELECT segment, COUNT(*) AS segment_count FROM customers GROUP BY segment LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-revenue-by-segment",
+      "dataset": "shop",
+      "question": "What is the total amount of completed orders for each customer segment?",
+      "passed": true,
+      "reason": "all 3 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 3,
+      "numbers_matched": 3,
+      "seconds": 51.5,
+      "tokens": 2041,
+      "rounds": 1,
+      "sql": [
+        "SELECT customers.segment, SUM(orders.amount) AS total_amount FROM customers JOIN orders ON customers.customer_id = orders.customer_id WHERE orders.status = 'completed' GROUP BY customers.segment LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-top-country",
+      "dataset": "shop",
+      "question": "Customers from which country placed the most orders?",
+      "passed": true,
+      "reason": "US is listed first",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 43.5,
+      "tokens": 1922,
+      "rounds": 1,
+      "sql": [
+        "SELECT customers.country, COUNT(orders.order_id) AS order_count FROM customers JOIN orders ON customers.customer_id = orders.customer_id GROUP BY customers.country ORDER BY order_count DESC LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-avg-completed-order",
+      "dataset": "shop",
+      "question": "What is the average amount of a completed order?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 2,
+      "numbers_matched": 2,
+      "seconds": 47.61,
+      "tokens": 1920,
+      "rounds": 1,
+      "sql": [
+        "SELECT AVG(amount) AS avg_amount FROM orders WHERE status = 'completed' LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-largest-order",
+      "dataset": "shop",
+      "question": "What is the largest single order amount?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 1,
+      "numbers_matched": 1,
+      "seconds": 39.42,
+      "tokens": 1851,
+      "rounds": 1,
+      "sql": [
+        "SELECT MAX(amount) AS max_amount FROM orders LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-orders-per-customer",
+      "dataset": "shop",
+      "question": "On average, how many orders has each customer who ordered placed?",
+      "passed": false,
+      "reason": "expected 6.66667, which is not in any result table",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 3,
+      "numbers_matched": 3,
+      "seconds": 52.19,
+      "tokens": 2239,
+      "rounds": 1,
+      "sql": [
+        "SELECT customers.customer_id, COUNT(orders.order_id) AS order_count FROM customers JOIN orders ON customers.customer_id = orders.customer_id GROUP BY customers.customer_id LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-cancelled-by-region",
+      "dataset": "shop",
+      "question": "How many cancelled orders are there in each region?",
+      "passed": true,
+      "reason": "all 4 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 0,
+      "numbers_matched": 0,
+      "seconds": 35.59,
+      "tokens": 1893,
+      "rounds": 1,
+      "sql": [
+        "SELECT region, COUNT(*) AS cancelled_count FROM orders WHERE status = 'cancelled' GROUP BY region LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-top-customer",
+      "dataset": "shop",
+      "question": "Which customer has spent the most on completed orders?",
+      "passed": true,
+      "reason": "42 is listed first",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 3,
+      "numbers_matched": 3,
+      "seconds": 51.29,
+      "tokens": 2073,
+      "rounds": 1,
+      "sql": [
+        "SELECT customers.customer_id, SUM(orders.amount) AS total_spent FROM customers JOIN orders ON customers.customer_id = orders.customer_id WHERE orders.status = 'completed' GROUP BY customers.customer_id ORDER BY total_spent DESC LIMIT 1"
+      ]
+    }
+  ],
+  "summary": {
+    "cases": 29,
+    "passed": 28,
+    "accuracy": 0.9655,
+    "fallback_rate": 0.0,
+    "error_rate": 0.0,
+    "summary_numbers_matched": 0.9595,
+    "average_seconds": 50.47,
+    "revised_cases": 1,
+    "total_tokens": 55491
+  }
+}

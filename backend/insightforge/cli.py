@@ -37,6 +37,7 @@ def _parser() -> argparse.ArgumentParser:
 
     evaluate = commands.add_parser("eval", help="Score the analyst on reference questions")
     evaluate.add_argument("--model", choices=["offline", "local", "cloud"], default="offline")
+    evaluate.add_argument("--mode", choices=["quick", "deep"], default="quick")
     evaluate.add_argument("--suite", type=Path, default=DEFAULT_SUITE)
     evaluate.add_argument("--case", dest="cases", action="append")
     evaluate.add_argument("--out", type=Path)
@@ -173,15 +174,16 @@ def _eval(args: argparse.Namespace) -> int:
         "offline": "offline",
         "local": f"local: {get_settings().local_llm_model}",
         "cloud": f"cloud: {resolved_model(get_settings())}",
-    }[args.model]
+    }[args.model] + f" ({args.mode})"
 
     def show(result: CaseResult) -> None:
         status = "PASS" if result.passed else "FAIL"
-        print(f"{status} {result.id} ({result.seconds:.1f}s): {result.reason}", flush=True)
+        revised = f", {result.rounds} rounds" if result.rounds > 1 else ""
+        print(f"{status} {result.id} ({result.seconds:.1f}s{revised}): {result.reason}", flush=True)
 
-    report = run_suite(suite, make_agent, label, args.cases, show)
+    report = run_suite(suite, make_agent, label, args.cases, show, args.mode)
     stamp = report.started_at.strftime("%Y%m%d-%H%M%S")
-    out = args.out or suite.base_dir / "results" / f"{args.model}-{stamp}.json"
+    out = args.out or suite.base_dir / "results" / f"{args.model}-{args.mode}-{stamp}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report.to_json(), encoding="utf-8")
     print(f"\n{json.dumps(report.summary, indent=2)}\nReport: {out}")

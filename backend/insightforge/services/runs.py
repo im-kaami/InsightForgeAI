@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from insightforge.config import get_settings
 from insightforge.core.agent import InsightForgeAgent
 from insightforge.core.artifacts import PlotArtifact, RunResult, TableArtifact, TextArtifact
+from insightforge.core.checks import SERIOUS_FINDINGS
 from insightforge.core.executor import truncation_note
 from insightforge.core.llm import LLMClient, build_llm, build_local_llm, llm_mode, resolved_model
 from insightforge.core.memory import ConversationMemory
@@ -261,22 +262,31 @@ def execute_run(
                 schema_sample_rows=3 if settings.llm_send_sample_values else 0,
                 privacy_mode=policy,
                 local_llm=local,
+                deep_max_rounds=settings.deep_max_rounds,
+                deep_max_seconds=settings.deep_max_seconds,
+                deep_max_tokens=settings.deep_max_tokens,
             )
             saved_schema = (
                 SchemaInfo.model_validate(version.schema_json)
                 if version is not None and (version.schema_json or {}).get("tables")
                 else None
             )
-            result = agent.run(run.goal, catalog, memory, on_event=publish, schema=saved_schema)
+            mode = "deep" if (run.request_json or {}).get("mode") == "deep" else "quick"
+            result = agent.run(
+                run.goal, catalog, memory, on_event=publish, schema=saved_schema, mode=mode
+            )
             check = result.number_check
             needs_review = (
                 result.used_fallback_plan
                 or any(artifact.type == "error" for artifact in result.artifacts)
                 or bool(check and check.unmatched)
+                or any(finding.code in SERIOUS_FINDINGS for finding in result.findings)
             )
             verification_status = "needs_review" if needs_review else "exploratory"
             warnings = [result.fallback_reason] if result.fallback_reason else []
             warnings += [f"Plan step skipped: {issue}" for issue in result.plan_issues]
+            warnings += [finding.message for finding in result.findings]
+            warnings += result.deep_notes
             warnings += [
                 f"{artifact.name}: {truncation_note(artifact.total_rows, artifact.full_row_count)}"
                 for artifact in result.artifacts
@@ -300,6 +310,9 @@ def execute_run(
                 "evidence": [item.model_dump(mode="json") for item in result.evidence],
                 "number_check": check.model_dump(mode="json") if check else None,
                 "trace": [event.model_dump(mode="json") for event in result.trace],
+                "mode": result.mode,
+                "rounds": result.rounds,
+                "reviews": result.reviews,
                 "checks": (
                     [
                         {
@@ -310,7 +323,11 @@ def execute_run(
                     ]
                     if check and check.checked
                     else []
-                ),
+                )
+                + [
+                    {"code": finding.code, "passed": False, "message": finding.message}
+                    for finding in result.findings
+                ],
             }
         run.status = "completed"
         run.plan_json = result.plan.model_dump(mode="json")

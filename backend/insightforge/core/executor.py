@@ -1,6 +1,7 @@
 import json
 import time
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -15,8 +16,9 @@ from insightforge.core.artifacts import (
 )
 from insightforge.core.catalog import DataCatalog, sanitize_identifier
 from insightforge.core.chart_data import AUTO_CHART_NOTE, QueryRunner, prepare_chart_data, suggest_chart
+from insightforge.core.checks import SERIOUS_FINDINGS, ResultFinding, check_result
 from insightforge.core.memory import ConversationMemory
-from insightforge.core.planner import Plan, Planner, PlotStep, SqlStep, SummaryStep
+from insightforge.core.planner import Plan, Planner, PlotStep, SqlStep, Step, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
 from insightforge.core.schema import SchemaInfo
 from insightforge.core.sql_guard import GuardedQuery, guard_query
@@ -33,6 +35,26 @@ def truncation_note(retrieved: int, full_row_count: int | None) -> str:
     return (
         f"The query produced {full_row_count:,} rows; only the first {retrieved:,} were kept. "
         "Figures below cover the retrieved rows only."
+    )
+
+
+@dataclass
+class ExecutionState:
+    goal: str
+    schema: SchemaInfo
+    memory: ConversationMemory | None
+    step_names: set[str]
+    auto_chart: bool
+    artifacts: list[Artifact] = field(default_factory=list)
+    timings: dict[str, float] = field(default_factory=dict)
+    results: dict[str, pd.DataFrame] = field(default_factory=dict)
+    sources: dict[str, tuple[GuardedQuery, bool, int | None]] = field(default_factory=dict)
+    notes: dict[str, str] = field(default_factory=dict)
+    row_counts: dict[str, list[int]] = field(default_factory=dict)
+    findings: list[ResultFinding] = field(default_factory=list)
+    summary: str = ""
+    summary_usage: dict[str, int] = field(
+        default_factory=lambda: {"prompt_tokens": 0, "completion_tokens": 0}
     )
 
 
@@ -109,6 +131,7 @@ class Executor:
                 title=step.title,
                 figure=figure,
                 note=chart.note,
+                data_source=step.data_source,
                 png_path=png_path,
             )
         except Exception as error:
@@ -122,6 +145,27 @@ class Executor:
             except Exception:
                 pass
 
+    def start(
+        self,
+        goal: str,
+        plan: Plan,
+        schema: SchemaInfo,
+        memory: ConversationMemory | None = None,
+    ) -> ExecutionState:
+        state = ExecutionState(
+            goal=goal,
+            schema=schema,
+            memory=memory,
+            step_names={step.name for step in plan.steps},
+            auto_chart=self.auto_chart and not any(isinstance(step, PlotStep) for step in plan.steps),
+        )
+        self.last_results = state.results
+        self.last_row_counts = state.row_counts
+        self.summary_from_model = False
+        if self.artifact_dir:
+            self.artifact_dir.mkdir(parents=True, exist_ok=True)
+        return state
+
     def execute(
         self,
         goal: str,
@@ -129,45 +173,70 @@ class Executor:
         schema: SchemaInfo,
         memory: ConversationMemory | None = None,
     ) -> tuple[list[Artifact], dict[str, float], dict[str, int], str]:
-        artifacts: list[Artifact] = []
-        timings: dict[str, float] = {}
-        results: dict[str, pd.DataFrame] = {}
-        self.last_results = results
-        self.last_row_counts = {}
-        self.summary_from_model = False
-        sources: dict[str, tuple[GuardedQuery, bool, int | None]] = {}
-        notes: dict[str, str] = {}
-        summary = ""
-        summary_usage = {"prompt_tokens": 0, "completion_tokens": 0}
-        step_names = {step.name for step in plan.steps}
-        auto_chart = self.auto_chart and not any(isinstance(step, PlotStep) for step in plan.steps)
-        if self.artifact_dir:
-            self.artifact_dir.mkdir(parents=True, exist_ok=True)
+        state = self.start(goal, plan, schema, memory)
+        self.run_steps(state, plan.steps)
+        return self.finish(state)
 
-        for step in plan.steps:
+    def finish(self, state: ExecutionState) -> tuple[list[Artifact], dict[str, float], dict[str, int], str]:
+        token_usage = {
+            key: self.planner.last_usage[key] + state.summary_usage[key]
+            for key in ("prompt_tokens", "completion_tokens")
+        }
+        return state.artifacts, state.timings, token_usage, state.summary
+
+    def _forget(self, state: ExecutionState, name: str) -> None:
+        state.artifacts = [
+            artifact
+            for artifact in state.artifacts
+            if artifact.name != name and getattr(artifact, "data_source", None) != name
+        ]
+        for mapping in (state.results, state.sources, state.notes, state.row_counts):
+            mapping.pop(name, None)
+        state.findings = [finding for finding in state.findings if finding.step != name]
+        if not any(isinstance(artifact, PlotArtifact) for artifact in state.artifacts):
+            state.auto_chart = self.auto_chart
+
+    def _check(self, state: ExecutionState, step: SqlStep, sql: str, frame: pd.DataFrame) -> None:
+        started = time.perf_counter()
+        findings = check_result(step.name, sql, frame, self.catalog, self.query_timeout)
+        if findings:
+            state.findings.extend(findings)
+            self.tracer.record(
+                f"checks:{step.name}",
+                "check",
+                started,
+                ok=not any(finding.code in SERIOUS_FINDINGS for finding in findings),
+                findings=[finding.code for finding in findings],
+            )
+
+    def run_steps(self, state: ExecutionState, steps: list[Step]) -> None:
+        state.step_names |= {step.name for step in steps}
+        for step in steps:
             started = time.perf_counter()
             self._emit({"type": "step_start", "name": step.name, "action": step.action})
             if isinstance(step, SqlStep):
+                if step.name in state.results or any(item.name == step.name for item in state.artifacts):
+                    self._forget(state, step.name)
                 repaired_sql = False
                 try:
                     guarded, frame = self._run_sql(step.query)
                 except Exception as first_error:
                     try:
-                        repaired = self.planner.repair_sql(step, str(first_error), schema)
+                        repaired = self.planner.repair_sql(step, str(first_error), state.schema)
                         guarded, frame = self._run_sql(repaired.query)
                         repaired_sql = True
                     except Exception as second_error:
                         message = f"{first_error}; repair failed: {second_error}"
-                        artifacts.append(
+                        state.artifacts.append(
                             ErrorArtifact(name=step.name, action=step.action, message=message)
                         )
                         self.tracer.record(step.name, "sql", started, ok=False, error=message[:300])
-                        timings[step.name] = time.perf_counter() - started
+                        state.timings[step.name] = time.perf_counter() - started
                         self._emit(
                             {
                                 "type": "step_done",
                                 "name": step.name,
-                                "artifact": artifacts[-1].model_dump(mode="json"),
+                                "artifact": state.artifacts[-1].model_dump(mode="json"),
                             }
                         )
                         continue
@@ -181,20 +250,21 @@ class Executor:
                     full_row_count=full_row_count,
                     repaired=repaired_sql,
                 )
-                results[step.name] = frame
-                self.last_row_counts[step.name] = [len(frame)] + (
+                state.results[step.name] = frame
+                state.row_counts[step.name] = [len(frame)] + (
                     [full_row_count] if full_row_count is not None else []
                 )
-                sources[step.name] = (guarded, truncated, full_row_count)
+                state.sources[step.name] = (guarded, truncated, full_row_count)
                 if truncated:
-                    notes[step.name] = truncation_note(len(frame), full_row_count)
+                    state.notes[step.name] = truncation_note(len(frame), full_row_count)
+                self._check(state, step, guarded.sql, frame)
                 csv_path = None
                 if self.artifact_dir:
                     path = self.artifact_dir / f"{sanitize_identifier(step.name)}.csv"
                     frame.to_csv(path, index=False)
                     csv_path = str(path)
                 rows = json.loads(frame.head(self.row_limit).to_json(orient="records", date_format="iso"))
-                artifacts.append(
+                state.artifacts.append(
                     TableArtifact(
                         name=step.name,
                         sql=guarded.sql,
@@ -207,9 +277,10 @@ class Executor:
                     )
                 )
             elif isinstance(step, PlotStep):
-                frame = results.get(step.data_source)
+                frame = state.results.get(step.data_source)
+                state.artifacts = [item for item in state.artifacts if item.name != step.name]
                 if frame is None:
-                    artifacts.append(
+                    state.artifacts.append(
                         ErrorArtifact(
                             name=step.name,
                             action=step.action,
@@ -217,51 +288,45 @@ class Executor:
                         )
                     )
                 else:
-                    artifacts.append(self._plot(step, frame, sources[step.data_source]))
+                    state.artifacts.append(self._plot(step, frame, state.sources[step.data_source]))
+                    state.auto_chart = False
             elif isinstance(step, SummaryStep):
                 try:
                     summary, response = self.summarizer.summarize(
-                        goal, results, step.focus, memory, notes
+                        state.goal, state.results, step.focus, state.memory, state.notes
                     )
+                    state.summary = summary
                     self.summary_from_model = response is not None
                     if response:
-                        summary_usage["prompt_tokens"] += response.prompt_tokens
-                        summary_usage["completion_tokens"] += response.completion_tokens
-                    artifacts.append(TextArtifact(name=step.name, text=summary))
+                        state.summary_usage["prompt_tokens"] += response.prompt_tokens
+                        state.summary_usage["completion_tokens"] += response.completion_tokens
+                    state.artifacts.append(TextArtifact(name=step.name, text=summary))
                 except Exception as error:
-                    artifacts.append(
+                    state.artifacts.append(
                         ErrorArtifact(name=step.name, action=step.action, message=str(error))
                     )
-            timings[step.name] = time.perf_counter() - started
+            state.timings[step.name] = time.perf_counter() - started
             self._emit(
                 {
                     "type": "step_done",
                     "name": step.name,
-                    "artifact": artifacts[-1].model_dump(mode="json"),
+                    "artifact": state.artifacts[-1].model_dump(mode="json"),
                 }
             )
-            if auto_chart and isinstance(step, SqlStep) and step.name in results:
-                suggestion = suggest_chart(step.name, results[step.name])
-                if suggestion is not None:
-                    auto_chart = False
-                    name = suggestion.name
-                    while name in step_names:
-                        name = f"{name}_auto"
-                    suggestion = suggestion.model_copy(update={"name": name})
-                    artifact = self._plot(suggestion, results[step.name], sources[step.name])
-                    if isinstance(artifact, PlotArtifact):
-                        artifact.note = f"{AUTO_CHART_NOTE} {artifact.note or ''}".strip()
-                        artifacts.append(artifact)
-                        self._emit(
-                            {
-                                "type": "step_done",
-                                "name": name,
-                                "artifact": artifact.model_dump(mode="json"),
-                            }
-                        )
+            if state.auto_chart and isinstance(step, SqlStep) and step.name in state.results:
+                self._auto_chart(state, step.name)
 
-        token_usage = {
-            key: self.planner.last_usage[key] + summary_usage[key]
-            for key in ("prompt_tokens", "completion_tokens")
-        }
-        return artifacts, timings, token_usage, summary
+    def _auto_chart(self, state: ExecutionState, source: str) -> None:
+        suggestion = suggest_chart(source, state.results[source])
+        if suggestion is None:
+            return
+        state.auto_chart = False
+        name = suggestion.name
+        while name in state.step_names:
+            name = f"{name}_auto"
+        suggestion = suggestion.model_copy(update={"name": name})
+        artifact = self._plot(suggestion, state.results[source], state.sources[source])
+        if isinstance(artifact, PlotArtifact):
+            artifact.note = f"{AUTO_CHART_NOTE} {artifact.note or ''}".strip()
+            state.artifacts.append(artifact)
+            self._emit({"type": "step_done", "name": name, "artifact": artifact.model_dump(mode="json")})

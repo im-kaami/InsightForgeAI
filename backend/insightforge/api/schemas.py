@@ -180,6 +180,7 @@ class SessionCreate(BaseModel):
 
 class RunCreate(BaseModel):
     goal: str
+    mode: Literal["quick", "deep"] = "quick"
 
 
 class ScheduleCreate(BaseModel):

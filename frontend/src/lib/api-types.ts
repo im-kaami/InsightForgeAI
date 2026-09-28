@@ -865,6 +865,12 @@ export interface components {
         RunCreate: {
             /** Goal */
             goal: string;
+            /**
+             * Mode
+             * @default quick
+             * @enum {string}
+             */
+            mode: "quick" | "deep";
         };
         /** RunOut */
         RunOut: {

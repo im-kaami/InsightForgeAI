@@ -51,6 +51,7 @@ class CaseResult(BaseModel):
     numbers_matched: int = 0
     seconds: float = 0.0
     tokens: int = 0
+    rounds: int = 1
     sql: list[str] = Field(default_factory=list)
 
 
@@ -75,6 +76,7 @@ class EvalReport(BaseModel):
                 round(sum(case.numbers_matched for case in self.cases) / checked, 4) if checked else None
             ),
             "average_seconds": round(sum(case.seconds for case in self.cases) / total, 2),
+            "revised_cases": sum(case.rounds > 1 for case in self.cases),
             "total_tokens": sum(case.tokens for case in self.cases),
         }
 
@@ -182,13 +184,15 @@ def score(case: EvalCase, expected: pd.DataFrame, result: RunResult) -> tuple[bo
     return False, f"no result table contains all {len(rows)} expected rows (best: {best})"
 
 
-def run_case(suite: EvalSuite, case: EvalCase, agent: InsightForgeAgent) -> CaseResult:
+def run_case(
+    suite: EvalSuite, case: EvalCase, agent: InsightForgeAgent, mode: Literal["quick", "deep"] = "quick"
+) -> CaseResult:
     catalog = open_dataset(suite, case.dataset)
     started = time.perf_counter()
     try:
         expected = catalog.query(case.expect.sql)
         try:
-            result = agent.run(case.question, catalog)
+            result = agent.run(case.question, catalog, mode=mode)
         except Exception as error:
             return CaseResult(
                 id=case.id,
@@ -215,6 +219,7 @@ def run_case(suite: EvalSuite, case: EvalCase, agent: InsightForgeAgent) -> Case
         numbers_matched=check.matched if check else 0,
         seconds=round(time.perf_counter() - started, 2),
         tokens=sum(result.token_usage.values()),
+        rounds=result.rounds,
         sql=[artifact.sql for artifact in result.artifacts if isinstance(artifact, TableArtifact)],
     )
 
@@ -225,6 +230,7 @@ def run_suite(
     model: str,
     case_ids: list[str] | None = None,
     on_result: Callable[[CaseResult], None] | None = None,
+    mode: Literal["quick", "deep"] = "quick",
 ) -> EvalReport:
     cases = [case for case in suite.cases if not case_ids or case.id in case_ids]
     if case_ids and len(cases) != len(set(case_ids)):
@@ -234,7 +240,7 @@ def run_suite(
         suite=suite.name, suite_version=suite.version, model=model, started_at=datetime.now(UTC), cases=[]
     )
     for case in cases:
-        result = run_case(suite, case, make_agent())
+        result = run_case(suite, case, make_agent(), mode)
         report.cases.append(result)
         if on_result:
             on_result(result)

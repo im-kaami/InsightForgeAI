@@ -49,6 +49,17 @@ function cutOffRun(sessionId: string) {
     provenance: {
       privacy_mode: "local",
       model: "local: qwen3:4b",
+      mode: "deep",
+      rounds: 2,
+      reviews: [
+        {
+          round: 1,
+          verdict: "revise",
+          reason: "The filter used the wrong capitalisation",
+          steps: ["orders"],
+        },
+        { round: 2, verdict: "answer", reason: "The count answers the question", steps: [] },
+      ],
       assumptions: ["orders: reads orders; uses every row (no filter)."],
       number_check: { checked: 2, matched: 1, unmatched: ["4,500,000"] },
       evidence: [
@@ -121,9 +132,14 @@ test("charts switch type in the browser and the health check lists findings", as
   await datasetRow.getByRole("button", { name: "Ask" }).click();
   await expect(page).toHaveURL(/\/sessions\/[a-f0-9]+$/, { timeout: 15_000 });
   const composer = page.getByPlaceholder("Ask a question about this dataset...");
+  await page.getByLabel("Analysis mode").selectOption("deep");
   await composer.fill("Profile departments");
   await composer.press("Enter");
   await expect(page.getByText("completed", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText("Deep · 1 round", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Deep mode needs an AI model, so the analysis ran once without a review."),
+  ).toBeVisible();
 
   const chartType = page.getByLabel("Chart type").first();
   await expect(chartType).toHaveValue("bar");
@@ -180,6 +196,13 @@ test("cut-off results, chart notes and the local model are explained", async ({ 
   await expect(page.getByText("AI model: local: qwen3:4b")).toBeVisible();
   await expect(page.getByTestId("number-check")).toContainText(
     "1 of 2 numbers in the summary were found in the results; not found: 4,500,000.",
+  );
+  await expect(page.getByText("Deep · 2 rounds", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("deep-reviews")).toContainText(
+    "Revised orders: The filter used the wrong capitalisation",
+  );
+  await expect(page.getByTestId("deep-reviews")).toContainText(
+    "Accepted: The count answers the question",
   );
   await expect(page.getByTestId("assumptions")).toContainText(
     "orders: reads orders; uses every row (no filter).",

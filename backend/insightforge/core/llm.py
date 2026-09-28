@@ -197,6 +197,7 @@ class FakeLLMClient:
         self.responses = responses
         self.calls: list[list[dict[str, str]]] = []
         self.schemas: list[dict[str, Any] | None] = []
+        self.offline = False
         self._index = 0
 
     def chat(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> LLMResponse:
@@ -256,7 +257,9 @@ def offline_fake_llm() -> FakeLLMClient:
         listed = ", ".join(names) if names else "the available results"
         return f"## Summary\n\nOffline analysis completed for {listed}."
 
-    return FakeLLMClient(respond)
+    client = FakeLLMClient(respond)
+    client.offline = True
+    return client
 
 
 def llm_mode(client: LLMClient) -> Literal["fake", "openai"]:
