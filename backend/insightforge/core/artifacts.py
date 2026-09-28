@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 from insightforge.core.checks import ResultFinding
 from insightforge.core.evidence import EvidenceItem, NumberCheck
-from insightforge.core.planner import Plan
+from insightforge.core.planner import Clarification, Plan
 from insightforge.core.trace import TraceEvent
 
 
@@ -68,3 +68,4 @@ class RunResult(BaseModel):
     reviews: list[dict[str, Any]] = Field(default_factory=list)
     findings: list[ResultFinding] = Field(default_factory=list)
     deep_notes: list[str] = Field(default_factory=list)
+    clarification: Clarification | None = None

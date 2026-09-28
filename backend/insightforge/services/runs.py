@@ -243,7 +243,8 @@ def execute_run(
             ).all()
             memory = ConversationMemory()
             for item in reversed(previous):
-                memory.add(item.goal, item.summary or "", dataset.tables_json)
+                if not (item.provenance_json or {}).get("clarification"):
+                    memory.add(item.goal, item.summary or "", dataset.tables_json)
             configured = llm or build_llm()
             local = local_llm if local_llm is not None else build_local_llm(settings)
             if policy == "local":
@@ -271,9 +272,16 @@ def execute_run(
                 if version is not None and (version.schema_json or {}).get("tables")
                 else None
             )
-            mode = "deep" if (run.request_json or {}).get("mode") == "deep" else "quick"
+            request = run.request_json or {}
+            mode = "deep" if request.get("mode") == "deep" else "quick"
             result = agent.run(
-                run.goal, catalog, memory, on_event=publish, schema=saved_schema, mode=mode
+                run.goal,
+                catalog,
+                memory,
+                on_event=publish,
+                schema=saved_schema,
+                mode=mode,
+                allow_clarification=bool(request.get("allow_clarification")),
             )
             check = result.number_check
             needs_review = (
@@ -313,6 +321,9 @@ def execute_run(
                 "mode": result.mode,
                 "rounds": result.rounds,
                 "reviews": result.reviews,
+                "clarification": (
+                    result.clarification.model_dump(mode="json") if result.clarification else None
+                ),
                 "checks": (
                     [
                         {

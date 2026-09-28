@@ -1,6 +1,7 @@
 "use client";
 
 import { Download } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,13 +26,75 @@ const verificationLabels: Record<string, string> = {
   blocked: "Blocked by validation",
 };
 
-export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] }) {
+function ClarificationPrompt({
+  question,
+  options,
+  disabled,
+  onAnswer,
+}: {
+  question: string;
+  options: string[];
+  disabled: boolean;
+  onAnswer?: (question: string, answer: string) => void;
+}) {
+  const [other, setOther] = useState("");
+  return (
+    <section data-testid="clarification" className="space-y-3 rounded border p-3 text-sm">
+      <p className="font-medium">Before analyzing, the AI needs to know: {question}</p>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => (
+          <Button
+            key={option}
+            size="sm"
+            variant="outline"
+            disabled={disabled || !onAnswer}
+            onClick={() => onAnswer?.(question, option)}
+          >
+            {option}
+          </Button>
+        ))}
+      </div>
+      <form
+        className="flex gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (other.trim()) onAnswer?.(question, other.trim());
+        }}
+      >
+        <input
+          aria-label="Other answer"
+          className="h-8 flex-1 rounded-md border bg-background px-2 text-sm"
+          placeholder="Other answer"
+          value={other}
+          onChange={(event) => setOther(event.target.value)}
+        />
+        <Button size="sm" type="submit" disabled={disabled || !onAnswer || !other.trim()}>
+          Answer
+        </Button>
+      </form>
+    </section>
+  );
+}
+
+export function RunCard({
+  run,
+  events = [],
+  answering = false,
+  onAnswer,
+}: {
+  run: Run;
+  events?: RunEvent[];
+  answering?: boolean;
+  onAnswer?: (question: string, answer: string) => void;
+}) {
   const artifacts = run.artifacts ?? [];
   const provenance = (run.provenance ?? {}) as Record<string, unknown>;
   const evidence = (provenance.evidence ?? []) as Record<string, unknown>[];
   const checks = (provenance.checks ?? []) as Record<string, unknown>[];
   const metricDefinitions = (provenance.metric_definitions ?? {}) as Record<string, unknown>;
   const assumptions = (provenance.assumptions ?? []) as string[];
+  const clarification = provenance.clarification as
+    { question: string; options: string[] } | null | undefined;
   const reviews = (provenance.reviews ?? []) as {
     round: number;
     verdict: string;
@@ -189,10 +252,19 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
               );
             return null;
           })}
-          {run.summary &&
+          {clarification ? (
+            <ClarificationPrompt
+              question={clarification.question}
+              options={clarification.options}
+              disabled={answering}
+              onAnswer={onAnswer}
+            />
+          ) : (
+            run.summary &&
             !artifacts.some((item) => (item as Record<string, unknown>).type === "text") && (
               <Markdown>{run.summary}</Markdown>
-            )}
+            )
+          )}
           {numberCheck && numberCheck.checked > 0 && (
             <p
               data-testid="number-check"

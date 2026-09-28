@@ -181,6 +181,7 @@ class SessionCreate(BaseModel):
 class RunCreate(BaseModel):
     goal: str
     mode: Literal["quick", "deep"] = "quick"
+    clarified: bool = False
 
 
 class ScheduleCreate(BaseModel):

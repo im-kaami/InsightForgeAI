@@ -72,6 +72,11 @@ class PlanValidationError(ValueError):
     pass
 
 
+class Clarification(BaseModel):
+    question: str = Field(min_length=3, max_length=300)
+    options: list[Annotated[str, Field(min_length=1, max_length=120)]] = Field(min_length=2, max_length=4)
+
+
 _STEP_ADAPTER = TypeAdapter(Step)
 MAX_STEPS = 6
 
@@ -113,6 +118,33 @@ PLAN_JSON_SCHEMA: dict[str, Any] = {
     "required": ["steps"],
 }
 
+
+AMBIGUITY_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "ambiguous": {"type": "boolean"},
+        "question": {"type": "string"},
+        "options": {"type": "array", "items": {"type": "string"}, "maxItems": 4},
+    },
+    "required": ["ambiguous"],
+}
+AMBIGUITY_PROMPT = """You decide whether a data question is too ambiguous to answer without asking the user.
+It is ambiguous only when it ranks or sizes things with a vague word such as best, top, biggest, largest,
+strongest, performing or doing well, does not name the measure, and the schema below offers more than one
+plausible measure. Questions that name a measure ("highest average salary", "most orders", "total amount")
+are never ambiguous. Respond only with JSON {"ambiguous": false} or
+{"ambiguous": true, "question": str, "options": [2 to 4 short measures taken from the schema]}.
+
+Examples, for a schema with sales(amount, deal_id, rep) and reps(rep, tenure_years):
+- "Which rep has the highest total amount?" -> {"ambiguous": false}
+- "How many deals were closed?" -> {"ambiguous": false}
+- "Who are the best reps?" -> {"ambiguous": true, "question": "Best by total amount or by number of deals?",
+  "options": ["Total amount", "Number of deals"]}
+- "Which rep is the strongest?" -> {"ambiguous": true, "question": "Strongest by total amount, number of
+  deals or tenure?", "options": ["Total amount", "Number of deals", "Tenure"]}
+
+The schema is:
+"""
 
 REVIEW_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -323,6 +355,7 @@ class Planner:
         self.last_used_fallback = False
         self.last_fallback_reason: str | None = None
         self.last_plan_issues: list[str] = []
+        self.last_clarification: Clarification | None = None
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
         self.tracer = Tracer()
 
@@ -345,10 +378,17 @@ class Planner:
         self.last_usage["completion_tokens"] += response.completion_tokens
         return raw, response
 
-    def plan(self, goal: str, schema: SchemaInfo, memory: ConversationMemory | None = None) -> Plan:
+    def plan(
+        self,
+        goal: str,
+        schema: SchemaInfo,
+        memory: ConversationMemory | None = None,
+        allow_clarification: bool = False,
+    ) -> Plan:
         self.last_used_fallback = False
         self.last_fallback_reason = None
         self.last_plan_issues = []
+        self.last_clarification = None
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
         schema_text = self.policy.schema_text(schema)
         sql_example = (
@@ -391,6 +431,10 @@ Return a single JSON object with a top-level "steps" array, for example:
                 f"{self.policy.memory_text(memory)}\nTreat the current goal as a follow-up "
                 "to this conversation."
             )
+        if allow_clarification:
+            self.last_clarification = self._check_ambiguity(goal, schema_text)
+            if self.last_clarification is not None:
+                return Plan(steps=[])
         messages = [{"role": "system", "content": system}, {"role": "user", "content": goal}]
         try:
             raw, _ = self._chat_json("plan", messages, PLAN_JSON_SCHEMA)
@@ -415,6 +459,21 @@ Return a single JSON object with a top-level "steps" array, for example:
                 "Planner falling back to profiling plan: %s", self.last_fallback_reason
             )
             return fallback_plan(goal, schema)
+
+    def _check_ambiguity(self, goal: str, schema_text: str) -> Clarification | None:
+        messages = [
+            {"role": "system", "content": AMBIGUITY_PROMPT + schema_text},
+            {"role": "user", "content": goal},
+        ]
+        try:
+            raw, _ = self._chat_json("ambiguity", messages, AMBIGUITY_JSON_SCHEMA)
+            if isinstance(raw, dict) and raw.get("ambiguous") is True:
+                return Clarification.model_validate(
+                    {"question": raw.get("question"), "options": raw.get("options")}
+                )
+        except Exception as exc:
+            logging.getLogger("insightforge").warning("Ambiguity check skipped: %s", describe_error(exc))
+        return None
 
     def _repair_plan(
         self, messages: list[dict[str, str]], raw: Any, problems: list[str], schema: SchemaInfo

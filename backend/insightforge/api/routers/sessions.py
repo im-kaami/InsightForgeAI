@@ -198,7 +198,12 @@ async def create_run(
         goal=body.goal,
         status="pending",
         dataset_version_id=version.id if version else None,
-        request_json={"kind": "exploratory", "privacy_mode": dataset.llm_policy, "mode": body.mode},
+        request_json={
+            "kind": "exploratory",
+            "privacy_mode": dataset.llm_policy,
+            "mode": body.mode,
+            "allow_clarification": not body.clarified,
+        },
         verification_status="exploratory",
     )
     db.add(run)

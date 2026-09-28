@@ -17,8 +17,8 @@ DEFAULT_SUITE = Path(__file__).resolve().parents[1] / "evals" / "suite.json"
 
 
 class Expectation(BaseModel):
-    type: Literal["value", "rows", "top"]
-    sql: str
+    type: Literal["value", "rows", "top", "clarify"]
+    sql: str = "SELECT 1"
     keys: int = 1
     either_percent: bool = False
 
@@ -77,6 +77,7 @@ class EvalReport(BaseModel):
             ),
             "average_seconds": round(sum(case.seconds for case in self.cases) / total, 2),
             "revised_cases": sum(case.rounds > 1 for case in self.cases),
+            "clarifying_questions": sum(case.reason.startswith("asked") for case in self.cases),
             "total_tokens": sum(case.tokens for case in self.cases),
         }
 
@@ -143,6 +144,12 @@ def _native(value: Any) -> Any:
 
 
 def score(case: EvalCase, expected: pd.DataFrame, result: RunResult) -> tuple[bool, str]:
+    if case.expect.type == "clarify":
+        if result.clarification:
+            return True, f"asked: {result.clarification.question}"
+        return False, "answered without asking a clarifying question"
+    if result.clarification:
+        return False, f"asked a needless clarifying question: {result.clarification.question}"
     tables = [artifact for artifact in result.artifacts if isinstance(artifact, TableArtifact)]
     if not tables:
         return False, "no result tables"
@@ -192,7 +199,7 @@ def run_case(
     try:
         expected = catalog.query(case.expect.sql)
         try:
-            result = agent.run(case.question, catalog, mode=mode)
+            result = agent.run(case.question, catalog, mode=mode, allow_clarification=True)
         except Exception as error:
             return CaseResult(
                 id=case.id,
@@ -251,8 +258,11 @@ def compare(report: EvalReport, baseline: EvalReport) -> Comparison:
     before = {case.id: case.passed for case in baseline.cases}
     now = {case.id: case.passed for case in report.cases}
     shared = before.keys() & now.keys()
+    count = len(shared) or 1
     return Comparison(
-        accuracy_delta=round(report.summary["accuracy"] - baseline.summary["accuracy"], 4),
+        accuracy_delta=round(
+            (sum(now[case] for case in shared) - sum(before[case] for case in shared)) / count, 4
+        ),
         regressions=sorted(case for case in shared if before[case] and not now[case]),
         fixes=sorted(case for case in shared if now[case] and not before[case]),
     )

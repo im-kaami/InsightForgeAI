@@ -1,6 +1,6 @@
 {
   "name": "insightforge-core",
-  "version": 1,
+  "version": 2,
   "datasets": {
     "hr": { "employees": "../tests/fixtures/hr.csv" },
     "shop": { "orders": "data/orders.csv", "customers": "data/customers.csv" }
@@ -248,6 +248,24 @@
         "type": "top",
         "sql": "SELECT customer_id FROM orders WHERE status = 'completed' GROUP BY 1 ORDER BY SUM(amount) DESC LIMIT 1"
       }
+    },
+    {
+      "id": "ambiguous-best-customers",
+      "dataset": "shop",
+      "question": "Who are our best customers?",
+      "expect": { "type": "clarify" }
+    },
+    {
+      "id": "ambiguous-top-performers",
+      "dataset": "hr",
+      "question": "Show me the top performers.",
+      "expect": { "type": "clarify" }
+    },
+    {
+      "id": "ambiguous-biggest-region",
+      "dataset": "shop",
+      "question": "Which region is the biggest?",
+      "expect": { "type": "clarify" }
     }
   ]
 }

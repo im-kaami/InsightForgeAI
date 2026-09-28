@@ -67,6 +67,7 @@ class InsightForgeAgent:
         on_event: Callable[[dict[str, Any]], None] | None = None,
         schema: SchemaInfo | None = None,
         mode: Literal["quick", "deep"] = "quick",
+        allow_clarification: bool = False,
     ) -> RunResult:
         def emit(event: dict[str, Any]) -> None:
             if on_event:
@@ -84,7 +85,22 @@ class InsightForgeAgent:
         elif self.schema_sample_rows == 0:
             schema = without_samples(schema)
         emit({"type": "planning"})
-        plan = self.planner.plan(goal, schema, memory)
+        plan = self.planner.plan(goal, schema, memory, allow_clarification)
+        clarification = self.planner.last_clarification
+        if clarification is not None:
+            emit({"type": "clarify", "question": clarification.question})
+            emit({"type": "done", "summary": clarification.question})
+            return RunResult(
+                goal=goal,
+                plan=plan,
+                artifacts=[],
+                summary=clarification.question,
+                timings={"total": time.perf_counter() - started},
+                token_usage=dict(self.planner.last_usage),
+                trace=tracer.events,
+                mode=mode,
+                clarification=clarification,
+            )
         emit(
             {
                 "type": "plan",

@@ -112,6 +112,64 @@ function cutOffRun(sessionId: string) {
   };
 }
 
+test("a clarifying question offers choices and sends the answer as a new run", async ({ page }) => {
+  await page.goto("/register");
+  await page.locator("#email").fill(`clarify-${Date.now()}@example.com`);
+  await page.locator("#password").fill("password123");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/datasets$/, { timeout: 15_000 });
+  await page.getByRole("button", { name: "Add data" }).click();
+  await page.locator('input[type="file"]').setInputFiles(await hrCsv());
+  await page.getByRole("button", { name: "Preview import" }).click();
+  await page.getByLabel("I reviewed the import preview").check();
+  await page.getByRole("button", { name: "Confirm import" }).click();
+  const datasetRow = page.getByRole("row").filter({
+    has: page.getByRole("button", { name: "Ask" }),
+  });
+  await expect(datasetRow).toBeVisible({ timeout: 15_000 });
+  await datasetRow.getByRole("button", { name: "Ask" }).click();
+  await expect(page).toHaveURL(/\/sessions\/[a-f0-9]+$/, { timeout: 15_000 });
+
+  await page.route(/\/api\/sessions\/[a-f0-9]+$/, async (route) => {
+    const response = await route.fetch(upstream(route));
+    const session = await response.json();
+    const now = new Date().toISOString();
+    const asked = {
+      ...cutOffRun(session.id),
+      goal: "Show me the top performers.",
+      summary: "Top by average salary or by performance score?",
+      artifacts: [],
+      warnings: [],
+      verification_status: "exploratory",
+      provenance: {
+        privacy_mode: "local",
+        clarification: {
+          question: "Top by average salary or by performance score?",
+          options: ["Average salary", "Performance score"],
+        },
+      },
+      created_at: now,
+    };
+    await route.fulfill({ response, json: { ...session, runs: [asked] } });
+  });
+  await page.reload();
+
+  const prompt = page.getByTestId("clarification");
+  await expect(prompt).toContainText(
+    "Before analyzing, the AI needs to know: Top by average salary or by performance score?",
+  );
+  const sent = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" && /\/api\/sessions\/[a-f0-9]+\/runs$/.test(request.url()),
+  );
+  await prompt.getByRole("button", { name: "Performance score" }).click();
+  const body = (await sent).postDataJSON();
+  expect(body.clarified).toBe(true);
+  expect(body.goal).toBe(
+    "Show me the top performers.\n\nClarification: Top by average salary or by performance score? Performance score",
+  );
+});
+
 test("charts switch type in the browser and the health check lists findings", async ({ page }) => {
   await page.goto("/register");
   await page.locator("#email").fill(`switch-${Date.now()}@example.com`);

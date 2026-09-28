@@ -20,9 +20,15 @@ SUITE = load_suite()
 
 def _agent_answering(answers: dict[str, str]) -> InsightForgeAgent:
     def reply(messages):
+        question = messages[-1]["content"]
+        if "too ambiguous" in messages[0]["content"]:
+            if answers[question] == "CLARIFY":
+                return json.dumps(
+                    {"ambiguous": True, "question": "Which measure?", "options": ["Revenue", "Orders"]}
+                )
+            return json.dumps({"ambiguous": False})
         if "data-analysis planner" not in messages[0]["content"]:
             return "Done."
-        question = messages[-1]["content"]
         return json.dumps(
             {
                 "steps": [
@@ -36,12 +42,29 @@ def _agent_answering(answers: dict[str, str]) -> InsightForgeAgent:
 
 
 def test_every_reference_answer_passes_its_own_check():
-    answers = {case.question: case.expect.sql for case in SUITE.cases}
+    answers = {
+        case.question: "CLARIFY" if case.expect.type == "clarify" else case.expect.sql for case in SUITE.cases
+    }
     report = run_suite(SUITE, lambda: _agent_answering(answers), "oracle")
     failures = [(case.id, case.reason) for case in report.cases if not case.passed]
     assert failures == []
     assert report.summary["accuracy"] == 1.0
-    assert len(report.cases) >= 25
+    assert report.summary["clarifying_questions"] == 3
+    assert len(report.cases) >= 30
+
+
+def test_needless_and_missing_clarifying_questions_fail():
+    clear = next(case for case in SUITE.cases if case.id == "hr-headcount")
+    asked = run_case(SUITE, clear, _agent_answering({clear.question: "CLARIFY"}))
+    assert not asked.passed and asked.reason.startswith("asked a needless clarifying question")
+    vague = next(case for case in SUITE.cases if case.id == "ambiguous-best-customers")
+    answered = run_case(SUITE, vague, _agent_answering({vague.question: "SELECT 1 AS n"}))
+    assert not answered.passed and answered.reason == "answered without asking a clarifying question"
+
+
+def test_compare_measures_accuracy_on_shared_questions_only():
+    comparison = compare(_report({"a": True, "b": True, "new": False}), _report({"a": True, "b": False}))
+    assert comparison.accuracy_delta == 0.5
 
 
 @pytest.mark.parametrize(

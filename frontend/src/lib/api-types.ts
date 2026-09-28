@@ -871,6 +871,11 @@ export interface components {
              * @enum {string}
              */
             mode: "quick" | "deep";
+            /**
+             * Clarified
+             * @default false
+             */
+            clarified: boolean;
         };
         /** RunOut */
         RunOut: {

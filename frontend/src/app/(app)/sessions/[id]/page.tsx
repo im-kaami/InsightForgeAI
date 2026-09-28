@@ -43,14 +43,14 @@ export default function SessionPage() {
     enabled: Boolean(query.data),
   });
   const localModel = useQuery({ queryKey: ["health"], queryFn: health }).data?.local_model;
-  async function send() {
-    if (!goal.trim()) return;
+  async function send(clarified?: { goal: string }) {
+    const text = clarified?.goal ?? goal;
+    if (!text.trim() || sending) return;
     setSending(true);
-    const text = goal;
     let createdRunId: string | undefined;
-    setGoal("");
+    if (!clarified) setGoal("");
     try {
-      const run = await sessions.createRun(id, text, mode);
+      const run = await sessions.createRun(id, text, mode, Boolean(clarified));
       createdRunId = run.id;
       setPending((items) => [...items, run]);
       await client.invalidateQueries({ queryKey: ["session", id] });
@@ -115,7 +115,17 @@ export default function SessionPage() {
       </header>
       <div className="space-y-8">
         {allRuns.length ? (
-          allRuns.map((run) => <RunCard key={run.id} run={run} events={live[run.id]} />)
+          allRuns.map((run) => (
+            <RunCard
+              key={run.id}
+              run={run}
+              events={live[run.id]}
+              answering={sending}
+              onAnswer={(question, answer) =>
+                send({ goal: `${run.goal}\n\nClarification: ${question} ${answer}` })
+              }
+            />
+          ))
         ) : (
           <div className="rounded-xl border border-dashed p-12 text-center text-muted-foreground">
             Ask a question about your data to begin.
@@ -146,7 +156,7 @@ export default function SessionPage() {
               <option value="quick">Quick</option>
               <option value="deep">Deep: check and revise</option>
             </select>
-            <Button className="flex-1" disabled={sending || !goal.trim()} onClick={send}>
+            <Button className="flex-1" disabled={sending || !goal.trim()} onClick={() => send()}>
               {sending ? "Analyzing..." : "Send"}
             </Button>
           </div>

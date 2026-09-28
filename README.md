@@ -170,6 +170,8 @@ Choose the mode under the chat box, or send `"mode": "deep"` to `POST /api/sessi
 - **Quick** (default) plans once, runs the plan, and summarizes.
 - **Deep** runs the plan, then asks the model to review the results before summarizing. The review sees the question and a description of each result. It either accepts the results or supplies corrected or extra SQL steps; a step with the same name replaces the earlier result. Deep mode stops after `DEEP_MAX_ROUNDS` (default 3), `DEEP_MAX_SECONDS` (300), or `DEEP_MAX_TOKENS` (40,000), and records any stop reason as a warning. It needs an AI model; offline mode runs once. Reviews follow the privacy mode: schema-only reviews see row counts, columns, missing-value counts, and findings without data values.
 
+**Clarifying questions.** When a chat question is ambiguous in a way that would change the answer, for example "Who are our best customers?" (by revenue or by number of orders?), a short ambiguity check before planning may ask first instead of guessing. The run finishes immediately with the question, 2 to 4 clickable options, and an "Other" box. Your answer starts a new run with the clarification appended, and that run may not ask again. Clarifying runs are left out of conversation memory. Schedules, the CLI, and Deep-mode revisions never ask.
+
 In both modes, fixed code checks every query result:
 
 - **Empty or zero results:** reported as a warning.
@@ -180,7 +182,7 @@ Filter and join problems mark the run **Needs review**, and appear in the warnin
 
 ### Evaluation
 
-`insightforge eval` scores the analyst on 29 reference questions over two synthetic datasets: the HR fixture, and a shop with orders and customers. The questions are in `backend/evals/suite.json`, and fixed SQL computes each correct answer, so the answers never come from an AI. A question passes when a result table contains the expected value, every expected row, or the expected winner as its first row.
+`insightforge eval` scores the analyst on 32 reference questions over two synthetic datasets. Three are deliberately ambiguous and pass only if the analyst asks a clarifying question; asking on a clear question counts as a failure. The datasets are the HR fixture and a shop with orders and customers. The questions are in `backend/evals/suite.json`, and fixed SQL computes each correct answer, so the answers never come from an AI. A question passes when a result table contains the expected value, every expected row, or the expected winner as its first row.
 
 ```bash
 cd backend
