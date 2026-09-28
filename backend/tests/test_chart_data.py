@@ -2,7 +2,14 @@ import pandas as pd
 import pytest
 
 from insightforge.core.catalog import DataCatalog
-from insightforge.core.chart_data import MAX_BARS, MAX_POINTS, MAX_SLICES, OTHER_LABEL, prepare_chart_data
+from insightforge.core.chart_data import (
+    MAX_BARS,
+    MAX_POINTS,
+    MAX_SLICES,
+    OTHER_LABEL,
+    prepare_chart_data,
+    suggest_chart,
+)
 from insightforge.core.planner import PlotStep
 from insightforge.core.plotter import PlotError, make_figure
 
@@ -129,6 +136,39 @@ def test_truncated_pie_combines_other_from_every_row(events):
     assert chart.note.startswith(f"Calculated from all {ROWS:,} rows.")
 
 
+def test_truncated_heatmap_sums_every_row_per_cell(events):
+    chart = prepare_chart_data(
+        _step("heatmap", "category", "region", "value"), _prefix(events), _full(events), ROWS
+    )
+    total = events.query("SELECT SUM(value) AS total FROM events")["total"].iloc[0]
+    assert chart.frame["value"].sum() == pytest.approx(total)
+    assert chart.note == f"Summed all {ROWS:,} rows into 80 cells."
+    assert make_figure(chart.step, chart.frame)["data"]
+
+
+def test_truncated_box_plot_uses_a_repeatable_sample(events):
+    chart = prepare_chart_data(_step("box", "region", "value"), _prefix(events), _full(events), ROWS)
+    assert len(chart.frame) == MAX_POINTS
+    assert chart.note == f"Showing a random sample of {MAX_POINTS:,} of {ROWS:,} points."
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        PlotStep(name="box", kind="box", data_source="source", x="group", y="value"),
+        PlotStep(name="single_box", kind="box", data_source="source", x="value"),
+        PlotStep(name="heatmap", kind="heatmap", data_source="source", x="group", y="band"),
+        PlotStep(name="area", kind="area", data_source="source", x="step", y="value", color="group"),
+    ],
+)
+def test_new_chart_kinds_render(step):
+    frame = pd.DataFrame(
+        {"group": ["a", "b"] * 5, "band": ["x"] * 5 + ["y"] * 5, "step": range(10), "value": range(10)}
+    )
+    figure = make_figure(step, prepare_chart_data(step, frame).frame)
+    assert figure["data"]
+
+
 def test_truncated_chart_falls_back_to_retrieved_rows_when_summary_fails():
     frame = pd.DataFrame({"x": range(10), "y": range(10)})
 
@@ -140,6 +180,41 @@ def test_truncated_chart_falls_back_to_retrieved_rows_when_summary_fails():
     assert chart.note == (
         "Only the first 10 rows are plotted because the full result could not be summarized (RuntimeError)."
     )
+
+
+@pytest.mark.parametrize(
+    ("frame", "expected"),
+    [
+        (pd.DataFrame({"region": ["a", "b"], "sales": [1, 2]}), ("bar", "region", "sales")),
+        (
+            pd.DataFrame({"day": pd.date_range("2024-01-01", periods=3), "sales": [1, 2, 3]}),
+            ("line", "day", "sales"),
+        ),
+        (pd.DataFrame({"price": range(12), "units": range(12)}), ("scatter", "price", "units")),
+        (pd.DataFrame({"team": ["a", "a", "b"], "salary": [1, 2, 3]}), ("box", "team", "salary")),
+        (
+            pd.DataFrame({"team": ["a", "a", "b"], "role": ["x", "y", "x"], "people": [1, 2, 3]}),
+            ("heatmap", "team", "role"),
+        ),
+        (pd.DataFrame({"order_id": range(12), "amount": range(12)}), ("histogram", "amount", None)),
+    ],
+)
+def test_suggest_chart_picks_a_chart_from_the_result_shape(frame, expected):
+    step = suggest_chart("result", frame)
+    assert (step.kind, step.x, step.y) == expected
+    assert step.data_source == "result"
+
+
+@pytest.mark.parametrize(
+    "frame",
+    [
+        pd.DataFrame({"total": [5]}),
+        pd.DataFrame({"region": ["a", "b"], "label": ["x", "y"]}),
+        pd.DataFrame({"order_id": [1, 2], "region": ["a", "b"]}),
+    ],
+)
+def test_suggest_chart_skips_results_without_a_useful_chart(frame):
+    assert suggest_chart("result", frame) is None
 
 
 def test_missing_chart_columns_raise_plot_error():

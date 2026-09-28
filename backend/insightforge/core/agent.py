@@ -10,7 +10,23 @@ from insightforge.core.llm import LLMClient
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Planner
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
+from insightforge.core.schema import SchemaInfo
 from insightforge.core.summarizer import Summarizer
+
+
+def without_samples(schema: SchemaInfo) -> SchemaInfo:
+    return SchemaInfo(
+        tables=[
+            table.model_copy(
+                update={
+                    "columns": [
+                        column.model_copy(update={"sample_values": []}) for column in table.columns
+                    ]
+                }
+            )
+            for table in schema.tables
+        ]
+    )
 
 
 class InsightForgeAgent:
@@ -41,6 +57,7 @@ class InsightForgeAgent:
         catalog: DataCatalog,
         memory: ConversationMemory | None = None,
         on_event: Callable[[dict[str, Any]], None] | None = None,
+        schema: SchemaInfo | None = None,
     ) -> RunResult:
         def emit(event: dict[str, Any]) -> None:
             if on_event:
@@ -50,7 +67,10 @@ class InsightForgeAgent:
                     pass
 
         started = time.perf_counter()
-        schema = catalog.introspect(sample_rows=self.schema_sample_rows)
+        if schema is None:
+            schema = catalog.introspect(sample_rows=self.schema_sample_rows)
+        elif self.schema_sample_rows == 0:
+            schema = without_samples(schema)
         emit({"type": "planning"})
         plan = self.planner.plan(goal, schema, memory)
         emit(
@@ -95,4 +115,5 @@ class InsightForgeAgent:
             token_usage=token_usage,
             used_fallback_plan=self.planner.last_used_fallback,
             fallback_reason=self.planner.last_fallback_reason,
+            plan_issues=self.planner.last_plan_issues,
         )

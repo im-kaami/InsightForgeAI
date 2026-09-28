@@ -14,7 +14,7 @@ from insightforge.core.artifacts import (
     TextArtifact,
 )
 from insightforge.core.catalog import DataCatalog, sanitize_identifier
-from insightforge.core.chart_data import QueryRunner, prepare_chart_data
+from insightforge.core.chart_data import AUTO_CHART_NOTE, QueryRunner, prepare_chart_data, suggest_chart
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Plan, Planner, PlotStep, SqlStep, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
@@ -47,6 +47,7 @@ class Executor:
         on_event: Callable[[dict[str, Any]], None] | None = None,
         query_timeout: float | None = None,
         result_limit: int = 10000,
+        auto_chart: bool = True,
     ):
         self.catalog = catalog
         self.planner = planner
@@ -57,6 +58,7 @@ class Executor:
         self.on_event = on_event
         self.query_timeout = query_timeout
         self.result_limit = result_limit
+        self.auto_chart = auto_chart
 
     def _run_sql(self, query: str) -> tuple[GuardedQuery, pd.DataFrame]:
         guarded = guard_query(query, self.result_limit)
@@ -80,6 +82,31 @@ class Executor:
 
         return run
 
+    def _plot(
+        self, step: PlotStep, frame: pd.DataFrame, source: tuple[GuardedQuery, bool, int | None]
+    ) -> Artifact:
+        guarded, truncated, full_row_count = source
+        try:
+            full_query = self._source_query(guarded.full_sql) if truncated and guarded.full_sql else None
+            chart = prepare_chart_data(step, frame, full_query, full_row_count)
+            figure = make_figure(
+                chart.step, chart.frame, prebinned=chart.prebinned, bin_width=chart.bin_width
+            )
+            png_path = None
+            if self.render_png and self.artifact_dir:
+                path = figure_to_png(figure, self.artifact_dir / f"{sanitize_identifier(step.name)}.png")
+                png_path = str(path) if path else None
+            return PlotArtifact(
+                name=step.name,
+                kind=step.kind,
+                title=step.title,
+                figure=figure,
+                note=chart.note,
+                png_path=png_path,
+            )
+        except Exception as error:
+            return ErrorArtifact(name=step.name, action=step.action, message=str(error))
+
     def _emit(self, event: dict[str, Any]) -> None:
         if self.on_event:
             try:
@@ -101,6 +128,8 @@ class Executor:
         notes: dict[str, str] = {}
         summary = ""
         summary_usage = {"prompt_tokens": 0, "completion_tokens": 0}
+        step_names = {step.name for step in plan.steps}
+        auto_chart = self.auto_chart and not any(isinstance(step, PlotStep) for step in plan.steps)
         if self.artifact_dir:
             self.artifact_dir.mkdir(parents=True, exist_ok=True)
 
@@ -165,37 +194,7 @@ class Executor:
                         )
                     )
                 else:
-                    try:
-                        guarded, truncated, full_row_count = sources[step.data_source]
-                        full_query = (
-                            self._source_query(guarded.full_sql)
-                            if truncated and guarded.full_sql
-                            else None
-                        )
-                        chart = prepare_chart_data(step, frame, full_query, full_row_count)
-                        figure = make_figure(
-                            chart.step, chart.frame, prebinned=chart.prebinned, bin_width=chart.bin_width
-                        )
-                        png_path = None
-                        if self.render_png and self.artifact_dir:
-                            path = figure_to_png(
-                                figure, self.artifact_dir / f"{sanitize_identifier(step.name)}.png"
-                            )
-                            png_path = str(path) if path else None
-                        artifacts.append(
-                            PlotArtifact(
-                                name=step.name,
-                                kind=step.kind,
-                                title=step.title,
-                                figure=figure,
-                                note=chart.note,
-                                png_path=png_path,
-                            )
-                        )
-                    except Exception as error:
-                        artifacts.append(
-                            ErrorArtifact(name=step.name, action=step.action, message=str(error))
-                        )
+                    artifacts.append(self._plot(step, frame, sources[step.data_source]))
             elif isinstance(step, SummaryStep):
                 try:
                     summary, response = self.summarizer.summarize(
@@ -217,6 +216,25 @@ class Executor:
                     "artifact": artifacts[-1].model_dump(mode="json"),
                 }
             )
+            if auto_chart and isinstance(step, SqlStep) and step.name in results:
+                suggestion = suggest_chart(step.name, results[step.name])
+                if suggestion is not None:
+                    auto_chart = False
+                    name = suggestion.name
+                    while name in step_names:
+                        name = f"{name}_auto"
+                    suggestion = suggestion.model_copy(update={"name": name})
+                    artifact = self._plot(suggestion, results[step.name], sources[step.name])
+                    if isinstance(artifact, PlotArtifact):
+                        artifact.note = f"{AUTO_CHART_NOTE} {artifact.note or ''}".strip()
+                        artifacts.append(artifact)
+                        self._emit(
+                            {
+                                "type": "step_done",
+                                "name": name,
+                                "artifact": artifact.model_dump(mode="json"),
+                            }
+                        )
 
         token_usage = {
             key: self.planner.last_usage[key] + summary_usage[key]

@@ -21,6 +21,17 @@ LOCAL_SUMMARY_PROMPT = (
 )
 
 
+LOCAL_SUMMARY_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "headline": {"type": "string"},
+        "findings": {"type": "array", "items": {"type": "string"}, "maxItems": 4},
+        "actions": {"type": "array", "items": {"type": "string"}, "maxItems": 3},
+    },
+    "required": ["headline", "findings", "actions"],
+}
+
+
 def _render_structured_summary(raw: Any) -> str:
     if not isinstance(raw, dict) or not isinstance(raw.get("headline"), str):
         raise ValueError("Local summary must contain a headline")
@@ -82,6 +93,10 @@ class Summarizer:
             rows = f"Total rows: {len(df)}"
             if name in notes:
                 rows = f"Rows retrieved: {len(df)}\n{notes[name]}"
+            if len(df) > self.max_rows:
+                rows += (
+                    f"\nOnly the first {self.max_rows} rows are listed below; do not count them as totals."
+                )
             parts.append(f"Table: {name}\n{rows}\n{_pipe_table(df, self.max_rows)}")
             numeric = df.select_dtypes(include="number")
             if not numeric.empty:
@@ -117,7 +132,8 @@ class Summarizer:
                     [
                         {"role": "system", "content": LOCAL_SUMMARY_PROMPT},
                         {"role": "user", "content": context},
-                    ]
+                    ],
+                    schema=LOCAL_SUMMARY_SCHEMA,
                 )
                 return _render_structured_summary(raw), response
             except Exception as exc:

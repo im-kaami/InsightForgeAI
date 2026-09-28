@@ -6,6 +6,24 @@ from insightforge.core.llm import FakeLLMClient
 from insightforge.core.memory import ConversationMemory
 
 
+def test_agent_reuses_a_saved_schema_without_rescanning(catalog, schema, monkeypatch):
+    def rescan(*_args, **_kwargs):
+        raise AssertionError("the saved schema should be reused")
+
+    monkeypatch.setattr(catalog, "introspect", rescan)
+    llm = FakeLLMClient(
+        [
+            '{"steps": [{"name": "n", "action": "sql", "query": "SELECT COUNT(*) AS n FROM employees"}]}',
+            "Summary",
+        ]
+    )
+    result = InsightForgeAgent(llm, privacy_mode="schema_only").run("Count", catalog, schema=schema)
+    assert result.artifacts[0].type == "table"
+    planner_prompt = llm.calls[0][0]["content"]
+    assert "TABLE employees" in planner_prompt
+    assert "Engineering" not in planner_prompt
+
+
 def test_agent_end_to_end_and_follow_up_memory(catalog):
     plan = {
         "steps": [

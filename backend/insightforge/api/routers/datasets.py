@@ -44,6 +44,7 @@ from insightforge.services.datasets import (
     list_versions,
     open_catalog,
     refresh_url_dataset,
+    reprofile_version,
     stage_files,
 )
 
@@ -286,6 +287,16 @@ def confirm_version(
     dataset = owned(db, user, dataset_id)
     version = owned_version(db, user, dataset, version_id)
     return output(activate_version(db, dataset, version, body.expected_current_version_id))
+
+
+@router.post("/{dataset_id}/versions/{version_id}/profile", response_model=VersionOut)
+def refresh_version_profile(dataset_id: str, version_id: str, db: Db, user: CurrentUser):
+    dataset = owned(db, user, dataset_id)
+    version = owned_version(db, user, dataset, version_id)
+    try:
+        return version_output(reprofile_version(db, dataset, version))
+    except IngestError as error:
+        raise HTTPException(400, str(error)) from error
 
 
 @router.post("/{dataset_id}/refresh", response_model=DatasetOut)

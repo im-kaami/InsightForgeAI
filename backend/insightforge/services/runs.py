@@ -17,6 +17,7 @@ from insightforge.core.llm import LLMClient, build_llm, build_local_llm, llm_mod
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Plan, PlotStep, SqlStep, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
+from insightforge.core.schema import SchemaInfo
 from insightforge.core.verified_report import (
     ReportPeriod,
     ReportValidationError,
@@ -261,12 +262,18 @@ def execute_run(
                 privacy_mode=policy,
                 local_llm=local,
             )
-            result = agent.run(run.goal, catalog, memory, on_event=publish)
+            saved_schema = (
+                SchemaInfo.model_validate(version.schema_json)
+                if version is not None and (version.schema_json or {}).get("tables")
+                else None
+            )
+            result = agent.run(run.goal, catalog, memory, on_event=publish, schema=saved_schema)
             needs_review = result.used_fallback_plan or any(
                 artifact.type == "error" for artifact in result.artifacts
             )
             verification_status = "needs_review" if needs_review else "exploratory"
             warnings = [result.fallback_reason] if result.fallback_reason else []
+            warnings += [f"Plan step skipped: {issue}" for issue in result.plan_issues]
             warnings += [
                 f"{artifact.name}: {truncation_note(artifact.total_rows, artifact.full_row_count)}"
                 for artifact in result.artifacts

@@ -1,6 +1,11 @@
 from pydantic import BaseModel, Field
 
 
+def is_identifier(name: str) -> bool:
+    lowered = name.strip().lower()
+    return lowered == "id" or lowered.endswith(("_id", " id", "-id"))
+
+
 class ColumnInfo(BaseModel):
     name: str
     dtype: str

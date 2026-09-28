@@ -180,7 +180,16 @@ export function DatasetTrustPanel({
           </CardContent>
         </Card>
       )}
-      <DataQuality profile={dataset.profile} />
+      <DataQuality
+        profile={dataset.profile}
+        datasetId={dataset.id}
+        versionId={dataset.current_version_id}
+        onRefreshed={() => {
+          void queryClient.invalidateQueries({ queryKey: ["dataset", dataset.id] });
+          void queryClient.invalidateQueries({ queryKey: ["dataset-versions", dataset.id] });
+          onChanged();
+        }}
+      />
     </div>
   );
 }

@@ -193,6 +193,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/datasets/{dataset_id}/versions/{version_id}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Version Profile */
+        post: operations["refresh_version_profile_api_datasets__dataset_id__versions__version_id__profile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/datasets/{dataset_id}/refresh": {
         parameters: {
             query?: never;
@@ -609,6 +626,40 @@ export interface components {
             distinct_count?: number | null;
             /** Repeated Non Null Count */
             repeated_non_null_count?: number | null;
+            /** Kind */
+            kind?: ("number" | "date" | "text" | "boolean" | "other") | null;
+            /** Min Value */
+            min_value?: string | null;
+            /** Max Value */
+            max_value?: string | null;
+            /** Mean */
+            mean?: number | null;
+            /** Median */
+            median?: number | null;
+            /** P25 */
+            p25?: number | null;
+            /** P75 */
+            p75?: number | null;
+            /** Std */
+            std?: number | null;
+            /** Skewness */
+            skewness?: number | null;
+            /** Outlier Count */
+            outlier_count?: number | null;
+            /** Histogram */
+            histogram?: number[];
+            /** Top Values */
+            top_values?: components["schemas"]["ValueCount"][];
+            /** Numeric Text Count */
+            numeric_text_count?: number | null;
+            /** Date Text Count */
+            date_text_count?: number | null;
+            /** Distinct Days */
+            distinct_days?: number | null;
+            /** Span Days */
+            span_days?: number | null;
+            /** Alerts */
+            alerts?: string[];
         };
         /** ColumnReference */
         ColumnReference: {
@@ -679,6 +730,11 @@ export interface components {
              * @default exact counts; no source rows are modified
              */
             method: string;
+            /**
+             * Profile Version
+             * @default 1
+             */
+            profile_version: number;
         };
         /** DatasetOut */
         DatasetOut: {
@@ -1091,6 +1147,13 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** ValueCount */
+        ValueCount: {
+            /** Value */
+            value: string;
+            /** Count */
+            count: number;
         };
         /** VersionConfirm */
         VersionConfirm: {
@@ -1531,6 +1594,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DatasetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_version_profile_api_datasets__dataset_id__versions__version_id__profile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionOut"];
                 };
             };
             /** @description Validation Error */

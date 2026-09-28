@@ -54,3 +54,4 @@ class RunResult(BaseModel):
     token_usage: dict[str, int]
     used_fallback_plan: bool = False
     fallback_reason: str | None = None
+    plan_issues: list[str] = Field(default_factory=list)

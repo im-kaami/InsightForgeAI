@@ -519,6 +519,41 @@ def add_source(
                     shutil.rmtree(version_dir)
 
 
+def _version_catalog_path(dataset: Dataset, version_id: str) -> Path:
+    return (
+        _storage().root
+        / "users"
+        / dataset.owner_id
+        / "datasets"
+        / dataset.id
+        / "versions"
+        / version_id
+        / "catalog.duckdb"
+    )
+
+
+def reprofile_version(db: Session, dataset: Dataset, version: DatasetVersion) -> DatasetVersion:
+    path = _version_catalog_path(dataset, version.id)
+    if not path.is_file():
+        raise IngestError("Dataset version files are missing")
+    try:
+        catalog = DataCatalog(path, read_only=True)
+    except duckdb.Error as error:
+        if "different configuration" in str(error).lower():
+            raise DatasetBusyError("Dataset is currently busy") from error
+        raise
+    try:
+        profile = profile_catalog(catalog, timeout_seconds=10, max_columns=100)
+    finally:
+        catalog.close()
+    version.profile_json = profile.model_dump(mode="json")
+    if dataset.current_version_id == version.id:
+        dataset.profile_json = version.profile_json
+    db.commit()
+    db.refresh(version)
+    return version
+
+
 def open_catalog(
     dataset: Dataset,
     connection_uri: str | None = None,
@@ -533,16 +568,7 @@ def open_catalog(
         selected = version_id or dataset.current_version_id
         if not selected:
             raise IngestError("Review and confirm the imported version first")
-        path = (
-            _storage().root
-            / "users"
-            / dataset.owner_id
-            / "datasets"
-            / dataset.id
-            / "versions"
-            / selected
-            / "catalog.duckdb"
-        )
+        path = _version_catalog_path(dataset, selected)
         if not path.is_file():
             raise IngestError("Dataset version files are missing")
         read_only = True

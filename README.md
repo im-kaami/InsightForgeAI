@@ -155,9 +155,20 @@ Provider presets:
 
 Sensitive-column classification is a name-based heuristic, not a complete data-loss-prevention system. Saved verified reports never call the LLM regardless of mode.
 
-Queries without their own `LIMIT` keep the first 10,000 rows. When a result is cut off, InsightForge counts the full result, marks the table as cut off, tells the summary which rows it covers, and adds a run warning. Charts use every row: bar and pie charts are summed in the database, histograms are binned in the database, and large line and scatter charts are evenly thinned or randomly sampled, with a note under the chart saying so.
+Queries without their own `LIMIT` keep the first 10,000 rows. When a result is cut off, InsightForge counts the full result, marks the table as cut off, tells the summary which rows it covers, and adds a run warning. Charts use every row: bar and pie charts are summed in the database, histograms and heatmaps are binned or summed in the database, and large line, area, scatter, and box charts are evenly thinned or randomly sampled, with a note under the chart saying so. Supported chart kinds are line, bar, area, scatter, pie, histogram, box, and heatmap. In the web app, bar, line, area, and point charts can be switched between those four types without another AI call.
 
-UI file uploads are staged and require preview and confirmation. The legacy upload API auto-confirms unless `review=true`; initial public URL imports and Add Source retain auto-confirm behavior, while manual URL refresh creates a draft. Structural profiling is bounded by function limits and does not certify accuracy or comprehensively detect outliers. A live database query is not a guarantee of source freshness.
+If the AI returns a plan with invalid steps, InsightForge lists the problems and asks the model once to correct the plan. It no longer drops invalid steps silently: any step that is still invalid appears as a run warning. Local models receive a JSON schema, so Ollama can only produce well-formed plans and summaries. When a plan has no chart, one is added from the shape of the first suitable result, and its note says it was added automatically.
+
+The data health check reports, for each column:
+
+- Numbers: range, median, quartiles, a 10-bin distribution, outliers (1.5 × interquartile range), and skew.
+- Dates: range and days with no rows.
+- Text: the most common values (hidden for sensitive columns) and values that look like numbers or dates but are stored as text.
+- All columns: plain-language warnings for missing, constant, or identifier-like data.
+
+Health checks made before this version show an **Update health check** button, which calls `POST /api/datasets/{id}/versions/{version_id}/profile`. Questions on saved versions reuse the schema saved at import instead of rescanning the data.
+
+UI file uploads are staged and require preview and confirmation. The legacy upload API auto-confirms unless `review=true`; initial public URL imports and Add Source retain auto-confirm behavior, while manual URL refresh creates a draft. Profiling is bounded by time and column limits. Its outlier and skew checks are simple statistical rules, and it does not certify accuracy. A live database query is not a guarantee of source freshness.
 
 ## Verified spreadsheet reports
 

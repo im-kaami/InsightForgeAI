@@ -39,6 +39,16 @@ def test_ollama_client_bounds_the_context_and_parses_json():
 
 
 @respx.mock
+def test_ollama_client_sends_the_json_schema_as_the_output_format():
+    route = respx.post("http://localhost:11434/api/chat").mock(
+        return_value=httpx.Response(200, json={"message": {"content": '{"steps": []}'}})
+    )
+    schema = {"type": "object", "properties": {"steps": {"type": "array"}}}
+    OllamaClient("qwen3:4b").chat_json([{"role": "user", "content": "plan"}], schema=schema)
+    assert json.loads(route.calls.last.request.content)["format"] == schema
+
+
+@respx.mock
 def test_ollama_client_reports_server_errors():
     respx.post("http://localhost:11434/api/chat").mock(
         return_value=httpx.Response(500, json={"error": "out of memory"})

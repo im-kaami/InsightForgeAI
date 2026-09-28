@@ -15,7 +15,7 @@ class PlotError(ValueError):
 
 def validate_plot_columns(step: PlotStep, df: pd.DataFrame) -> None:
     required = [step.x]
-    if step.kind in {"line", "bar", "scatter"} and not step.y:
+    if step.kind in {"line", "bar", "scatter", "area", "heatmap"} and not step.y:
         raise PlotError(f"{step.kind} plots require y; available columns: {', '.join(map(str, df.columns))}")
     if step.y:
         required.append(step.y)
@@ -38,6 +38,21 @@ def make_figure(
         if bin_width is not None:
             figure.update_traces(width=bin_width)
         figure.update_layout(bargap=0)
+    elif step.kind == "box":
+        figure = (
+            px.box(data, x=step.x, y=step.y, color=step.color, title=step.title)
+            if step.y
+            else px.box(data, y=step.x, color=step.color, title=step.title)
+        )
+    elif step.kind == "heatmap":
+        figure = px.density_heatmap(
+            data,
+            x=step.x,
+            y=step.y,
+            z=step.color,
+            histfunc="sum" if step.color else "count",
+            title=step.title,
+        )
     elif step.kind == "pie":
         figure = px.pie(data, names=step.x, values=step.y, color=step.color, title=step.title)
     elif step.kind == "histogram":

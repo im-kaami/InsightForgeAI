@@ -72,6 +72,38 @@ def test_executor_marks_unknown_size_when_the_count_fails(monkeypatch):
     assert (table.truncated, table.full_row_count) == (True, None)
 
 
+def test_executor_adds_a_chart_when_the_plan_has_none(catalog, schema):
+    llm = FakeLLMClient(["Summary"])
+    plan = Plan(
+        steps=[
+            SqlStep(
+                name="by_department",
+                query="SELECT department, AVG(salary) AS avg_salary FROM employees GROUP BY 1",
+            ),
+            SummaryStep(name="summary"),
+        ]
+    )
+    artifacts, _, _, _ = Executor(catalog, Planner(llm), Summarizer(llm)).execute("Compare", plan, schema)
+    assert [artifact.type for artifact in artifacts] == ["table", "plot", "text"]
+    plot = artifacts[1]
+    assert (plot.name, plot.kind, plot.title) == ("by_department_chart", "bar", "avg_salary by department")
+    assert plot.note == "Chart added automatically because the plan had none."
+
+
+def test_executor_does_not_add_charts_to_plans_that_have_one(catalog, schema):
+    llm = FakeLLMClient(["Summary"])
+    plan = Plan(
+        steps=[
+            SqlStep(name="one", query="SELECT department, COUNT(*) AS n FROM employees GROUP BY 1"),
+            SqlStep(name="two", query="SELECT department, AVG(salary) AS s FROM employees GROUP BY 1"),
+            PlotStep(name="plot", kind="bar", data_source="one", x="department", y="n"),
+            SummaryStep(name="summary"),
+        ]
+    )
+    artifacts, _, _, _ = Executor(catalog, Planner(llm), Summarizer(llm)).execute("Compare", plan, schema)
+    assert [artifact.name for artifact in artifacts if artifact.type == "plot"] == ["plot"]
+
+
 def test_executor_does_not_flag_results_that_exactly_fill_the_limit():
     catalog = _events(50)
     try:

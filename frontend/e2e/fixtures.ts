@@ -1,4 +1,14 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { expect, test as base } from "@playwright/test";
+
+export async function hrCsv() {
+  return {
+    name: "hr.csv",
+    mimeType: "text/csv",
+    buffer: await readFile(resolve("../backend/tests/fixtures/hr.csv")),
+  };
+}
 
 export const test = base.extend<{ isolatedApi: void }>({
   isolatedApi: [

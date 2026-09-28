@@ -8,6 +8,7 @@ def test_context_contains_table_shape_headers_and_data(hr_df):
     context = Summarizer(FakeLLMClient(["unused"])).build_context("Review HR", {"employees": hr_df})
     assert "Table: employees" in context
     assert "Total rows: 60" in context
+    assert "Only the first 20 rows are listed below; do not count them as totals." in context
     assert "employee_id" in context
     assert "Engineering" in context
 
@@ -46,6 +47,7 @@ def test_local_model_summary_is_structured(hr_df):
         "### Recommended actions\n- Review pay"
     )
     assert "Respond only with JSON" in llm.calls[0][0]["content"]
+    assert llm.schemas[0]["required"] == ["headline", "findings", "actions"]
 
 
 def test_local_model_summary_falls_back_to_tables_on_bad_output(hr_df):

@@ -98,6 +98,8 @@ export const datasets = {
       body: JSON.stringify({ mode, acknowledged: true }),
     }),
   refresh: (id: string) => apiFetch<Dataset>(`/datasets/${id}/refresh`, { method: "POST" }),
+  refreshProfile: (id: string, versionId: string) =>
+    apiFetch<DatasetVersion>(`/datasets/${id}/versions/${versionId}/profile`, { method: "POST" }),
   fromUrl: (url: string, name?: string, sheets?: string[]) =>
     apiFetch<Dataset>("/datasets/from-url", json({ url, name, sheets })),
   fromConnection: (value: {

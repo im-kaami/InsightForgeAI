@@ -141,7 +141,10 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
               return (
                 <section key={index}>
                   <h3 className="font-medium">{String(item.title || item.name)}</h3>
-                  <Plot figure={(item.figure as { data?: never[]; layout?: object }) ?? {}} />
+                  <Plot
+                    figure={(item.figure as { data?: never[]; layout?: object }) ?? {}}
+                    kind={String(item.kind)}
+                  />
                   {item.note ? (
                     <p className="mt-1 text-xs text-muted-foreground" data-testid="chart-note">
                       {String(item.note)}

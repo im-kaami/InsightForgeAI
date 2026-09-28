@@ -1,6 +1,5 @@
-import { expect, test } from "./fixtures";
+import { expect, hrCsv, test } from "./fixtures";
 import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
 
 test("register, ask a question, see results", async ({ page }, testInfo) => {
   const email = `e2e-${Date.now()}@example.com`;
@@ -27,9 +26,7 @@ test("register, ask a question, see results", async ({ page }, testInfo) => {
 
     await page.getByRole("button", { name: "Add data" }).click();
     await page.getByRole("tab", { name: "Upload files" }).click();
-    await page
-      .locator('input[type="file"]')
-      .setInputFiles(resolve("../backend/tests/fixtures/hr.csv"));
+    await page.locator('input[type="file"]').setInputFiles(await hrCsv());
     await page.getByRole("button", { name: "Preview import" }).click();
     await expect(page.getByRole("heading", { name: "Review import" })).toBeVisible();
     await page.getByLabel("I reviewed the import preview").check();
@@ -90,9 +87,7 @@ test("double-clicking Ask creates one session", async ({ page }) => {
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/datasets$/, { timeout: 15_000 });
   await page.getByRole("button", { name: "Add data" }).click();
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles(resolve("../backend/tests/fixtures/hr.csv"));
+  await page.locator('input[type="file"]').setInputFiles(await hrCsv());
   await page.getByRole("button", { name: "Preview import" }).click();
   await page.getByLabel("I reviewed the import preview").check();
   await page.getByRole("button", { name: "Confirm import" }).click();
@@ -127,9 +122,7 @@ test("draft Review and detail Start analysis create one session", async ({ page 
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/datasets$/, { timeout: 15_000 });
   await page.getByRole("button", { name: "Add data" }).click();
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles(resolve("../backend/tests/fixtures/hr.csv"));
+  await page.locator('input[type="file"]').setInputFiles(await hrCsv());
   await page.getByRole("button", { name: "Preview import" }).click();
   await expect(page.getByRole("heading", { name: "Review import" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Confirm import" })).toBeVisible();
@@ -169,9 +162,7 @@ test("Ask unlocks after a failed session request", async ({ page }) => {
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/datasets$/, { timeout: 15_000 });
   await page.getByRole("button", { name: "Add data" }).click();
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles(resolve("../backend/tests/fixtures/hr.csv"));
+  await page.locator('input[type="file"]').setInputFiles(await hrCsv());
   await page.getByRole("button", { name: "Preview import" }).click();
   await page.getByLabel("I reviewed the import preview").check();
   await page.getByRole("button", { name: "Confirm import" }).click();
@@ -206,9 +197,7 @@ test("polling recovers when the run event stream fails", async ({ page }) => {
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/datasets$/, { timeout: 15_000 });
   await page.getByRole("button", { name: "Add data" }).click();
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles(resolve("../backend/tests/fixtures/hr.csv"));
+  await page.locator('input[type="file"]').setInputFiles(await hrCsv());
   await page.getByRole("button", { name: "Preview import" }).click();
   await page.getByLabel("I reviewed the import preview").check();
   await page.getByRole("button", { name: "Confirm import" }).click();

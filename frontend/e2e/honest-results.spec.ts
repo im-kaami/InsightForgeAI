@@ -1,6 +1,5 @@
-import { resolve } from "node:path";
 import type { Route } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, hrCsv, test } from "./fixtures";
 
 const target = process.env.E2E_API_TARGET;
 
@@ -57,6 +56,43 @@ function cutOffRun(sessionId: string) {
   };
 }
 
+test("charts switch type in the browser and the health check lists findings", async ({ page }) => {
+  await page.goto("/register");
+  await page.locator("#email").fill(`switch-${Date.now()}@example.com`);
+  await page.locator("#password").fill("password123");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/datasets$/, { timeout: 15_000 });
+  await page.getByRole("button", { name: "Add data" }).click();
+  await page.locator('input[type="file"]').setInputFiles(await hrCsv());
+  await page.getByRole("button", { name: "Preview import" }).click();
+  await expect(page.getByTestId("quality-checks")).toBeVisible();
+  await expect(page.getByText("Imported rows: 60")).toBeVisible();
+  await page.getByLabel("I reviewed the import preview").check();
+  await page.getByRole("button", { name: "Confirm import" }).click();
+  const datasetRow = page.getByRole("row").filter({
+    has: page.getByRole("button", { name: "Ask" }),
+  });
+  await expect(datasetRow).toBeVisible({ timeout: 15_000 });
+  await datasetRow.getByRole("button", { name: "Ask" }).click();
+  await expect(page).toHaveURL(/\/sessions\/[a-f0-9]+$/, { timeout: 15_000 });
+  const composer = page.getByPlaceholder("Ask a question about this dataset...");
+  await composer.fill("Profile departments");
+  await composer.press("Enter");
+  await expect(page.getByText("completed", { exact: true })).toBeVisible({ timeout: 60_000 });
+
+  const chartType = page.getByLabel("Chart type").first();
+  await expect(chartType).toHaveValue("bar");
+  const plot = page.locator(".js-plotly-plot").first();
+  await expect(plot.locator(".barlayer .trace")).toHaveCount(1, { timeout: 60_000 });
+  await chartType.selectOption("line");
+  await expect(plot.locator(".scatterlayer .trace")).toHaveCount(1);
+  await expect(plot.locator(".barlayer .trace")).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Change data sharing" }).click();
+  await expect(page).toHaveURL(/\/datasets\/[a-f0-9]+$/, { timeout: 15_000 });
+  await expect(page.getByTestId("quality-checks")).toBeVisible();
+});
+
 test("cut-off results, chart notes and the local model are explained", async ({ page }) => {
   await page.route("**/api/health", async (route) => {
     const response = await route.fetch(upstream(route));
@@ -71,9 +107,7 @@ test("cut-off results, chart notes and the local model are explained", async ({ 
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/datasets$/, { timeout: 15_000 });
   await page.getByRole("button", { name: "Add data" }).click();
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles(resolve("../backend/tests/fixtures/hr.csv"));
+  await page.locator('input[type="file"]').setInputFiles(await hrCsv());
   await page.getByRole("button", { name: "Preview import" }).click();
   await page.getByLabel("I reviewed the import preview").check();
   await page.getByRole("button", { name: "Confirm import" }).click();

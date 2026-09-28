@@ -1,7 +1,77 @@
+import numpy as np
 import pandas as pd
 
 from insightforge.core.catalog import DataCatalog, QueryTimeoutError
-from insightforge.core.profiling import profile_catalog
+from insightforge.core.profiling import PROFILE_VERSION, DataProfile, profile_catalog
+
+
+def _columns(frame: pd.DataFrame) -> dict:
+    catalog = DataCatalog()
+    try:
+        catalog.register_df("items", frame)
+        profile = profile_catalog(catalog)
+    finally:
+        catalog.close()
+    assert profile.profile_version == PROFILE_VERSION
+    return {column.name: column for column in profile.tables[0].columns}
+
+
+def test_numbers_get_ranges_quartiles_outliers_and_a_distribution():
+    values = [*[100.0] * 50, *[110.0] * 50, 1000.0]
+    column = _columns(pd.DataFrame({"amount": values}))["amount"]
+    assert (column.kind, column.min_value, column.max_value) == ("number", "100", "1000")
+    assert (column.p25, column.median, column.p75) == (100.0, 110.0, 110.0)
+    assert column.outlier_count == 1
+    assert sum(column.histogram) == len(values) and len(column.histogram) == 10
+    assert column.alerts == [
+        "1 values fall outside the usual range (85 to 125)",
+        "Values are highly skewed; the median may describe them better than the average",
+    ]
+
+
+def test_text_columns_show_common_values_and_values_stored_as_text():
+    frame = pd.DataFrame(
+        {
+            "region": ["north", "north", "south", "east", "west", "north"],
+            "price": ["1.50", "2", " 3 ", "4.25", "5", "6"],
+            "email": [f"person{index}@example.com" for index in range(6)],
+        }
+    )
+    columns = _columns(frame)
+    assert [(item.value, item.count) for item in columns["region"].top_values[:2]] == [
+        ("north", 3),
+        ("east", 1),
+    ]
+    assert columns["price"].alerts == ["Values look like numbers but are stored as text"]
+    assert columns["email"].sensitivity and columns["email"].top_values == []
+
+
+def test_dates_report_their_range_and_missing_days():
+    days = [*pd.date_range("2024-01-01", periods=10), *pd.date_range("2024-01-15", periods=10)]
+    column = _columns(pd.DataFrame({"day": days}))["day"]
+    assert (column.min_value, column.max_value) == ("2024-01-01", "2024-01-24")
+    assert (column.distinct_days, column.span_days) == (20, 24)
+    assert column.alerts == ["4 days between 2024-01-01 and 2024-01-24 have no rows"]
+
+
+def test_constant_identifier_and_empty_columns_are_flagged():
+    frame = pd.DataFrame(
+        {
+            "status": ["open"] * 30,
+            "code": [f"c{index}" for index in range(30)],
+            "empty": [None] * 30,
+            "order_id": np.arange(30),
+        }
+    )
+    columns = _columns(frame)
+    assert columns["status"].alerts == ["Every value is the same"]
+    assert columns["code"].alerts == ["Every value is different, so this may be an identifier"]
+    assert columns["empty"].alerts == ["All values are missing"]
+    assert columns["order_id"].alerts == []
+
+
+def test_profiles_saved_before_version_two_are_marked_as_older():
+    assert DataProfile.model_validate({"tables": []}).profile_version == 1
 
 
 def test_profile_counts_and_no_data_mutation():

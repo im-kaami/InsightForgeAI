@@ -39,7 +39,11 @@ class LLMClient(Protocol):
     def chat(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> LLMResponse: ...
 
     def chat_json(
-        self, messages: list[dict[str, str]], *, temperature: float = 0.0
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float = 0.0,
+        schema: dict[str, Any] | None = None,
     ) -> tuple[Any, LLMResponse]: ...
 
 
@@ -98,8 +102,13 @@ class OpenAICompatibleClient:
         return self._create(messages, temperature)
 
     def chat_json(
-        self, messages: list[dict[str, str]], *, temperature: float = 0.0
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float = 0.0,
+        schema: dict[str, Any] | None = None,
     ) -> tuple[Any, LLMResponse]:
+        del schema
         try:
             response = self._create(messages, temperature, response_format={"type": "json_object"})
         except Exception:
@@ -138,7 +147,9 @@ class OllamaClient:
         self.timeout = timeout
         self.max_output_tokens = max_output_tokens
 
-    def _chat(self, messages: list[dict[str, str]], temperature: float, json_mode: bool) -> LLMResponse:
+    def _chat(
+        self, messages: list[dict[str, str]], temperature: float, output_format: str | dict[str, Any] | None
+    ) -> LLMResponse:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
@@ -150,8 +161,8 @@ class OllamaClient:
                 "temperature": temperature,
             },
         }
-        if json_mode:
-            payload["format"] = "json"
+        if output_format is not None:
+            payload["format"] = output_format
         with httpx.Client(trust_env=False, timeout=self.timeout) as client:
             response = client.post(f"{self.base_url}/api/chat", json=payload)
         try:
@@ -168,12 +179,16 @@ class OllamaClient:
         )
 
     def chat(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> LLMResponse:
-        return self._chat(messages, temperature, json_mode=False)
+        return self._chat(messages, temperature, None)
 
     def chat_json(
-        self, messages: list[dict[str, str]], *, temperature: float = 0.0
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float = 0.0,
+        schema: dict[str, Any] | None = None,
     ) -> tuple[Any, LLMResponse]:
-        response = self._chat(messages, temperature, json_mode=True)
+        response = self._chat(messages, temperature, schema or "json")
         return _parse_json_response(response), response
 
 
@@ -181,6 +196,7 @@ class FakeLLMClient:
     def __init__(self, responses: list[str] | Callable[[list[dict[str, str]]], str]):
         self.responses = responses
         self.calls: list[list[dict[str, str]]] = []
+        self.schemas: list[dict[str, Any] | None] = []
         self._index = 0
 
     def chat(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> LLMResponse:
@@ -198,8 +214,13 @@ class FakeLLMClient:
         return LLMResponse(text=text)
 
     def chat_json(
-        self, messages: list[dict[str, str]], *, temperature: float = 0.0
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float = 0.0,
+        schema: dict[str, Any] | None = None,
     ) -> tuple[Any, LLMResponse]:
+        self.schemas.append(schema)
         response = self.chat(messages, temperature=temperature)
         parsed = extract_json(response.text)
         if parsed is None:
