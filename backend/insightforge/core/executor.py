@@ -14,12 +14,25 @@ from insightforge.core.artifacts import (
     TextArtifact,
 )
 from insightforge.core.catalog import DataCatalog, sanitize_identifier
+from insightforge.core.chart_data import QueryRunner, prepare_chart_data
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Plan, Planner, PlotStep, SqlStep, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
 from insightforge.core.schema import SchemaInfo
-from insightforge.core.sql_guard import guard_sql
+from insightforge.core.sql_guard import GuardedQuery, guard_query
 from insightforge.core.summarizer import Summarizer
+
+
+def truncation_note(retrieved: int, full_row_count: int | None) -> str:
+    if full_row_count is None:
+        return (
+            f"Only the first {retrieved:,} rows were kept and the full row count could not be computed. "
+            "Figures below cover the retrieved rows only."
+        )
+    return (
+        f"The query produced {full_row_count:,} rows; only the first {retrieved:,} were kept. "
+        "Figures below cover the retrieved rows only."
+    )
 
 
 class Executor:
@@ -33,6 +46,7 @@ class Executor:
         render_png: bool = False,
         on_event: Callable[[dict[str, Any]], None] | None = None,
         query_timeout: float | None = None,
+        result_limit: int = 10000,
     ):
         self.catalog = catalog
         self.planner = planner
@@ -42,6 +56,29 @@ class Executor:
         self.render_png = render_png
         self.on_event = on_event
         self.query_timeout = query_timeout
+        self.result_limit = result_limit
+
+    def _run_sql(self, query: str) -> tuple[GuardedQuery, pd.DataFrame]:
+        guarded = guard_query(query, self.result_limit)
+        return guarded, self.catalog.query(guarded.sql, timeout_seconds=self.query_timeout)
+
+    def _full_row_count(self, guarded: GuardedQuery, frame: pd.DataFrame) -> tuple[bool, int | None]:
+        if guarded.limit is None or guarded.count_sql is None or len(frame) < guarded.limit:
+            return False, None
+        try:
+            count = self.catalog.query(guarded.count_sql, timeout_seconds=self.query_timeout)
+            full_row_count = int(count.iloc[0, 0])
+        except Exception:
+            return True, None
+        if full_row_count <= len(frame):
+            return False, None
+        return True, full_row_count
+
+    def _source_query(self, full_sql: str) -> QueryRunner:
+        def run(sql: str) -> pd.DataFrame:
+            return self.catalog.query(f"WITH src AS ({full_sql}) {sql}", timeout_seconds=self.query_timeout)
+
+        return run
 
     def _emit(self, event: dict[str, Any]) -> None:
         if self.on_event:
@@ -60,6 +97,8 @@ class Executor:
         artifacts: list[Artifact] = []
         timings: dict[str, float] = {}
         results: dict[str, pd.DataFrame] = {}
+        sources: dict[str, tuple[GuardedQuery, bool, int | None]] = {}
+        notes: dict[str, str] = {}
         summary = ""
         summary_usage = {"prompt_tokens": 0, "completion_tokens": 0}
         if self.artifact_dir:
@@ -69,15 +108,12 @@ class Executor:
             started = time.perf_counter()
             self._emit({"type": "step_start", "name": step.name, "action": step.action})
             if isinstance(step, SqlStep):
-                executed_sql = step.query
                 try:
-                    executed_sql = guard_sql(executed_sql)
-                    frame = self.catalog.query(executed_sql, timeout_seconds=self.query_timeout)
+                    guarded, frame = self._run_sql(step.query)
                 except Exception as first_error:
                     try:
                         repaired = self.planner.repair_sql(step, str(first_error), schema)
-                        executed_sql = guard_sql(repaired.query)
-                        frame = self.catalog.query(executed_sql, timeout_seconds=self.query_timeout)
+                        guarded, frame = self._run_sql(repaired.query)
                     except Exception as second_error:
                         artifacts.append(
                             ErrorArtifact(
@@ -95,7 +131,11 @@ class Executor:
                             }
                         )
                         continue
+                truncated, full_row_count = self._full_row_count(guarded, frame)
                 results[step.name] = frame
+                sources[step.name] = (guarded, truncated, full_row_count)
+                if truncated:
+                    notes[step.name] = truncation_note(len(frame), full_row_count)
                 csv_path = None
                 if self.artifact_dir:
                     path = self.artifact_dir / f"{sanitize_identifier(step.name)}.csv"
@@ -105,10 +145,12 @@ class Executor:
                 artifacts.append(
                     TableArtifact(
                         name=step.name,
-                        sql=executed_sql,
+                        sql=guarded.sql,
                         columns=[str(column) for column in frame.columns],
                         rows=rows,
                         total_rows=len(frame),
+                        truncated=truncated,
+                        full_row_count=full_row_count,
                         csv_path=csv_path,
                     )
                 )
@@ -124,7 +166,16 @@ class Executor:
                     )
                 else:
                     try:
-                        figure = make_figure(step, frame)
+                        guarded, truncated, full_row_count = sources[step.data_source]
+                        full_query = (
+                            self._source_query(guarded.full_sql)
+                            if truncated and guarded.full_sql
+                            else None
+                        )
+                        chart = prepare_chart_data(step, frame, full_query, full_row_count)
+                        figure = make_figure(
+                            chart.step, chart.frame, prebinned=chart.prebinned, bin_width=chart.bin_width
+                        )
                         png_path = None
                         if self.render_png and self.artifact_dir:
                             path = figure_to_png(
@@ -137,6 +188,7 @@ class Executor:
                                 kind=step.kind,
                                 title=step.title,
                                 figure=figure,
+                                note=chart.note,
                                 png_path=png_path,
                             )
                         )
@@ -147,7 +199,7 @@ class Executor:
             elif isinstance(step, SummaryStep):
                 try:
                     summary, response = self.summarizer.summarize(
-                        goal, results, step.focus, memory
+                        goal, results, step.focus, memory, notes
                     )
                     if response:
                         summary_usage["prompt_tokens"] += response.prompt_tokens

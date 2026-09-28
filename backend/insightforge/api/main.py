@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from insightforge.api.routers import auth, connections, datasets, runs, schedules, sessions, verified_reports
 from insightforge.api.schemas import HealthOut, ImportOptions
 from insightforge.config import get_settings, validate_settings
-from insightforge.core.llm import build_llm, llm_mode, resolved_model
+from insightforge.core.llm import build_llm, build_local_llm, llm_mode, resolved_model
 from insightforge.db.models import Run
 from insightforge.db.session import SessionLocal, configure, init_db
 from insightforge.services.datasets import DatasetBusyError
@@ -38,6 +38,7 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
     app.state.llm = build_llm(settings)
+    app.state.local_llm = build_local_llm(settings)
     app.state.bus = RunEventBus(asyncio.get_running_loop())
     app.state.tasks = set()
     if settings.scheduler_enabled:
@@ -104,6 +105,7 @@ def create_app() -> FastAPI:
             "llm": llm_mode(application.state.llm),
             "provider": settings.llm_provider,
             "model": resolved_model(settings),
+            "local_model": getattr(application.state.local_llm, "model", None),
         }
 
     return application

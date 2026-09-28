@@ -79,6 +79,54 @@ def test_local_mode_never_calls_configured_llm():
         catalog.close()
 
 
+def test_local_mode_uses_the_local_model_instead_of_the_configured_one():
+    def forbidden(_messages):
+        raise AssertionError("A cloud model must not be called")
+
+    def local_reply(messages):
+        if "data-analysis planner" in messages[0]["content"]:
+            return json.dumps(
+                {
+                    "steps": [
+                        {
+                            "name": "totals",
+                            "action": "sql",
+                            "query": "SELECT category, SUM(amount) AS total FROM records GROUP BY 1",
+                        },
+                        {"name": "summary", "action": "summary"},
+                    ]
+                }
+            )
+        return json.dumps({"headline": "Local model summary", "findings": ["17 total"], "actions": []})
+
+    configured = FakeLLMClient(forbidden)
+    local = FakeLLMClient(local_reply)
+    catalog = DataCatalog()
+    try:
+        catalog.register_df("records", pd.DataFrame({"category": ["PRIVATE_VALUE"], "amount": [17]}))
+        result = InsightForgeAgent(configured, privacy_mode="local", local_llm=local).run(
+            "PRIVATE_QUESTION", catalog
+        )
+    finally:
+        catalog.close()
+    assert configured.calls == []
+    assert not result.used_fallback_plan
+    assert result.summary == "Local model summary\n\n### Key findings\n- 17 total"
+    assert "PRIVATE_VALUE" in str(local.calls)
+
+
+def test_local_policy_shares_errors_and_results_only_with_a_local_model():
+    offline = PromptPolicy("local")
+    assert not offline.llm_summary_allowed
+    assert offline.repair_error("SECRET_ERROR") != "SECRET_ERROR"
+    local_client = FakeLLMClient(["local"])
+    with_model = PromptPolicy("local", local_model=True)
+    assert with_model.llm_summary_allowed
+    assert with_model.repair_error("SECRET_ERROR") == "SECRET_ERROR"
+    assert with_model.client(FakeLLMClient(["cloud"]), local_client) is local_client
+    assert PromptPolicy("schema_only", local_model=True).repair_error("SECRET_ERROR") != "SECRET_ERROR"
+
+
 def test_schema_only_summary_keeps_rows_aggregates_and_memory_local():
     llm = FakeLLMClient(["must not be used"])
     memory = ConversationMemory()

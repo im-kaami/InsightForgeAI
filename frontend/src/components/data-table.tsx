@@ -16,23 +16,50 @@ export function DataTable({
   columns,
   rows,
   totalRows,
+  truncated = false,
+  fullRowCount,
   sql,
 }: {
   columns: string[];
   rows: Record<string, unknown>[];
   totalRows?: number;
+  truncated?: boolean;
+  fullRowCount?: number | null;
   sql?: string;
 }) {
   const [all, setAll] = useState(false);
   const [showSql, setShowSql] = useState(false);
   const visible = rows.slice(0, all ? 200 : 20);
+  const kept = totalRows ?? rows.length;
   return (
     <div className="space-y-2">
+      {truncated && (
+        <div
+          role="note"
+          data-testid="truncation-note"
+          className="rounded border border-amber-500/30 p-2 text-xs"
+        >
+          {fullRowCount
+            ? `Result cut off: the query produced ${fullRowCount.toLocaleString()} rows; only the first ${kept.toLocaleString()} were kept.`
+            : `Result cut off: only the first ${kept.toLocaleString()} rows were kept, and the full row count could not be computed.`}
+        </div>
+      )}
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {totalRows !== undefined && <span>{totalRows.toLocaleString()} total rows</span>}
+        {totalRows !== undefined && (
+          <span>
+            {truncated
+              ? `${totalRows.toLocaleString()} rows kept`
+              : `${totalRows.toLocaleString()} total rows`}
+            {totalRows > visible.length ? ` · showing ${visible.length.toLocaleString()}` : ""}
+          </span>
+        )}
         {rows.length > 20 && (
           <Button size="sm" variant="ghost" onClick={() => setAll(!all)}>
-            {all ? "Show less" : "Show all"}
+            {all
+              ? "Show less"
+              : totalRows && totalRows > rows.length
+                ? `Show ${rows.length}`
+                : "Show all"}
           </Button>
         )}
         {sql && (

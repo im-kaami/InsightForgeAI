@@ -12,6 +12,8 @@ class TableArtifact(BaseModel):
     columns: list[str]
     rows: list[dict[str, Any]]
     total_rows: int
+    truncated: bool = False
+    full_row_count: int | None = None
     csv_path: str | None = None
 
 
@@ -21,6 +23,7 @@ class PlotArtifact(BaseModel):
     kind: str
     title: str
     figure: dict[str, Any]
+    note: str | None = None
     png_path: str | None = None
 
 

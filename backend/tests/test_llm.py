@@ -1,14 +1,61 @@
+import json
+
+import httpx
 import pytest
+import respx
 
 from insightforge.config import Settings
 from insightforge.core.llm import (
     FakeLLMClient,
+    OllamaClient,
     OpenAICompatibleClient,
     build_llm,
+    build_local_llm,
     llm_mode,
     resolved_base_url,
     resolved_model,
 )
+
+
+@respx.mock
+def test_ollama_client_bounds_the_context_and_parses_json():
+    route = respx.post("http://localhost:11434/api/chat").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "message": {"role": "assistant", "content": '{"n": 42}', "thinking": "private"},
+                "prompt_eval_count": 12,
+                "eval_count": 5,
+            },
+        )
+    )
+    client = OllamaClient("qwen3:4b", "http://localhost:11434/v1", context_tokens=4096, max_output_tokens=256)
+    parsed, response = client.chat_json([{"role": "user", "content": "sum"}])
+    assert parsed == {"n": 42}
+    assert (response.prompt_tokens, response.completion_tokens) == (12, 5)
+    body = json.loads(route.calls.last.request.content)
+    assert (body["options"]["num_ctx"], body["options"]["num_predict"]) == (4096, 256)
+    assert (body["think"], body["format"], body["stream"]) == (False, "json", False)
+
+
+@respx.mock
+def test_ollama_client_reports_server_errors():
+    respx.post("http://localhost:11434/api/chat").mock(
+        return_value=httpx.Response(500, json={"error": "out of memory"})
+    )
+    with pytest.raises(RuntimeError, match="out of memory"):
+        OllamaClient("qwen3:4b").chat([{"role": "user", "content": "hello"}])
+
+
+def test_build_local_llm_requires_a_model_on_this_computer():
+    assert build_local_llm(Settings(_env_file=None, local_llm_model=None)) is None
+    remote = Settings(
+        _env_file=None, local_llm_model="qwen3:4b", local_llm_base_url="http://10.0.0.5:11434"
+    )
+    assert build_local_llm(remote) is None
+    client = build_local_llm(Settings(_env_file=None, local_llm_model="qwen3:4b"))
+    assert isinstance(client, OllamaClient)
+    assert client.model == "qwen3:4b"
 
 
 def test_build_llm_without_credentials_uses_offline_fake(monkeypatch):

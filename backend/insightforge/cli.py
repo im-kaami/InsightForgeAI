@@ -8,6 +8,7 @@ from insightforge.config import get_settings
 from insightforge.core.agent import InsightForgeAgent
 from insightforge.core.artifacts import ErrorArtifact, PlotArtifact, TableArtifact, TextArtifact
 from insightforge.core.catalog import DataCatalog
+from insightforge.core.executor import truncation_note
 from insightforge.core.llm import build_llm, offline_fake_llm
 from insightforge.ingest import IngestError, load_any
 
@@ -68,6 +69,8 @@ def _print_result(result: Any) -> None:
     for artifact in result.artifacts:
         if isinstance(artifact, TableArtifact):
             print(f"\nTable: {artifact.name} ({artifact.total_rows} rows)")
+            if artifact.truncated:
+                print(truncation_note(artifact.total_rows, artifact.full_row_count))
             print(_pipe_rows(artifact.columns, artifact.rows))
             if artifact.csv_path:
                 print(f"CSV: {artifact.csv_path}")

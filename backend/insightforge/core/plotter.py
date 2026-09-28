@@ -13,7 +13,7 @@ class PlotError(ValueError):
     pass
 
 
-def make_figure(step: PlotStep, df: pd.DataFrame) -> dict[str, Any]:
+def validate_plot_columns(step: PlotStep, df: pd.DataFrame) -> None:
     required = [step.x]
     if step.kind in {"line", "bar", "scatter"} and not step.y:
         raise PlotError(f"{step.kind} plots require y; available columns: {', '.join(map(str, df.columns))}")
@@ -26,8 +26,19 @@ def make_figure(step: PlotStep, df: pd.DataFrame) -> dict[str, Any]:
         available = ", ".join(map(str, df.columns))
         raise PlotError(f"Missing columns: {', '.join(missing)}; available columns: {available}")
 
-    data = df.head(500) if step.kind in {"bar", "pie", "line"} else df
-    if step.kind == "pie":
+
+def make_figure(
+    step: PlotStep, df: pd.DataFrame, *, prebinned: bool = False, bin_width: float | None = None
+) -> dict[str, Any]:
+    validate_plot_columns(step, df)
+    data = df
+    if step.kind == "histogram" and prebinned:
+        value = step.y or next(column for column in data.columns if column not in {step.x, step.color})
+        figure = px.bar(data, x=step.x, y=value, color=step.color, title=step.title)
+        if bin_width is not None:
+            figure.update_traces(width=bin_width)
+        figure.update_layout(bargap=0)
+    elif step.kind == "pie":
         figure = px.pie(data, names=step.x, values=step.y, color=step.color, title=step.title)
     elif step.kind == "histogram":
         figure = px.histogram(data, x=step.x, y=step.y, color=step.color, title=step.title)

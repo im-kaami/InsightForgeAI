@@ -4,11 +4,18 @@ import json
 import re
 from pathlib import Path
 
+from insightforge.core.executor import truncation_note
 from insightforge.db.models import Artifact, Run
 
 
 class ReportFormatUnavailable(RuntimeError):
     pass
+
+
+def _truncation(payload: dict) -> str | None:
+    if not payload.get("truncated"):
+        return None
+    return truncation_note(int(payload.get("total_rows", 0)), payload.get("full_row_count"))
 
 
 def _safe(value: object) -> str:
@@ -38,6 +45,8 @@ def _table(payload: dict, limit: int = 50) -> str:
     ]
     if payload.get("total_rows", 0) > limit:
         lines.append(f"\n_Showing {limit} of {payload['total_rows']} rows._")
+    if note := _truncation(payload):
+        lines.append(f"\n_{_safe(note)}_")
     return "\n".join(lines)
 
 
@@ -69,6 +78,8 @@ def render_markdown(run: Run, artifacts: list[Artifact]) -> str:
                     else "(interactive chart in app)",
                 ]
             )
+            if payload.get("note"):
+                lines.append(f"_{_safe(payload['note'])}_")
     lines.extend(
         [
             "## Provenance",
@@ -103,6 +114,8 @@ def _html_table(payload: dict, limit: int = 50) -> str:
     note = ""
     if payload.get("total_rows", 0) > limit:
         note = f"<p>Showing {limit} of {int(payload['total_rows'])} rows.</p>"
+    if truncated := _truncation(payload):
+        note += f"<p>{_safe(truncated)}</p>"
     return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>{note}"
 
 
@@ -134,6 +147,8 @@ def render_html(run: Run, artifacts: list[Artifact]) -> str:
                 sections.append(f"<img alt='{title}' src='data:image/png;base64,{encoded}'>")
             else:
                 sections.append("<p>(interactive chart in app)</p>")
+            if payload.get("note"):
+                sections.append(f"<p>{_safe(payload['note'])}</p>")
     sections.extend(
         [
             "<h2>Provenance</h2>",

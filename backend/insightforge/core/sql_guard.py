@@ -1,4 +1,5 @@
 import re
+from dataclasses import dataclass
 
 from sqlglot import exp, parse
 from sqlglot.errors import ParseError
@@ -6,6 +7,14 @@ from sqlglot.errors import ParseError
 
 class SQLGuardError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class GuardedQuery:
+    sql: str
+    full_sql: str | None = None
+    count_sql: str | None = None
+    limit: int | None = None
 
 
 _FILE_SUFFIX = re.compile(r"\.(csv|parquet|json|jsonl|xlsx|db|duckdb)$", re.IGNORECASE)
@@ -16,7 +25,7 @@ def _unsafe_path(value: str) -> bool:
     return "/" in value or "\\" in value or bool(_FILE_SUFFIX.search(value))
 
 
-def guard_sql(sql: str, default_limit: int = 10000) -> str:
+def _validated(sql: str) -> exp.Expression:
     try:
         statements = [statement for statement in parse(sql, read="duckdb") if statement is not None]
     except ParseError as error:
@@ -63,10 +72,26 @@ def guard_sql(sql: str, default_limit: int = 10000) -> str:
             parent = node.parent
             if isinstance(parent, (exp.Table, exp.From, exp.Join)):
                 raise SQLGuardError(f"File-backed table references are forbidden: {node.this}")
+    return expression
 
-    if expression.args.get("limit") is None:
-        if isinstance(expression, exp.Union):
-            rendered = expression.sql(dialect="duckdb")
-            return f"SELECT * FROM ({rendered}) AS q LIMIT {int(default_limit)}"
-        expression = expression.limit(default_limit)
-    return expression.sql(dialect="duckdb")
+
+def guard_query(sql: str, default_limit: int = 10000) -> GuardedQuery:
+    expression = _validated(sql)
+    if expression.args.get("limit") is not None:
+        return GuardedQuery(sql=expression.sql(dialect="duckdb"))
+    limit = int(default_limit)
+    full_sql = expression.sql(dialect="duckdb")
+    if isinstance(expression, exp.Union):
+        limited = f"SELECT * FROM ({full_sql}) AS q LIMIT {limit}"
+    else:
+        limited = expression.limit(limit).sql(dialect="duckdb")
+    return GuardedQuery(
+        sql=limited,
+        full_sql=full_sql,
+        count_sql=f"SELECT COUNT(*) FROM ({full_sql}) AS q",
+        limit=limit,
+    )
+
+
+def guard_sql(sql: str, default_limit: int = 10000) -> str:
+    return guard_query(sql, default_limit).sql

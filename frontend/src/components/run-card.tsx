@@ -121,6 +121,8 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
                     columns={(item.columns as string[]) ?? []}
                     rows={(item.rows as Record<string, unknown>[]) ?? []}
                     totalRows={Number(item.total_rows)}
+                    truncated={Boolean(item.truncated)}
+                    fullRowCount={item.full_row_count == null ? null : Number(item.full_row_count)}
                     sql={String(item.sql ?? "")}
                   />
                   {item.csv_path ? (
@@ -140,6 +142,11 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
                 <section key={index}>
                   <h3 className="font-medium">{String(item.title || item.name)}</h3>
                   <Plot figure={(item.figure as { data?: never[]; layout?: object }) ?? {}} />
+                  {item.note ? (
+                    <p className="mt-1 text-xs text-muted-foreground" data-testid="chart-note">
+                      {String(item.note)}
+                    </p>
+                  ) : null}
                 </section>
               );
             if (item.type === "text")
@@ -170,6 +177,13 @@ export function RunCard({ run, events = [] }: { run: Run; events?: RunEvent[] })
             <span>Imported at: {String(provenance.imported_at ?? "Not available")}</span>
             <span>Freshness: {String(provenance.source_freshness ?? "Not available")}</span>
             <span>Privacy: {String(provenance.privacy_mode ?? "Not available")}</span>
+            <span>
+              AI model:{" "}
+              {String(
+                provenance.model ??
+                  (run.definition_id ? "None (fixed calculations)" : "Not recorded"),
+              )}
+            </span>
             <span>
               Engine:{" "}
               {String(provenance.engine_version ?? provenance.engine_kind ?? "Not available")}

@@ -23,10 +23,13 @@ class InsightForgeAgent:
         summary_max_rows: int = 20,
         schema_sample_rows: int = 3,
         privacy_mode: PrivacyMode = "schema_only",
+        local_llm: LLMClient | None = None,
     ):
-        self.policy = PromptPolicy(privacy_mode)
-        self.planner = Planner(llm, privacy_mode=privacy_mode)
-        self.summarizer = Summarizer(llm, max_rows=summary_max_rows, privacy_mode=privacy_mode)
+        self.policy = PromptPolicy(privacy_mode, local_model=local_llm is not None)
+        self.planner = Planner(llm, privacy_mode=privacy_mode, local_llm=local_llm)
+        self.summarizer = Summarizer(
+            llm, max_rows=summary_max_rows, privacy_mode=privacy_mode, local_llm=local_llm
+        )
         self.artifact_dir = artifact_dir
         self.render_png = render_png
         self.query_timeout = query_timeout

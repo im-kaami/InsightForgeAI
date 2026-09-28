@@ -41,8 +41,9 @@ class DataCatalog:
         threads: int | None = None,
         read_only: bool = False,
     ):
+        config = {"enable_external_access": False} if read_only else {}
         self.connection = duckdb.connect(
-            str(db_path) if db_path is not None else ":memory:", read_only=read_only
+            str(db_path) if db_path is not None else ":memory:", read_only=read_only, config=config
         )
         if memory_limit is not None:
             escaped_limit = memory_limit.replace("'", "''")

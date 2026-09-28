@@ -33,6 +33,7 @@ class HealthOut(BaseModel):
     llm: str
     provider: str
     model: str
+    local_model: str | None = None
 
 
 class ImportOptions(BaseModel):

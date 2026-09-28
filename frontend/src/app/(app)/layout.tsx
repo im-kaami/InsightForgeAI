@@ -55,6 +55,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 Configured model: {healthQuery.data.provider} · {healthQuery.data.model}
               </p>
             ) : null}
+            {healthQuery.data?.local_model && (
+              <p className="px-1 text-xs text-muted-foreground">
+                Local only: {healthQuery.data.local_model} on this computer
+              </p>
+            )}
             <div className="rounded-lg border p-3 text-xs text-muted-foreground">
               <p className="truncate">{user?.email}</p>
               <Button

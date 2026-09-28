@@ -761,6 +761,8 @@ export interface components {
             provider: string;
             /** Model */
             model: string;
+            /** Local Model */
+            local_model?: string | null;
         };
         /** PrivacyUpdate */
         PrivacyUpdate: {

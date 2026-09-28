@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { datasets, type Dataset, type DatasetVersion } from "@/lib/api";
+import { datasets, health, type Dataset, type DatasetVersion } from "@/lib/api";
 
 const descriptions = {
   local:
@@ -33,6 +33,8 @@ export function DatasetTrustPanel({
     queryFn: () => datasets.versions(dataset.id),
     enabled: dataset.kind !== "connection",
   });
+  const healthQuery = useQuery({ queryKey: ["health"], queryFn: health });
+  const localModel = healthQuery.data?.local_model;
   const [mode, setMode] = useState<Dataset["llm_policy"]>(dataset.llm_policy);
   const [acknowledged, setAcknowledged] = useState(false);
   const [review, setReview] = useState<DatasetVersion | null>(null);
@@ -111,7 +113,11 @@ export function DatasetTrustPanel({
               <option value="full">Full cloud analysis</option>
             </select>
           </div>
-          <p className="text-sm text-muted-foreground">{descriptions[mode]}</p>
+          <p className="text-sm text-muted-foreground">
+            {mode === "local" && localModel
+              ? `Chat uses ${localModel} running on this computer, so nothing is sent to a cloud AI. Approved reports still calculate your saved metrics.`
+              : descriptions[mode]}
+          </p>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"

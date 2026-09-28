@@ -211,9 +211,11 @@ def fallback_plan(goal: str, schema: SchemaInfo) -> Plan:
 
 
 class Planner:
-    def __init__(self, llm: LLMClient, privacy_mode: PrivacyMode = "full"):
-        self.policy = PromptPolicy(privacy_mode)
-        self.llm = self.policy.client(llm)
+    def __init__(
+        self, llm: LLMClient, privacy_mode: PrivacyMode = "full", local_llm: LLMClient | None = None
+    ):
+        self.policy = PromptPolicy(privacy_mode, local_model=local_llm is not None)
+        self.llm = self.policy.client(llm, local_llm)
         self.last_used_fallback = False
         self.last_fallback_reason: str | None = None
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}

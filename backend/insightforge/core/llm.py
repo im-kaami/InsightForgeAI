@@ -5,9 +5,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
+import httpx
 from openai import OpenAI
 
-from insightforge.config import Settings, get_settings
+from insightforge.config import Settings, get_settings, is_loopback_url
 
 PROVIDER_PRESETS: dict[str, tuple[str | None, str]] = {
     "openai": (None, "gpt-4o-mini"),
@@ -103,17 +104,77 @@ class OpenAICompatibleClient:
             response = self._create(messages, temperature, response_format={"type": "json_object"})
         except Exception:
             response = self._create(messages, temperature)
+        return _parse_json_response(response), response
+
+
+def _parse_json_response(response: LLMResponse) -> Any:
+    try:
+        parsed = json.loads(response.text)
+    except json.JSONDecodeError:
+        parsed = extract_json(response.text)
+        if parsed is not None:
+            logging.getLogger("insightforge").warning(
+                "LLM returned non-strict JSON; extracted embedded object"
+            )
+    if parsed is None:
+        raise LLMJSONError("LLM response did not contain valid JSON")
+    return parsed
+
+
+class OllamaClient:
+    def __init__(
+        self,
+        model: str,
+        base_url: str = "http://localhost:11434",
+        context_tokens: int = 8192,
+        think: bool = False,
+        timeout: float = 300.0,
+        max_output_tokens: int = 1024,
+    ):
+        self.model = model
+        self.base_url = base_url.rstrip("/").removesuffix("/v1")
+        self.context_tokens = context_tokens
+        self.think = think
+        self.timeout = timeout
+        self.max_output_tokens = max_output_tokens
+
+    def _chat(self, messages: list[dict[str, str]], temperature: float, json_mode: bool) -> LLMResponse:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            "think": self.think,
+            "options": {
+                "num_ctx": self.context_tokens,
+                "num_predict": self.max_output_tokens,
+                "temperature": temperature,
+            },
+        }
+        if json_mode:
+            payload["format"] = "json"
+        with httpx.Client(trust_env=False, timeout=self.timeout) as client:
+            response = client.post(f"{self.base_url}/api/chat", json=payload)
         try:
-            parsed = json.loads(response.text)
-        except json.JSONDecodeError:
-            parsed = extract_json(response.text)
-            if parsed is not None:
-                logging.getLogger("insightforge").warning(
-                    "LLM returned non-strict JSON; extracted embedded object",
-                )
-        if parsed is None:
-            raise LLMJSONError("LLM response did not contain valid JSON")
-        return parsed, response
+            data = response.json()
+        except ValueError:
+            data = {}
+        if response.status_code >= 400 or "error" in data:
+            detail = str(data.get("error") or f"HTTP {response.status_code}")[:300]
+            raise RuntimeError(f"Local model request failed: {detail}")
+        return LLMResponse(
+            text=(data.get("message") or {}).get("content") or "",
+            prompt_tokens=int(data.get("prompt_eval_count") or 0),
+            completion_tokens=int(data.get("eval_count") or 0),
+        )
+
+    def chat(self, messages: list[dict[str, str]], *, temperature: float = 0.0) -> LLMResponse:
+        return self._chat(messages, temperature, json_mode=False)
+
+    def chat_json(
+        self, messages: list[dict[str, str]], *, temperature: float = 0.0
+    ) -> tuple[Any, LLMResponse]:
+        response = self._chat(messages, temperature, json_mode=True)
+        return _parse_json_response(response), response
 
 
 class FakeLLMClient:
@@ -210,3 +271,17 @@ def build_llm(settings: Settings | None = None) -> LLMClient:
             )
             return offline_fake_llm()
     return OpenAICompatibleClient(model, api_key, base_url)
+
+
+def build_local_llm(settings: Settings | None = None) -> LLMClient | None:
+    settings = settings or get_settings()
+    if not settings.local_llm_model or not is_loopback_url(settings.local_llm_base_url):
+        return None
+    return OllamaClient(
+        settings.local_llm_model,
+        settings.local_llm_base_url,
+        context_tokens=settings.local_llm_context_tokens,
+        think=settings.local_llm_think,
+        timeout=settings.local_llm_timeout_seconds,
+        max_output_tokens=settings.local_llm_max_output_tokens,
+    )

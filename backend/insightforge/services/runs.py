@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from insightforge.config import get_settings
 from insightforge.core.agent import InsightForgeAgent
 from insightforge.core.artifacts import PlotArtifact, RunResult, TableArtifact, TextArtifact
-from insightforge.core.llm import LLMClient, build_llm
+from insightforge.core.executor import truncation_note
+from insightforge.core.llm import LLMClient, build_llm, build_local_llm, llm_mode, resolved_model
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Plan, PlotStep, SqlStep, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
@@ -40,8 +41,11 @@ def start_run(
     run_id: str,
     tasks: set[asyncio.Task[Any]],
     llm: LLMClient | None = None,
+    local_llm: LLMClient | None = None,
 ) -> asyncio.Task[Any]:
-    task = asyncio.create_task(asyncio.to_thread(execute_run, run_id, db_factory, bus, llm))
+    task = asyncio.create_task(
+        asyncio.to_thread(execute_run, run_id, db_factory, bus, llm, local_llm)
+    )
     tasks.add(task)
     task.add_done_callback(tasks.discard)
     return task
@@ -157,6 +161,7 @@ def execute_run(
     db_factory: Callable[[], Session] | None = None,
     bus: RunEventBus | None = None,
     llm: LLMClient | None = None,
+    local_llm: LLMClient | None = None,
 ) -> None:
     configure()
     factory = db_factory or SessionLocal
@@ -237,14 +242,24 @@ def execute_run(
             memory = ConversationMemory()
             for item in reversed(previous):
                 memory.add(item.goal, item.summary or "", dataset.tables_json)
+            configured = llm or build_llm()
+            local = local_llm if local_llm is not None else build_local_llm(settings)
+            if policy == "local":
+                name = getattr(local, "model", settings.local_llm_model)
+                model = f"local: {name}" if local else "offline (no AI model)"
+            elif llm_mode(configured) == "fake":
+                model = "offline (no AI model)"
+            else:
+                model = f"{settings.llm_provider}: {resolved_model(settings)}"
             agent = InsightForgeAgent(
-                llm or build_llm(),
+                configured,
                 artifact_dir=run_dir,
                 render_png=True,
                 query_timeout=settings.query_timeout_seconds,
                 summary_max_rows=settings.llm_summary_max_rows,
                 schema_sample_rows=3 if settings.llm_send_sample_values else 0,
                 privacy_mode=policy,
+                local_llm=local,
             )
             result = agent.run(run.goal, catalog, memory, on_event=publish)
             needs_review = result.used_fallback_plan or any(
@@ -252,6 +267,11 @@ def execute_run(
             )
             verification_status = "needs_review" if needs_review else "exploratory"
             warnings = [result.fallback_reason] if result.fallback_reason else []
+            warnings += [
+                f"{artifact.name}: {truncation_note(artifact.total_rows, artifact.full_row_count)}"
+                for artifact in result.artifacts
+                if isinstance(artifact, TableArtifact) and artifact.truncated
+            ]
             run.provenance_json = {
                 "kind": "exploratory",
                 "source_version_id": version.id if version else None,
@@ -259,6 +279,7 @@ def execute_run(
                 "source_freshness": "unknown" if version else "live query (not a reproducible snapshot)",
                 "sources": version.sources_json if version else dataset.sources_json,
                 "privacy_mode": policy,
+                "model": model,
                 "engine_kind": "exploratory",
             }
         run.status = "completed"

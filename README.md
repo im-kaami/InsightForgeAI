@@ -127,6 +127,12 @@ Copy `.env.example` to `.env` and adjust these values:
 | `MAX_UPLOAD_BYTES` | Maximum bytes accepted for each uploaded file | `200000000` |
 | `LLM_SEND_SAMPLE_VALUES` | Include non-sensitive schema samples in planner prompts | `true` |
 | `LLM_SUMMARY_MAX_ROWS` | Result rows included per table in summary prompts | `20` |
+| `LOCAL_LLM_MODEL` | Ollama model used by `local` datasets, for example `qwen3:4b`; empty keeps the offline planner | empty |
+| `LOCAL_LLM_BASE_URL` | Ollama address; must be on this computer (`localhost`) | `http://localhost:11434` |
+| `LOCAL_LLM_CONTEXT_TOKENS` | Context window requested from Ollama | `8192` |
+| `LOCAL_LLM_MAX_OUTPUT_TOKENS` | Maximum tokens per local-model reply | `1024` |
+| `LOCAL_LLM_THINK` | Let thinking models reason before answering (much slower on small GPUs) | `false` |
+| `LOCAL_LLM_TIMEOUT_SECONDS` | Timeout for each local-model request | `300` |
 
 Provider presets:
 
@@ -143,11 +149,13 @@ Provider presets:
 
 | Mode | Outbound data |
 | --- | --- |
-| `local` | No LLM requests. Exploratory chat uses local generic planning and summaries. |
+| `local` | No cloud LLM requests. With `LOCAL_LLM_MODEL` set, a model running on this computer through Ollama plans the analysis and writes a short summary with full access to the data. Otherwise exploratory chat uses local generic planning and summaries. |
 | `schema_only` | Sends table/column identifiers, types, and current/prior questions. Result values, statistics, previous answers, and schema samples stay local. Questions can still contain data typed by the user. |
 | `full` | Explicitly allows schema samples, result rows, statistics, and conversation history. These can contain sensitive data. |
 
 Sensitive-column classification is a name-based heuristic, not a complete data-loss-prevention system. Saved verified reports never call the LLM regardless of mode.
+
+Queries without their own `LIMIT` keep the first 10,000 rows. When a result is cut off, InsightForge counts the full result, marks the table as cut off, tells the summary which rows it covers, and adds a run warning. Charts use every row: bar and pie charts are summed in the database, histograms are binned in the database, and large line and scatter charts are evenly thinned or randomly sampled, with a note under the chart saying so.
 
 UI file uploads are staged and require preview and confirmation. The legacy upload API auto-confirms unless `review=true`; initial public URL imports and Add Source retain auto-confirm behavior, while manual URL refresh creates a draft. Structural profiling is bounded by function limits and does not certify accuracy or comprehensively detect outliers. A live database query is not a guarantee of source freshness.
 

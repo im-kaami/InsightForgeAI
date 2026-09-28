@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { RunCard } from "@/components/run-card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { datasets, runs, sessions, type Run } from "@/lib/api";
+import { datasets, health, runs, sessions, type Run } from "@/lib/api";
 import { streamRunEvents, type RunEvent } from "@/lib/sse";
 
 async function waitForTerminalRun(runId: string): Promise<Run> {
@@ -41,6 +41,7 @@ export default function SessionPage() {
     queryFn: () => datasets.get(query.data!.dataset_id),
     enabled: Boolean(query.data),
   });
+  const localModel = useQuery({ queryKey: ["health"], queryFn: health }).data?.local_model;
   async function send() {
     if (!goal.trim()) return;
     setSending(true);
@@ -98,7 +99,9 @@ export default function SessionPage() {
             </Link>
             <div className="rounded-md border p-3 text-sm text-muted-foreground">
               {dataset.data.llm_policy === "local"
-                ? "Local only: chat uses a generic profiling plan. Saved reports use the deterministic report engine."
+                ? localModel
+                  ? `Local only: chat uses ${localModel} on this computer; nothing is sent to a cloud AI.`
+                  : "Local only: chat uses a generic profiling plan. Saved reports use the deterministic report engine."
                 : dataset.data.llm_policy === "schema_only"
                   ? "Schema-only cloud planning: values and previous answer text stay local."
                   : "Full cloud analysis: questions, result rows, statistics and summaries may be shared."}{" "}
