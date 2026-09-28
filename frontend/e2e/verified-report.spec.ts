@@ -250,12 +250,18 @@ test.describe("verified spreadsheet report", () => {
         salesCsv.replace("c1,o3,2026-09-01,120,0,70,USD", "c1,o3,2026-09-01,120,0,70,EUR"),
       ),
     });
+    const uploaded = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        /\/api\/datasets\/[a-f0-9]+\/versions$/.test(response.url()),
+    );
     await page.getByRole("button", { name: "Preview import" }).click();
+    const replacement = await (await uploaded).json();
     await page.getByLabel("I reviewed the import preview").check();
     await page.getByRole("button", { name: "Confirm import" }).click();
     await expect(page.getByText("Current policy:")).toBeVisible();
-    await expect(page.getByLabel("Dataset version").locator("option:checked")).toContainText(
-      "current",
+    await expect(page.getByLabel("Dataset version").locator("option:checked")).toHaveText(
+      `${replacement.id.slice(0, 8)} · current`,
     );
     await runReport(page);
     const card = page.getByTestId("run-card").last();

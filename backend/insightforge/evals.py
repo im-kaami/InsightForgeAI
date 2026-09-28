@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from insightforge.core.agent import InsightForgeAgent
 from insightforge.core.artifacts import ErrorArtifact, RunResult, TableArtifact
 from insightforge.core.catalog import DataCatalog, _quote
+from insightforge.core.schema import DatasetNotes
 
 DEFAULT_SUITE = Path(__file__).resolve().parents[1] / "evals" / "suite.json"
 
@@ -34,6 +35,7 @@ class EvalSuite(BaseModel):
     name: str
     version: int
     datasets: dict[str, dict[str, str]]
+    notes: dict[str, DatasetNotes] = Field(default_factory=dict)
     cases: list[EvalCase]
     base_dir: Path = Field(default=Path("."), exclude=True)
 
@@ -199,7 +201,13 @@ def run_case(
     try:
         expected = catalog.query(case.expect.sql)
         try:
-            result = agent.run(case.question, catalog, mode=mode, allow_clarification=True)
+            result = agent.run(
+                case.question,
+                catalog,
+                mode=mode,
+                allow_clarification=True,
+                notes=suite.notes.get(case.dataset),
+            )
         except Exception as error:
             return CaseResult(
                 id=case.id,

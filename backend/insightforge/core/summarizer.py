@@ -6,6 +6,7 @@ import pandas as pd
 from insightforge.core.llm import LLMClient, LLMResponse, describe_error, llm_mode
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
+from insightforge.core.schema import DatasetNotes
 from insightforge.core.trace import Tracer, model_label, prompt_chars
 
 
@@ -76,6 +77,7 @@ class Summarizer:
         self.llm = self.policy.client(llm, local_llm)
         self.max_rows = max_rows
         self.tracer = Tracer()
+        self.dataset_notes: DatasetNotes | None = None
 
     def _span(self, messages: list[dict[str, str]]):
         return self.tracer.span(
@@ -100,6 +102,8 @@ class Summarizer:
         parts = [f"Goal: {goal}"]
         if focus:
             parts.append(f"Focus: {focus}")
+        if self.dataset_notes and self.dataset_notes.to_prompt():
+            parts.append(f"Dataset notes from the data owner:\n{self.dataset_notes.to_prompt()}")
         if memory and memory.turns:
             parts.append(f"Conversation so far:\n{memory.to_prompt()}")
         for name, df in tables.items():

@@ -18,7 +18,7 @@ from insightforge.core.llm import LLMClient, build_llm, build_local_llm, llm_mod
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Plan, PlotStep, SqlStep, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
-from insightforge.core.schema import SchemaInfo
+from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.verified_report import (
     ReportPeriod,
     ReportValidationError,
@@ -243,8 +243,21 @@ def execute_run(
             ).all()
             memory = ConversationMemory()
             for item in reversed(previous):
-                if not (item.provenance_json or {}).get("clarification"):
-                    memory.add(item.goal, item.summary or "", dataset.tables_json)
+                earlier = item.provenance_json or {}
+                if earlier.get("clarification"):
+                    continue
+                memory.add(
+                    item.goal,
+                    item.summary or "",
+                    dataset.tables_json,
+                    key_numbers=earlier.get("key_numbers") or [],
+                    assumptions=earlier.get("assumptions") or [],
+                    queries=[
+                        f"{step['name']}: {step['query']}"
+                        for step in (item.plan_json or {}).get("steps", [])
+                        if step.get("action") == "sql" and step.get("query")
+                    ],
+                )
             configured = llm or build_llm()
             local = local_llm if local_llm is not None else build_local_llm(settings)
             if policy == "local":
@@ -282,6 +295,7 @@ def execute_run(
                 schema=saved_schema,
                 mode=mode,
                 allow_clarification=bool(request.get("allow_clarification")),
+                notes=DatasetNotes.model_validate(dataset.notes_json or {}),
             )
             check = result.number_check
             needs_review = (
@@ -321,6 +335,7 @@ def execute_run(
                 "mode": result.mode,
                 "rounds": result.rounds,
                 "reviews": result.reviews,
+                "key_numbers": result.key_numbers,
                 "clarification": (
                     result.clarification.model_dump(mode="json") if result.clarification else None
                 ),

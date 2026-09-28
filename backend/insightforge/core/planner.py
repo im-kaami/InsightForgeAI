@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_valid
 from insightforge.core.llm import LLMClient, LLMResponse, describe_error, llm_mode
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
-from insightforge.core.schema import SchemaInfo, TableInfo, is_identifier
+from insightforge.core.schema import DatasetNotes, SchemaInfo, TableInfo, is_identifier, notes_block
 from insightforge.core.summarizer import pipe_table
 from insightforge.core.trace import Tracer, model_label, prompt_chars
 
@@ -358,6 +358,7 @@ class Planner:
         self.last_clarification: Clarification | None = None
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
         self.tracer = Tracer()
+        self.notes: DatasetNotes | None = None
 
     def _chat_json(
         self, purpose: str, messages: list[dict[str, str]], schema: dict[str, Any] | None = None
@@ -390,7 +391,7 @@ class Planner:
         self.last_plan_issues = []
         self.last_clarification = None
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
-        schema_text = self.policy.schema_text(schema)
+        schema_text = self.policy.schema_text(schema) + notes_block(self.notes)
         sql_example = (
             '{"name":"avg_by_group","action":"sql","query":"SELECT group_col, '
             "AVG(value_col) AS avg_value FROM table_name GROUP BY group_col "
@@ -522,7 +523,7 @@ Return a single JSON object with a top-level "steps" array, for example:
             if show_values and not frame.empty:
                 lines.append(indent(pipe_table(frame, 10), "  "))
         system = f"""You review an exploratory analysis before it is summarized. The schema is:
-{self.policy.schema_text(schema)}
+{self.policy.schema_text(schema)}{notes_block(self.notes)}
 
 Decide whether the results directly answer the question.
 - If they do, respond {{"verdict": "answer", "reason": str}}.
@@ -578,7 +579,7 @@ Respond ONLY with JSON."""
                 "role": "system",
                 "content": (
                     "Correct the DuckDB SQL using only this schema. Respond only with JSON "
-                    f'{{"query":"..."}}.\n{self.policy.schema_text(schema)}'
+                    f'{{"query":"..."}}.\n{self.policy.schema_text(schema)}{notes_block(self.notes)}'
                 ),
             },
             {

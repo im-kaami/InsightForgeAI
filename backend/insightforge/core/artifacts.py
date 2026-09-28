@@ -69,3 +69,4 @@ class RunResult(BaseModel):
     findings: list[ResultFinding] = Field(default_factory=list)
     deep_notes: list[str] = Field(default_factory=list)
     clarification: Clarification | None = None
+    key_numbers: list[str] = Field(default_factory=list)

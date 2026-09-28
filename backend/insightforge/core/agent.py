@@ -5,13 +5,19 @@ from typing import Any, Literal
 
 from insightforge.core.artifacts import RunResult, TableArtifact, TextArtifact
 from insightforge.core.catalog import DataCatalog
-from insightforge.core.evidence import check_numbers, describe_query, extract_numbers, sql_literals
+from insightforge.core.evidence import (
+    check_numbers,
+    describe_evidence,
+    describe_query,
+    extract_numbers,
+    sql_literals,
+)
 from insightforge.core.executor import ExecutionState, Executor
 from insightforge.core.llm import LLMClient, describe_error
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Plan, Planner, SummaryStep
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
-from insightforge.core.schema import SchemaInfo
+from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.summarizer import Summarizer
 from insightforge.core.trace import Tracer
 
@@ -68,6 +74,7 @@ class InsightForgeAgent:
         schema: SchemaInfo | None = None,
         mode: Literal["quick", "deep"] = "quick",
         allow_clarification: bool = False,
+        notes: DatasetNotes | None = None,
     ) -> RunResult:
         def emit(event: dict[str, Any]) -> None:
             if on_event:
@@ -80,6 +87,8 @@ class InsightForgeAgent:
         tracer = Tracer()
         self.planner.tracer = tracer
         self.summarizer.tracer = tracer
+        self.planner.notes = notes
+        self.summarizer.dataset_notes = notes
         if schema is None:
             schema = catalog.introspect(sample_rows=self.schema_sample_rows)
         elif self.schema_sample_rows == 0:
@@ -165,8 +174,17 @@ class InsightForgeAgent:
                 token_usage["prompt_tokens"] += response.prompt_tokens
                 token_usage["completion_tokens"] += response.completion_tokens
             artifacts.append(TextArtifact(name="summary", text=summary))
+        key_numbers = [describe_evidence(item, executor.last_results) for item in evidence[:8]]
+        queries = [f"{table.name}: {table.sql}" for table in tables]
         if memory is not None:
-            memory.add(goal, summary, [table.name for table in schema.tables])
+            memory.add(
+                goal,
+                summary,
+                [table.name for table in schema.tables],
+                key_numbers=key_numbers,
+                assumptions=assumptions,
+                queries=queries,
+            )
         timings["total"] = time.perf_counter() - started
         emit({"type": "done", "summary": summary})
         return RunResult(
@@ -188,6 +206,7 @@ class InsightForgeAgent:
             reviews=reviews,
             findings=state.findings,
             deep_notes=deep_notes,
+            key_numbers=key_numbers,
         )
 
     def _deep(

@@ -4,7 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from insightforge.core.profiling import DataProfile
-from insightforge.core.schema import SchemaInfo
+from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.verified_report import ReportPeriod, SalesDefinition
 
 
@@ -97,6 +97,7 @@ class DatasetOut(APIModel):
     sources: list[dict[str, Any]]
     current_version_id: str | None = None
     llm_policy: Literal["local", "schema_only", "full"] = "local"
+    notes: DatasetNotes = Field(default_factory=DatasetNotes)
     profile: DataProfile | None = None
     review_version_id: str | None = None
     created_at: datetime

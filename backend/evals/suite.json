@@ -1,9 +1,18 @@
 {
   "name": "insightforge-core",
-  "version": 2,
+  "version": 3,
   "datasets": {
     "hr": { "employees": "../tests/fixtures/hr.csv" },
     "shop": { "orders": "data/orders.csv", "customers": "data/customers.csv" }
+  },
+  "notes": {
+    "shop": {
+      "general": "Revenue and sales mean the amount of completed orders only; refunded and cancelled orders are not revenue.",
+      "columns": {
+        "orders.amount": { "description": "Order value", "unit": "GBP" },
+        "orders.status": { "description": "One of completed, refunded or cancelled" }
+      }
+    }
   },
   "cases": [
     {
@@ -247,6 +256,22 @@
       "expect": {
         "type": "top",
         "sql": "SELECT customer_id FROM orders WHERE status = 'completed' GROUP BY 1 ORDER BY SUM(amount) DESC LIMIT 1"
+      }
+    },
+    {
+      "id": "shop-revenue-uses-notes",
+      "dataset": "shop",
+      "question": "What is our total revenue?",
+      "expect": { "type": "value", "sql": "SELECT SUM(amount) FROM orders WHERE status = 'completed'" }
+    },
+    {
+      "id": "shop-sales-by-region-uses-notes",
+      "dataset": "shop",
+      "question": "What are total sales by region?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT region, SUM(amount) FROM orders WHERE status = 'completed' GROUP BY 1",
+        "keys": 1
       }
     },
     {

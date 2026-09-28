@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { AddDataDialog } from "@/components/add-data-dialog";
 import { DataQuality } from "@/components/data-quality";
+import { DatasetNotes } from "@/components/dataset-notes";
 import { ImportReview } from "@/components/import-review";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -180,6 +181,7 @@ export function DatasetTrustPanel({
           </CardContent>
         </Card>
       )}
+      <DatasetNotes key={`${dataset.id}-${dataset.current_version_id}`} dataset={dataset} />
       <DataQuality
         profile={dataset.profile}
         datasetId={dataset.id}

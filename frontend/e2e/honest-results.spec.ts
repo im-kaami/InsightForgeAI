@@ -112,6 +112,43 @@ function cutOffRun(sessionId: string) {
   };
 }
 
+test("dataset notes for the AI are saved and reloaded", async ({ page }) => {
+  await page.goto("/register");
+  await page.locator("#email").fill(`notes-${Date.now()}@example.com`);
+  await page.locator("#password").fill("password123");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/datasets$/, { timeout: 15_000 });
+  await page.getByRole("button", { name: "Add data" }).click();
+  await page.locator('input[type="file"]').setInputFiles(await hrCsv());
+  await page.getByRole("button", { name: "Preview import" }).click();
+  await page.getByLabel("I reviewed the import preview").check();
+  await page.getByRole("button", { name: "Confirm import" }).click();
+  const datasetRow = page.getByRole("row").filter({
+    has: page.getByRole("button", { name: "Ask" }),
+  });
+  await expect(datasetRow).toBeVisible({ timeout: 15_000 });
+  await datasetRow.getByRole("button", { name: "Ask" }).click();
+  await expect(page).toHaveURL(/\/sessions\/[a-f0-9]+$/, { timeout: 15_000 });
+  await page.getByRole("link", { name: "Change data sharing" }).click();
+  await expect(page).toHaveURL(/\/datasets\/[a-f0-9]+$/, { timeout: 15_000 });
+
+  const notes = page.getByTestId("dataset-notes");
+  await notes.getByLabel("General notes and business rules").fill("Salary is annual base pay.");
+  await notes.getByLabel("Meaning of hr.salary").fill("Annual base pay");
+  await notes.getByLabel("Unit of hr.salary").fill("USD");
+  await notes.getByLabel("Other names for hr.salary").fill("pay, compensation");
+  await notes.getByRole("button", { name: "Save notes" }).click();
+  await expect(page.getByText("Notes saved")).toBeVisible();
+
+  await page.reload();
+  const reloaded = page.getByTestId("dataset-notes");
+  await expect(reloaded.getByLabel("General notes and business rules")).toHaveValue(
+    "Salary is annual base pay.",
+  );
+  await expect(reloaded.getByLabel("Unit of hr.salary")).toHaveValue("USD");
+  await expect(reloaded.getByLabel("Other names for hr.salary")).toHaveValue("pay, compensation");
+});
+
 test("a clarifying question offers choices and sends the answer as a new run", async ({ page }) => {
   await page.goto("/register");
   await page.locator("#email").fill(`clarify-${Date.now()}@example.com`);

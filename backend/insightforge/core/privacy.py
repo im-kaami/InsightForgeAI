@@ -51,9 +51,7 @@ class PromptPolicy:
     def memory_text(self, memory: ConversationMemory | None) -> str:
         if not memory:
             return ""
-        if self.mode in {"local", "full"}:
-            return memory.to_prompt()
-        return "\n".join(f"Previous user question: {turn.goal}" for turn in memory.turns)
+        return memory.to_prompt(include_values=self.mode in {"local", "full"})
 
     def repair_error(self, error: str) -> str:
         if self.values_visible_to_model:

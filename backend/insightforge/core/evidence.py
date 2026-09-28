@@ -181,6 +181,28 @@ def check_numbers(
     return NumberCheck(checked=len(claims), matched=len(evidence), unmatched=unmatched), evidence
 
 
+def describe_evidence(item: EvidenceItem, tables: dict[str, pd.DataFrame]) -> str:
+    value = (
+        f"{item.value:,.4f}".rstrip("0").rstrip(".") if isinstance(item.value, float) else str(item.value)
+    )
+    if item.kind == "row_count":
+        return f"{item.artifact} has {value} rows"
+    if item.kind in {"column_total", "column_average"}:
+        label = "total" if item.kind == "column_total" else "average"
+        return f"{label} {item.column} in {item.artifact} = {value}"
+    frame = tables.get(item.artifact)
+    labels: list[str] = []
+    if frame is not None and item.row is not None and 0 < item.row <= len(frame):
+        row = frame.iloc[item.row - 1]
+        labels = [
+            f"{column}={row[column]}"
+            for column in frame.columns
+            if column != item.column and not pd.api.types.is_numeric_dtype(frame[column])
+        ][:2]
+    where = f" for {', '.join(labels)}" if labels else ""
+    return f"{item.column}{where} = {value} ({item.artifact})"
+
+
 def sql_literals(sql: str) -> set[float]:
     try:
         expression = parse_one(sql, read="duckdb")

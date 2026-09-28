@@ -172,6 +172,10 @@ Choose the mode under the chat box, or send `"mode": "deep"` to `POST /api/sessi
 
 **Clarifying questions.** When a chat question is ambiguous in a way that would change the answer, for example "Who are our best customers?" (by revenue or by number of orders?), a short ambiguity check before planning may ask first instead of guessing. The run finishes immediately with the question, 2 to 4 clickable options, and an "Other" box. Your answer starts a new run with the clarification appended, and that run may not ask again. Clarifying runs are left out of conversation memory. Schedules, the CLI, and Deep-mode revisions never ask.
 
+**Notes for the AI.** On the dataset page, owners can write general notes and business rules, and for each column a meaning, a unit, and other names ("revenue", "sales"). The notes go to the AI with the schema when planning, reviewing, repairing SQL, checking for ambiguity, and summarizing. That includes schema-only mode, so notes must not contain confidential values. They are saved with `PUT /api/datasets/{id}/notes`. On the evaluation set, `qwen3:4b` answered two revenue questions correctly (completed orders only) with the notes and got both wrong without them.
+
+**Conversation memory.** Follow-up questions see up to five earlier questions in the session. Each comes with its queries and its assumptions. When the privacy mode lets values reach the model (full, or a local model), each also comes with its key numbers, taken from the summary's evidence, such as `avg_salary for department=Engineering = 106,333.33`, and a short summary. Schema-only follow-ups get the questions, queries, and assumptions without values.
+
 In both modes, fixed code checks every query result:
 
 - **Empty or zero results:** reported as a warning.
@@ -182,7 +186,7 @@ Filter and join problems mark the run **Needs review**, and appear in the warnin
 
 ### Evaluation
 
-`insightforge eval` scores the analyst on 32 reference questions over two synthetic datasets. Three are deliberately ambiguous and pass only if the analyst asks a clarifying question; asking on a clear question counts as a failure. The datasets are the HR fixture and a shop with orders and customers. The questions are in `backend/evals/suite.json`, and fixed SQL computes each correct answer, so the answers never come from an AI. A question passes when a result table contains the expected value, every expected row, or the expected winner as its first row.
+`insightforge eval` scores the analyst on 34 reference questions over two synthetic datasets. Three are deliberately ambiguous and pass only if the analyst asks a clarifying question; asking on a clear question counts as a failure. Two depend on the shop dataset's notes ("revenue means completed orders only"). The datasets are the HR fixture and a shop with orders and customers. The questions are in `backend/evals/suite.json`, and fixed SQL computes each correct answer, so the answers never come from an AI. A question passes when a result table contains the expected value, every expected row, or the expected winner as its first row.
 
 ```bash
 cd backend

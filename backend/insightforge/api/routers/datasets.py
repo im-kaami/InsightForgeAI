@@ -21,7 +21,7 @@ from insightforge.api.schemas import (
 )
 from insightforge.config import get_settings
 from insightforge.core.profiling import DataProfile
-from insightforge.core.schema import SchemaInfo
+from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.sql_guard import guard_sql
 from insightforge.db.models import (
     ChatSession,
@@ -99,6 +99,7 @@ def output(dataset: Dataset, review_version_id: str | None = None) -> DatasetOut
         sources=dataset.sources_json,
         current_version_id=dataset.current_version_id,
         llm_policy=dataset.llm_policy,
+        notes=DatasetNotes.model_validate(dataset.notes_json or {}),
         profile=DataProfile.model_validate(dataset.profile_json) if dataset.profile_json else None,
         review_version_id=review_version_id,
         created_at=dataset.created_at,
@@ -307,6 +308,15 @@ def refresh_dataset(dataset_id: str, db: Db, user: CurrentUser):
     except IngestError as error:
         raise HTTPException(422, str(error)) from error
     return output(dataset, review_version_id=version.id)
+
+
+@router.put("/{dataset_id}/notes", response_model=DatasetOut)
+def update_notes(dataset_id: str, body: DatasetNotes, db: Db, user: CurrentUser):
+    dataset = owned(db, user, dataset_id)
+    dataset.notes_json = body.model_dump(mode="json")
+    db.commit()
+    db.refresh(dataset)
+    return output(dataset)
 
 
 @router.patch("/{dataset_id}/privacy", response_model=DatasetOut)
