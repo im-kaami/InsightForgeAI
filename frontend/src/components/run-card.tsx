@@ -15,6 +15,7 @@ import {
 import { DataTable } from "@/components/data-table";
 import { Markdown } from "@/components/markdown";
 import { Plot } from "@/components/plot";
+import { StatResultCard, type StatResult } from "@/components/stat-result";
 import { StepTimeline } from "@/components/step-timeline";
 import { api, ApiError, runs, type Run } from "@/lib/api";
 import type { RunEvent } from "@/lib/sse";
@@ -239,6 +240,8 @@ export function RunCard({
               );
             if (item.type === "text")
               return <Markdown key={index}>{String(item.text ?? "")}</Markdown>;
+            if (item.type === "stat")
+              return <StatResultCard key={index} result={item as unknown as StatResult} />;
             if (item.type === "error")
               return (
                 <div

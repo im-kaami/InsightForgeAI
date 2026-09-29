@@ -207,6 +207,78 @@ test("a clarifying question offers choices and sends the answer as a new run", a
   );
 });
 
+test("statistical test results show the method, verdict, effect size and cautions", async ({
+  page,
+}) => {
+  await page.goto("/register");
+  await page.locator("#email").fill(`stats-${Date.now()}@example.com`);
+  await page.locator("#password").fill("password123");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/datasets$/, { timeout: 15_000 });
+  await page.getByRole("button", { name: "Add data" }).click();
+  await page.locator('input[type="file"]').setInputFiles(await hrCsv());
+  await page.getByRole("button", { name: "Preview import" }).click();
+  await page.getByLabel("I reviewed the import preview").check();
+  await page.getByRole("button", { name: "Confirm import" }).click();
+  const datasetRow = page.getByRole("row").filter({
+    has: page.getByRole("button", { name: "Ask" }),
+  });
+  await expect(datasetRow).toBeVisible({ timeout: 15_000 });
+  await datasetRow.getByRole("button", { name: "Ask" }).click();
+  await expect(page).toHaveURL(/\/sessions\/[a-f0-9]+$/, { timeout: 15_000 });
+
+  await page.route(/\/api\/sessions\/[a-f0-9]+$/, async (route) => {
+    const response = await route.fetch(upstream(route));
+    const session = await response.json();
+    const tested = {
+      ...cutOffRun(session.id),
+      goal: "Is the salary difference between Remote and New York significant?",
+      summary: "Salaries differ.",
+      warnings: [],
+      verification_status: "exploratory",
+      provenance: { privacy_mode: "local" },
+      artifacts: [
+        {
+          type: "stat",
+          name: "significance_test",
+          trust: "tested method",
+          method: "compare_groups",
+          test: "Mann-Whitney U test",
+          data_source: "rows",
+          x: "location",
+          y: "salary",
+          n: 26,
+          statistic: 128.5,
+          p_value: 0.0159,
+          p_adjusted: null,
+          effect_size: { name: "rank_biserial", value: 0.562, magnitude: "large" },
+          interval: null,
+          groups: [
+            { location: "New York", n: 13, mean: 94923, median: 85000, sd: 21000 },
+            { location: "Remote", n: 13, mean: 77923, median: 72000, sd: 9000 },
+          ],
+          pairwise: [],
+          checks: ["Normality: not met for Remote, so a rank-based test compares typical values."],
+          cautions: ["Small groups (New York, Remote have fewer than 10 values)."],
+          interpretation: "Median salary is 85,000 for New York and 72,000 for Remote.",
+          note: null,
+        },
+      ],
+    };
+    await route.fulfill({ response, json: { ...session, runs: [tested] } });
+  });
+  await page.reload();
+
+  const card = page.getByTestId("stat-result");
+  await expect(card).toContainText("Tested method: Mann-Whitney U test");
+  await expect(card).toContainText("Unlikely to be chance");
+  await expect(card).toContainText("p = 0.016");
+  await expect(card).toContainText("0.562 · large");
+  await expect(card).toContainText("Median salary is 85,000 for New York and 72,000 for Remote.");
+  await expect(card.getByRole("row")).toHaveCount(3);
+  await expect(card).toContainText("Small groups (New York, Remote have fewer than 10 values).");
+});
+
 test("charts switch type in the browser and the health check lists findings", async ({ page }) => {
   await page.goto("/register");
   await page.locator("#email").fill(`switch-${Date.now()}@example.com`);

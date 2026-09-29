@@ -18,12 +18,15 @@ from insightforge.core.catalog import DataCatalog, sanitize_identifier
 from insightforge.core.chart_data import AUTO_CHART_NOTE, QueryRunner, prepare_chart_data, suggest_chart
 from insightforge.core.checks import SERIOUS_FINDINGS, ResultFinding, check_result
 from insightforge.core.memory import ConversationMemory
-from insightforge.core.planner import Plan, Planner, PlotStep, SqlStep, Step, SummaryStep
+from insightforge.core.planner import Plan, Planner, PlotStep, SqlStep, StatStep, Step, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
 from insightforge.core.schema import SchemaInfo
 from insightforge.core.sql_guard import GuardedQuery, guard_query
+from insightforge.core.stats import StatArtifact, adjust_for_multiple_tests, run_test
 from insightforge.core.summarizer import Summarizer
 from insightforge.core.trace import Tracer
+
+STAT_MAX_ROWS = 200_000
 
 
 def truncation_note(retrieved: int, full_row_count: int | None) -> str:
@@ -138,6 +141,42 @@ class Executor:
             self.tracer.record(step.name, "chart", started, ok=False, error=str(error)[:300])
             return ErrorArtifact(name=step.name, action=step.action, message=str(error))
 
+    def _test(self, state: ExecutionState, step: StatStep, frame: pd.DataFrame) -> Artifact:
+        started = time.perf_counter()
+        guarded, truncated, full_row_count = state.sources[step.data_source]
+        note = None
+        try:
+            if truncated and guarded.full_sql:
+                columns = ", ".join(
+                    f'"{column.replace(chr(34), chr(34) * 2)}"' for column in (step.x, step.y)
+                )
+                frame = self._source_query(guarded.full_sql)(
+                    f"SELECT {columns} FROM src USING SAMPLE reservoir({STAT_MAX_ROWS} ROWS) REPEATABLE (42)"
+                )
+                note = (
+                    f"Computed on a random sample of {STAT_MAX_ROWS:,} of {full_row_count:,} rows."
+                    if full_row_count and full_row_count > STAT_MAX_ROWS
+                    else f"Computed on all {len(frame):,} rows, not only the {self.result_limit:,} shown."
+                )
+            artifact = run_test(step.name, step.method, step.data_source, step.x, step.y, frame, note)
+        except Exception as error:
+            self.tracer.record(
+                step.name, "test", started, ok=False, method=step.method, error=str(error)[:300]
+            )
+            return ErrorArtifact(name=step.name, action=step.action, message=str(error))
+        state.results[step.name] = artifact.key_table()
+        state.notes[step.name] = f"{artifact.test} (tested method): {artifact.interpretation}"
+        self.tracer.record(
+            step.name,
+            "test",
+            started,
+            method=step.method,
+            test=artifact.test,
+            n=artifact.n,
+            rows_sampled=bool(note),
+        )
+        return artifact
+
     def _emit(self, event: dict[str, Any]) -> None:
         if self.on_event:
             try:
@@ -178,6 +217,9 @@ class Executor:
         return self.finish(state)
 
     def finish(self, state: ExecutionState) -> tuple[list[Artifact], dict[str, float], dict[str, int], str]:
+        adjust_for_multiple_tests(
+            [artifact for artifact in state.artifacts if isinstance(artifact, StatArtifact)]
+        )
         token_usage = {
             key: self.planner.last_usage[key] + state.summary_usage[key]
             for key in ("prompt_tokens", "completion_tokens")
@@ -185,6 +227,10 @@ class Executor:
         return state.artifacts, state.timings, token_usage, state.summary
 
     def _forget(self, state: ExecutionState, name: str) -> None:
+        for artifact in state.artifacts:
+            if isinstance(artifact, StatArtifact) and artifact.data_source == name:
+                state.results.pop(artifact.name, None)
+                state.notes.pop(artifact.name, None)
         state.artifacts = [
             artifact
             for artifact in state.artifacts
@@ -290,6 +336,22 @@ class Executor:
                 else:
                     state.artifacts.append(self._plot(step, frame, state.sources[step.data_source]))
                     state.auto_chart = False
+            elif isinstance(step, StatStep):
+                self._forget(state, step.name)
+                frame = state.results.get(step.data_source)
+                if frame is None:
+                    failed = any(
+                        isinstance(item, ErrorArtifact) and item.name == step.data_source
+                        for item in state.artifacts
+                    )
+                    message = (
+                        f"The data step {step.data_source!r} failed, so the test could not run"
+                        if failed
+                        else f"Unknown data source: {step.data_source}"
+                    )
+                    state.artifacts.append(ErrorArtifact(name=step.name, action=step.action, message=message))
+                else:
+                    state.artifacts.append(self._test(state, step, frame))
             elif isinstance(step, SummaryStep):
                 try:
                     summary, response = self.summarizer.summarize(

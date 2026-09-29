@@ -1,0 +1,716 @@
+{
+  "suite": "insightforge-core",
+  "suite_version": 4,
+  "model": "local: qwen3:4b (quick)",
+  "started_at": "2026-09-29T00:51:52.504076Z",
+  "cases": [
+    {
+      "id": "hr-headcount",
+      "dataset": "hr",
+      "question": "How many employees are there?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 2,
+      "numbers_matched": 2,
+      "seconds": 31.39,
+      "tokens": 1450,
+      "rounds": 1,
+      "sql": [
+        "SELECT COUNT(*) FROM employees LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-avg-salary",
+      "dataset": "hr",
+      "question": "What is the average salary?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 1,
+      "numbers_matched": 1,
+      "seconds": 34.6,
+      "tokens": 1497,
+      "rounds": 1,
+      "sql": [
+        "SELECT AVG(salary) AS avg_salary FROM employees LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-avg-salary-by-department",
+      "dataset": "hr",
+      "question": "What is the average salary by department?",
+      "passed": true,
+      "reason": "all 5 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 46.15,
+      "tokens": 1650,
+      "rounds": 1,
+      "sql": [
+        "SELECT department, AVG(salary) AS avg_salary FROM employees GROUP BY department LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-top-department-salary",
+      "dataset": "hr",
+      "question": "Which department has the highest average salary?",
+      "passed": true,
+      "reason": "Engineering is listed first",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 43.26,
+      "tokens": 1645,
+      "rounds": 1,
+      "sql": [
+        "SELECT department, AVG(salary) AS avg_salary FROM employees GROUP BY department ORDER BY avg_salary DESC LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-headcount-by-location",
+      "dataset": "hr",
+      "question": "How many employees work in each location?",
+      "passed": true,
+      "reason": "all 5 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 3,
+      "numbers_matched": 3,
+      "seconds": 30.6,
+      "tokens": 1490,
+      "rounds": 1,
+      "sql": [
+        "SELECT location, COUNT(*) AS employee_count FROM employees GROUP BY location LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-max-salary",
+      "dataset": "hr",
+      "question": "What is the highest salary?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 2,
+      "numbers_matched": 1,
+      "seconds": 33.48,
+      "tokens": 1509,
+      "rounds": 1,
+      "sql": [
+        "SELECT MAX(salary) AS max_salary FROM employees LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-min-salary-engineering",
+      "dataset": "hr",
+      "question": "What is the lowest salary in the Engineering department?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 1,
+      "numbers_matched": 1,
+      "seconds": 31.45,
+      "tokens": 1504,
+      "rounds": 1,
+      "sql": [
+        "SELECT MIN(salary) AS lowest_salary FROM employees WHERE department = 'Engineering' LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-avg-performance-by-department",
+      "dataset": "hr",
+      "question": "What is the average performance score in each department?",
+      "passed": true,
+      "reason": "all 5 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 34.96,
+      "tokens": 1614,
+      "rounds": 1,
+      "sql": [
+        "SELECT department, AVG(performance_score) AS avg_performance FROM employees GROUP BY department LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-hires-by-year",
+      "dataset": "hr",
+      "question": "How many people were hired in each year?",
+      "passed": true,
+      "reason": "all 8 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 0,
+      "numbers_matched": 0,
+      "seconds": 34.91,
+      "tokens": 1713,
+      "rounds": 1,
+      "sql": [
+        "SELECT DATE_TRUNC('YEAR', hire_date) AS hire_year, COUNT(*) AS count_hired FROM employees GROUP BY hire_year ORDER BY hire_year LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-remote-count",
+      "dataset": "hr",
+      "question": "How many employees work remotely?",
+      "passed": false,
+      "reason": "expected 13, which is not in any result table",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 2,
+      "numbers_matched": 2,
+      "seconds": 26.15,
+      "tokens": 1446,
+      "rounds": 1,
+      "sql": [
+        "SELECT COUNT(*) AS remote_count FROM employees WHERE location = 'remote' LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-top-performance-department",
+      "dataset": "hr",
+      "question": "Which department has the best average performance score?",
+      "passed": true,
+      "reason": "Engineering is listed first",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 39.74,
+      "tokens": 1657,
+      "rounds": 1,
+      "sql": [
+        "SELECT department, AVG(performance_score) AS avg_performance FROM employees GROUP BY department ORDER BY avg_performance DESC LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-salary-above-100k",
+      "dataset": "hr",
+      "question": "How many employees earn more than 100,000?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 1,
+      "numbers_matched": 1,
+      "seconds": 31.62,
+      "tokens": 1518,
+      "rounds": 1,
+      "sql": [
+        "SELECT COUNT(*) AS high_salary_count FROM employees WHERE salary > 100000 LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-total-payroll",
+      "dataset": "hr",
+      "question": "What is the total payroll, the sum of all salaries?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 1,
+      "numbers_matched": 1,
+      "seconds": 28.47,
+      "tokens": 1510,
+      "rounds": 1,
+      "sql": [
+        "SELECT SUM(salary) AS total_payroll FROM employees LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-payroll-by-department",
+      "dataset": "hr",
+      "question": "What is the total salary cost per department?",
+      "passed": true,
+      "reason": "all 5 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 5,
+      "numbers_matched": 5,
+      "seconds": 33.26,
+      "tokens": 1609,
+      "rounds": 1,
+      "sql": [
+        "SELECT department, SUM(salary) AS total_salary FROM employees GROUP BY department LIMIT 10000"
+      ]
+    },
+    {
+      "id": "hr-distinct-job-titles",
+      "dataset": "hr",
+      "question": "How many distinct job titles are there?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 2,
+      "numbers_matched": 2,
+      "seconds": 29.06,
+      "tokens": 1499,
+      "rounds": 1,
+      "sql": [
+        "SELECT COUNT(DISTINCT job_title) FROM employees LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-completed-revenue",
+      "dataset": "shop",
+      "question": "What is the total amount of completed orders?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 1,
+      "numbers_matched": 1,
+      "seconds": 31.36,
+      "tokens": 1908,
+      "rounds": 1,
+      "sql": [
+        "SELECT SUM(orders.amount) AS total_amount FROM orders WHERE orders.status = 'completed' LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-orders-by-status",
+      "dataset": "shop",
+      "question": "How many orders are there in each status?",
+      "passed": true,
+      "reason": "all 3 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 28.76,
+      "tokens": 1888,
+      "rounds": 1,
+      "sql": [
+        "SELECT status, COUNT(*) AS order_count FROM orders GROUP BY status LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-revenue-by-category",
+      "dataset": "shop",
+      "question": "What is the total amount of completed orders by category?",
+      "passed": true,
+      "reason": "all 5 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 34.17,
+      "tokens": 2013,
+      "rounds": 1,
+      "sql": [
+        "SELECT category, SUM(amount) AS total_amount FROM orders WHERE status = 'completed' GROUP BY category LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-top-category",
+      "dataset": "shop",
+      "question": "Which category has the highest total amount of completed orders?",
+      "passed": true,
+      "reason": "Toys is listed first",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 38.43,
+      "tokens": 2043,
+      "rounds": 1,
+      "sql": [
+        "SELECT category, SUM(amount) AS total_amount FROM orders WHERE status = 'completed' GROUP BY category LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-avg-order-by-region",
+      "dataset": "shop",
+      "question": "What is the average order amount in each region, across all orders?",
+      "passed": true,
+      "reason": "all 4 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 52.75,
+      "tokens": 2175,
+      "rounds": 1,
+      "sql": [
+        "SELECT region, AVG(amount) AS avg_amount FROM orders GROUP BY region LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-refund-share",
+      "dataset": "shop",
+      "question": "What share of all orders were refunded?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 3,
+      "numbers_matched": 3,
+      "seconds": 33.65,
+      "tokens": 1934,
+      "rounds": 1,
+      "sql": [
+        "SELECT COUNT(*) AS total_refunded, COUNT(*) * 100.0 / (SELECT COUNT(*) FROM orders) AS refund_share FROM orders WHERE status = 'refunded' LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-customers-by-segment",
+      "dataset": "shop",
+      "question": "How many customers are in each segment?",
+      "passed": true,
+      "reason": "all 3 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 2,
+      "numbers_matched": 2,
+      "seconds": 30.2,
+      "tokens": 1883,
+      "rounds": 1,
+      "sql": [
+        "SELECT segment, COUNT(*) AS segment_count FROM customers GROUP BY segment LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-revenue-by-segment",
+      "dataset": "shop",
+      "question": "What is the total amount of completed orders for each customer segment?",
+      "passed": true,
+      "reason": "all 3 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 3,
+      "numbers_matched": 3,
+      "seconds": 34.23,
+      "tokens": 1987,
+      "rounds": 1,
+      "sql": [
+        "SELECT customers.segment, SUM(orders.amount) AS total_amount FROM customers JOIN orders ON customers.customer_id = orders.customer_id WHERE orders.status = 'completed' GROUP BY customers.segment LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-top-country",
+      "dataset": "shop",
+      "question": "Customers from which country placed the most orders?",
+      "passed": true,
+      "reason": "US is listed first",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 32.52,
+      "tokens": 1921,
+      "rounds": 1,
+      "sql": [
+        "SELECT customers.country, COUNT(orders.order_id) AS order_count FROM customers JOIN orders ON customers.customer_id = orders.customer_id GROUP BY customers.country ORDER BY order_count DESC LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-avg-completed-order",
+      "dataset": "shop",
+      "question": "What is the average amount of a completed order?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 1,
+      "numbers_matched": 1,
+      "seconds": 35.14,
+      "tokens": 1939,
+      "rounds": 1,
+      "sql": [
+        "SELECT AVG(orders.amount) AS avg_amount FROM orders WHERE orders.status = 'completed' LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-largest-order",
+      "dataset": "shop",
+      "question": "What is the largest single order amount?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 3,
+      "numbers_matched": 1,
+      "seconds": 35.72,
+      "tokens": 1924,
+      "rounds": 1,
+      "sql": [
+        "SELECT MAX(amount) AS max_amount FROM orders LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-orders-per-customer",
+      "dataset": "shop",
+      "question": "On average, how many orders has each customer who ordered placed?",
+      "passed": false,
+      "reason": "expected 6.66667, which is not in any result table",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 3,
+      "numbers_matched": 3,
+      "seconds": 30.52,
+      "tokens": 2085,
+      "rounds": 1,
+      "sql": [
+        "SELECT customer_id, COUNT(*) AS order_count FROM orders GROUP BY customer_id LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-cancelled-by-region",
+      "dataset": "shop",
+      "question": "How many cancelled orders are there in each region?",
+      "passed": true,
+      "reason": "all 4 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 0,
+      "numbers_matched": 0,
+      "seconds": 32.45,
+      "tokens": 1914,
+      "rounds": 1,
+      "sql": [
+        "SELECT region, COUNT(*) AS cancelled_count FROM orders WHERE status = 'cancelled' GROUP BY region LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-top-customer",
+      "dataset": "shop",
+      "question": "Which customer has spent the most on completed orders?",
+      "passed": true,
+      "reason": "42 is listed first",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 2,
+      "numbers_matched": 2,
+      "seconds": 51.56,
+      "tokens": 2138,
+      "rounds": 1,
+      "sql": [
+        "SELECT customers.customer_id, SUM(orders.amount) AS total_spent FROM customers JOIN orders ON customers.customer_id = orders.customer_id WHERE orders.status = 'completed' GROUP BY customers.customer_id ORDER BY total_spent DESC LIMIT 1"
+      ]
+    },
+    {
+      "id": "shop-revenue-uses-notes",
+      "dataset": "shop",
+      "question": "What is our total revenue?",
+      "passed": true,
+      "reason": "value found in a result cell",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 1,
+      "numbers_matched": 1,
+      "seconds": 29.26,
+      "tokens": 1892,
+      "rounds": 1,
+      "sql": [
+        "SELECT SUM(orders.amount) AS total_revenue FROM orders WHERE orders.status = 'completed' LIMIT 10000"
+      ]
+    },
+    {
+      "id": "shop-sales-by-region-uses-notes",
+      "dataset": "shop",
+      "question": "What are total sales by region?",
+      "passed": true,
+      "reason": "all 4 expected rows found",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 32.71,
+      "tokens": 1987,
+      "rounds": 1,
+      "sql": [
+        "SELECT region, SUM(amount) AS total_sales FROM orders WHERE status = 'completed' GROUP BY region LIMIT 10000"
+      ]
+    },
+    {
+      "id": "stat-salary-by-department",
+      "dataset": "hr",
+      "question": "Does salary really differ between departments, or could the differences be chance?",
+      "passed": true,
+      "reason": "Kruskal-Wallis test on department and salary, p matches the reference",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 5,
+      "numbers_matched": 4,
+      "seconds": 36.77,
+      "tokens": 2212,
+      "rounds": 1,
+      "sql": [
+        "SELECT department, salary FROM employees LIMIT 10000"
+      ]
+    },
+    {
+      "id": "stat-remote-vs-new-york-salary",
+      "dataset": "hr",
+      "question": "Is the salary difference between Remote and New York employees statistically significant?",
+      "passed": true,
+      "reason": "Mann-Whitney U test on location and salary, p matches the reference",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 5,
+      "numbers_matched": 5,
+      "seconds": 36.3,
+      "tokens": 2205,
+      "rounds": 1,
+      "sql": [
+        "SELECT location, salary FROM employees WHERE location IN ('Remote', 'New York') LIMIT 10000"
+      ]
+    },
+    {
+      "id": "stat-salary-performance-correlation",
+      "dataset": "hr",
+      "question": "Is salary significantly correlated with performance score?",
+      "passed": true,
+      "reason": "Pearson correlation on salary and performance_score, p matches the reference",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 8,
+      "numbers_matched": 6,
+      "seconds": 32.81,
+      "tokens": 2343,
+      "rounds": 1,
+      "sql": [
+        "SELECT salary, performance_score FROM employees LIMIT 10000"
+      ]
+    },
+    {
+      "id": "stat-region-status-association",
+      "dataset": "shop",
+      "question": "Is order status associated with region, or is any pattern just chance?",
+      "passed": true,
+      "reason": "Chi-square test of independence on region and status, p matches the reference",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 32.04,
+      "tokens": 2380,
+      "rounds": 1,
+      "sql": [
+        "SELECT region, status FROM orders LIMIT 10000"
+      ]
+    },
+    {
+      "id": "stat-segment-completed-amount",
+      "dataset": "shop",
+      "question": "Do completed order amounts differ significantly between customer segments?",
+      "passed": true,
+      "reason": "Kruskal-Wallis test on segment and amount, p matches the reference",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 4,
+      "numbers_matched": 4,
+      "seconds": 38.19,
+      "tokens": 2596,
+      "rounds": 1,
+      "sql": [
+        "SELECT c.segment, o.amount FROM orders AS o JOIN customers AS c ON o.customer_id = c.customer_id WHERE o.status = 'completed' LIMIT 10000"
+      ]
+    },
+    {
+      "id": "ambiguous-best-customers",
+      "dataset": "shop",
+      "question": "Who are our best customers?",
+      "passed": true,
+      "reason": "asked: Best by total amount or by number of orders?",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 0,
+      "numbers_matched": 0,
+      "seconds": 7.79,
+      "tokens": 663,
+      "rounds": 1,
+      "sql": []
+    },
+    {
+      "id": "ambiguous-top-performers",
+      "dataset": "hr",
+      "question": "Show me the top performers.",
+      "passed": true,
+      "reason": "asked: Top performers by what measure?",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 0,
+      "numbers_matched": 0,
+      "seconds": 7.22,
+      "tokens": 495,
+      "rounds": 1,
+      "sql": []
+    },
+    {
+      "id": "ambiguous-biggest-region",
+      "dataset": "shop",
+      "question": "Which region is the biggest?",
+      "passed": true,
+      "reason": "asked: Biggest by number of orders or by total amount?",
+      "used_fallback_plan": false,
+      "plan_issues": 0,
+      "errors": 0,
+      "numbers_checked": 0,
+      "numbers_matched": 0,
+      "seconds": 7.79,
+      "tokens": 664,
+      "rounds": 1,
+      "sql": []
+    }
+  ],
+  "summary": {
+    "cases": 39,
+    "passed": 37,
+    "accuracy": 0.9487,
+    "fallback_rate": 0.0,
+    "error_rate": 0.0,
+    "summary_numbers_matched": 0.9429,
+    "average_seconds": 32.6,
+    "revised_cases": 0,
+    "clarifying_questions": 3,
+    "total_tokens": 68500
+  }
+}

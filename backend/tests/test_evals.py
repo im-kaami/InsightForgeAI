@@ -18,39 +18,66 @@ from insightforge.evals import (
 SUITE = load_suite()
 
 
-def _agent_answering(answers: dict[str, str]) -> InsightForgeAgent:
+def _agent_answering(answers: dict[str, object]) -> InsightForgeAgent:
     def reply(messages):
         question = messages[-1]["content"]
+        answer = answers.get(question)
         if "too ambiguous" in messages[0]["content"]:
-            if answers[question] == "CLARIFY":
+            if answer == "CLARIFY":
                 return json.dumps(
                     {"ambiguous": True, "question": "Which measure?", "options": ["Revenue", "Orders"]}
                 )
             return json.dumps({"ambiguous": False})
         if "data-analysis planner" not in messages[0]["content"]:
             return "Done."
-        return json.dumps(
-            {
-                "steps": [
-                    {"name": "answer", "action": "sql", "query": answers[question]},
-                    {"name": "summary", "action": "summary"},
-                ]
-            }
-        )
+        test = answer if isinstance(answer, dict) else None
+        steps = [{"name": "answer", "action": "sql", "query": test["sql"] if test else answer}]
+        if test:
+            steps.append(
+                {"name": "test", "action": "test", "data_source": "answer"}
+                | {key: test[key] for key in ("method", "x", "y")}
+            )
+        return json.dumps({"steps": [*steps, {"name": "summary", "action": "summary"}]})
 
     return InsightForgeAgent(FakeLLMClient(reply), privacy_mode="full")
 
 
+def _reference(case) -> object:
+    if case.expect.type == "clarify":
+        return "CLARIFY"
+    if case.expect.type == "stat":
+        return case.expect.model_dump()
+    return case.expect.sql
+
+
 def test_every_reference_answer_passes_its_own_check():
-    answers = {
-        case.question: "CLARIFY" if case.expect.type == "clarify" else case.expect.sql for case in SUITE.cases
-    }
+    answers = {case.question: _reference(case) for case in SUITE.cases}
     report = run_suite(SUITE, lambda: _agent_answering(answers), "oracle")
     failures = [(case.id, case.reason) for case in report.cases if not case.passed]
     assert failures == []
     assert report.summary["accuracy"] == 1.0
     assert report.summary["clarifying_questions"] == 3
     assert len(report.cases) >= 30
+
+
+def test_stat_cases_need_the_right_method_columns_and_data():
+    case = next(case for case in SUITE.cases if case.id == "stat-segment-completed-amount")
+    right = case.expect.model_dump()
+    assert run_case(SUITE, case, _agent_answering({case.question: right})).passed
+    unfiltered = right | {"sql": right["sql"].replace(" WHERE o.status = 'completed'", "")}
+    wrong_data = run_case(SUITE, case, _agent_answering({case.question: unfiltered}))
+    assert not wrong_data.passed and "ran on the right columns but p =" in wrong_data.reason
+    with_region = right["sql"].replace("SELECT c.segment,", "SELECT c.segment, o.region,")
+    wrong_column = run_case(
+        SUITE, case, _agent_answering({case.question: right | {"sql": with_region, "x": "region"}})
+    )
+    assert wrong_column.reason == (
+        "expected compare_groups(segment, amount); ran compare_groups(region, amount)"
+    )
+    failed = run_case(SUITE, case, _agent_answering({case.question: right | {"method": "correlation"}}))
+    assert failed.reason == "the test step failed: Column 'segment' has no numeric values"
+    no_test = run_case(SUITE, case, _agent_answering({case.question: right["sql"]}))
+    assert not no_test.passed and no_test.reason == "no statistical test was run"
 
 
 def test_needless_and_missing_clarifying_questions_fail():

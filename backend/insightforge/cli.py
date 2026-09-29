@@ -7,7 +7,13 @@ from typing import Any
 
 from insightforge.config import get_settings
 from insightforge.core.agent import InsightForgeAgent
-from insightforge.core.artifacts import ErrorArtifact, PlotArtifact, TableArtifact, TextArtifact
+from insightforge.core.artifacts import (
+    ErrorArtifact,
+    PlotArtifact,
+    StatArtifact,
+    TableArtifact,
+    TextArtifact,
+)
 from insightforge.core.catalog import DataCatalog
 from insightforge.core.executor import truncation_note
 from insightforge.core.llm import build_llm, build_local_llm, llm_mode, offline_fake_llm, resolved_model
@@ -88,6 +94,11 @@ def _print_result(result: Any) -> None:
         elif isinstance(artifact, PlotArtifact):
             location = artifact.png_path or "PNG not rendered"
             print(f"\nPlot: {artifact.title or artifact.name} ({location})")
+        elif isinstance(artifact, StatArtifact):
+            print(f"\nTest: {artifact.name} ({artifact.test}, tested method)")
+            print(artifact.interpretation)
+            for line in [*artifact.checks, *artifact.cautions]:
+                print(f"- {line}")
         elif isinstance(artifact, ErrorArtifact):
             print(f"\nError: {artifact.name}: {artifact.message}")
         elif isinstance(artifact, TextArtifact):

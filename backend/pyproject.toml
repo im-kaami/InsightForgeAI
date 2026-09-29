@@ -29,6 +29,8 @@ dependencies = [
     "cryptography==50.0.1",
     "python-dotenv==1.2.3",
     "Markdown==3.10.3",
+    "scipy==1.17.1",
+    "statsmodels==0.15.0",
 ]
 
 [project.optional-dependencies]

@@ -1,6 +1,6 @@
 {
   "name": "insightforge-core",
-  "version": 3,
+  "version": 4,
   "datasets": {
     "hr": { "employees": "../tests/fixtures/hr.csv" },
     "shop": { "orders": "data/orders.csv", "customers": "data/customers.csv" }
@@ -272,6 +272,66 @@
         "type": "rows",
         "sql": "SELECT region, SUM(amount) FROM orders WHERE status = 'completed' GROUP BY 1",
         "keys": 1
+      }
+    },
+    {
+      "id": "stat-salary-by-department",
+      "dataset": "hr",
+      "question": "Does salary really differ between departments, or could the differences be chance?",
+      "expect": {
+        "type": "stat",
+        "method": "compare_groups",
+        "x": "department",
+        "y": "salary",
+        "sql": "SELECT department, salary FROM employees"
+      }
+    },
+    {
+      "id": "stat-remote-vs-new-york-salary",
+      "dataset": "hr",
+      "question": "Is the salary difference between Remote and New York employees statistically significant?",
+      "expect": {
+        "type": "stat",
+        "method": "compare_groups",
+        "x": "location",
+        "y": "salary",
+        "sql": "SELECT location, salary FROM employees WHERE location IN ('Remote', 'New York')"
+      }
+    },
+    {
+      "id": "stat-salary-performance-correlation",
+      "dataset": "hr",
+      "question": "Is salary significantly correlated with performance score?",
+      "expect": {
+        "type": "stat",
+        "method": "correlation",
+        "x": "salary",
+        "y": "performance_score",
+        "sql": "SELECT salary, performance_score FROM employees"
+      }
+    },
+    {
+      "id": "stat-region-status-association",
+      "dataset": "shop",
+      "question": "Is order status associated with region, or is any pattern just chance?",
+      "expect": {
+        "type": "stat",
+        "method": "compare_categories",
+        "x": "region",
+        "y": "status",
+        "sql": "SELECT region, status FROM orders"
+      }
+    },
+    {
+      "id": "stat-segment-completed-amount",
+      "dataset": "shop",
+      "question": "Do completed order amounts differ significantly between customer segments?",
+      "expect": {
+        "type": "stat",
+        "method": "compare_groups",
+        "x": "segment",
+        "y": "amount",
+        "sql": "SELECT c.segment, o.amount FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.status = 'completed'"
       }
     },
     {

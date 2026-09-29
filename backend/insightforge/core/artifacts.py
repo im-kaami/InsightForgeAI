@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from insightforge.core.checks import ResultFinding
 from insightforge.core.evidence import EvidenceItem, NumberCheck
 from insightforge.core.planner import Clarification, Plan
+from insightforge.core.stats import StatArtifact
 from insightforge.core.trace import TraceEvent
 
 
@@ -45,7 +46,7 @@ class ErrorArtifact(BaseModel):
 
 
 Artifact = Annotated[
-    TableArtifact | PlotArtifact | TextArtifact | ErrorArtifact, Field(discriminator="type")
+    TableArtifact | PlotArtifact | TextArtifact | ErrorArtifact | StatArtifact, Field(discriminator="type")
 ]
 
 

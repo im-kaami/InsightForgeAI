@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from insightforge.core.executor import truncation_note
+from insightforge.core.stats import format_p
 from insightforge.db.models import Artifact, Run
 
 
@@ -101,6 +102,9 @@ def render_markdown(run: Run, artifacts: list[Artifact]) -> str:
             )
             if payload.get("note"):
                 lines.append(f"_{_safe(payload['note'])}_")
+        elif artifact.type == "stat":
+            title, *details = _stat_lines(artifact.name, payload)
+            lines.extend([f"### {_safe(title)}", *[f"- {_safe(line)}" for line in details]])
     lines.extend(
         [
             "## Provenance",
@@ -116,6 +120,25 @@ def render_markdown(run: Run, artifacts: list[Artifact]) -> str:
         if step.get("query"):
             lines.append(_code_block(str(step["query"]), "sql"))
     return "\n\n".join(lines)
+
+
+def _stat_lines(name: str, payload: dict) -> list[str]:
+    p_value = float(payload.get("p_value", 1.0))
+    numbers = [f"p {format_p(p_value)}", f"n = {payload.get('n')}"]
+    if payload.get("p_adjusted") is not None:
+        numbers.append(f"adjusted p {format_p(float(payload['p_adjusted']))}")
+    if effect := payload.get("effect_size"):
+        numbers.append(f"{effect['name']} = {effect['value']:.3g} ({effect['magnitude']})")
+    if interval := payload.get("interval"):
+        numbers.append(f"95% CI for {interval['label']}: {interval['low']:.4g} to {interval['high']:.4g}")
+    return [
+        f"{name}: {payload.get('test')} (tested method)",
+        str(payload.get("interpretation", "")),
+        "; ".join(numbers),
+        *[f"Check: {line}" for line in payload.get("checks", [])],
+        *[f"Caution: {line}" for line in payload.get("cautions", [])],
+        *([str(payload["note"])] if payload.get("note") else []),
+    ]
 
 
 def _html_table(payload: dict, limit: int = 50) -> str:
@@ -173,6 +196,13 @@ def render_html(run: Run, artifacts: list[Artifact]) -> str:
                 sections.append("<p>(interactive chart in app)</p>")
             if payload.get("note"):
                 sections.append(f"<p>{_safe(payload['note'])}</p>")
+        elif artifact.type == "stat":
+            title, *details = _stat_lines(artifact.name, payload)
+            sections.append(
+                f"<h3>{_safe(title)}</h3><ul>"
+                + "".join(f"<li>{_safe(line)}</li>" for line in details)
+                + "</ul>"
+            )
     sections.extend(
         [
             "<h2>Provenance</h2>",

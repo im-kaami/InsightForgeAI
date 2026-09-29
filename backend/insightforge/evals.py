@@ -10,18 +10,22 @@ import pandas as pd
 from pydantic import BaseModel, Field
 
 from insightforge.core.agent import InsightForgeAgent
-from insightforge.core.artifacts import ErrorArtifact, RunResult, TableArtifact
+from insightforge.core.artifacts import ErrorArtifact, RunResult, StatArtifact, TableArtifact
 from insightforge.core.catalog import DataCatalog, _quote
 from insightforge.core.schema import DatasetNotes
+from insightforge.core.stats import TestMethod, run_test
 
 DEFAULT_SUITE = Path(__file__).resolve().parents[1] / "evals" / "suite.json"
 
 
 class Expectation(BaseModel):
-    type: Literal["value", "rows", "top", "clarify"]
+    type: Literal["value", "rows", "top", "clarify", "stat"]
     sql: str = "SELECT 1"
     keys: int = 1
     either_percent: bool = False
+    method: TestMethod | None = None
+    x: str | None = None
+    y: str | None = None
 
 
 class EvalCase(BaseModel):
@@ -145,6 +149,32 @@ def _native(value: Any) -> Any:
     return value.item() if hasattr(value, "item") else value
 
 
+def _score_stat(expect: Expectation, expected: pd.DataFrame, result: RunResult) -> tuple[bool, str]:
+    assert expect.method and expect.x and expect.y
+    reference = run_test("reference", expect.method, "reference", expect.x, expect.y, expected)
+    tests = [artifact for artifact in result.artifacts if isinstance(artifact, StatArtifact)]
+    if not tests:
+        failed = next(
+            (item for item in result.artifacts if isinstance(item, ErrorArtifact) and item.action == "test"),
+            None,
+        )
+        return False, f"the test step failed: {failed.message}" if failed else "no statistical test was run"
+    wanted = (expect.x, expect.y)
+    for test in tests:
+        columns = (test.x, test.y)
+        same_columns = columns == wanted or (expect.method != "compare_groups" and columns == wanted[::-1])
+        if test.method != expect.method or not same_columns:
+            continue
+        if math.isclose(test.p_value, reference.p_value, rel_tol=1e-6, abs_tol=1e-12):
+            return True, f"{test.test} on {test.x} and {test.y}, p matches the reference"
+        return False, (
+            f"{test.test} ran on the right columns but p = {test.p_value:.4g}, "
+            f"expected {reference.p_value:.4g}"
+        )
+    found = ", ".join(f"{test.method}({test.x}, {test.y})" for test in tests)
+    return False, f"expected {expect.method}({expect.x}, {expect.y}); ran {found}"
+
+
 def score(case: EvalCase, expected: pd.DataFrame, result: RunResult) -> tuple[bool, str]:
     if case.expect.type == "clarify":
         if result.clarification:
@@ -152,6 +182,8 @@ def score(case: EvalCase, expected: pd.DataFrame, result: RunResult) -> tuple[bo
         return False, "answered without asking a clarifying question"
     if result.clarification:
         return False, f"asked a needless clarifying question: {result.clarification.question}"
+    if case.expect.type == "stat":
+        return _score_stat(case.expect, expected, result)
     tables = [artifact for artifact in result.artifacts if isinstance(artifact, TableArtifact)]
     if not tables:
         return False, "no result tables"

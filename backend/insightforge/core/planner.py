@@ -12,6 +12,7 @@ from insightforge.core.llm import LLMClient, LLMResponse, describe_error, llm_mo
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
 from insightforge.core.schema import DatasetNotes, SchemaInfo, TableInfo, is_identifier, notes_block
+from insightforge.core.stats import TestMethod
 from insightforge.core.summarizer import pipe_table
 from insightforge.core.trace import Tracer, model_label, prompt_chars
 
@@ -61,7 +62,16 @@ class SummaryStep(BaseModel):
     focus: str = ""
 
 
-Step = Annotated[SqlStep | PlotStep | SummaryStep, Field(discriminator="action")]
+class StatStep(BaseModel):
+    name: str
+    action: Literal["test"] = "test"
+    method: TestMethod
+    data_source: str
+    x: str
+    y: str
+
+
+Step = Annotated[SqlStep | PlotStep | SummaryStep | StatStep, Field(discriminator="action")]
 
 
 class Plan(BaseModel):
@@ -111,6 +121,16 @@ PLAN_JSON_SCHEMA: dict[str, Any] = {
                         ["kind", "data_source", "x"],
                     ),
                     _object("summary", {"focus": {"type": "string"}}, []),
+                    _object(
+                        "test",
+                        {
+                            "method": {"enum": list(get_args(TestMethod))},
+                            "data_source": {"type": "string"},
+                            "x": {"type": "string"},
+                            "y": {"type": "string"},
+                        },
+                        ["method", "data_source", "x", "y"],
+                    ),
                 ]
             },
         }
@@ -146,6 +166,53 @@ Examples, for a schema with sales(amount, deal_id, rep) and reps(rep, tenure_yea
 The schema is:
 """
 
+STAT_CUES = re.compile(
+    r"\b(significan\w*|statistic\w*|chance|random\w*|noise|coinciden\w*|really|correlat\w*|"
+    r"associat\w*|relationship|p-?values?|hypothes\w*)\b",
+    re.IGNORECASE,
+)
+STAT_CHOICE_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "test": {"type": "boolean"},
+        "method": {"enum": list(get_args(TestMethod))},
+        "x": {"type": "string"},
+        "y": {"type": "string"},
+        "sql": {"type": "string"},
+    },
+    "required": ["test"],
+}
+STAT_CHOICE_PROMPT = """You decide whether a data question asks for a statistical test: whether a difference,
+association or relationship is real, statistically significant, or could be chance. Descriptive questions
+(what is the average, which is highest, how many, how do values differ) do NOT need a test.
+Respond only with JSON {"test": false} or
+{"test": true, "method": str, "x": str, "y": str, "sql": str}, where:
+- method "compare_groups": x = group column, y = numeric measure;
+  method "compare_categories": x and y = two category columns;
+  method "correlation": x and y = two numeric columns.
+- sql is one DuckDB SELECT returning ONE ROW PER RECORD (no GROUP BY, no aggregates) with exactly the
+  columns x and y, plus any joins and filters the question implies. Use only listed tables and columns.
+
+- If x and y are in different tables, JOIN them on their shared key column.
+
+Examples, for a schema with sales(rep_id, region, amount, deals, status) and reps(rep_id, team):
+- "Which region has the highest total amount?" -> {"test": false}
+- "How does the average amount differ by region?" -> {"test": false}
+- "Does amount really differ between regions?" -> {"test": true, "method": "compare_groups", "x": "region",
+  "y": "amount", "sql": "SELECT region, amount FROM sales"}
+- "Is the amount difference between East and West significant?" -> {"test": true, "method": "compare_groups",
+  "x": "region", "y": "amount", "sql": "SELECT region, amount FROM sales WHERE region IN ('East', 'West')"}
+- "Are amount and deals correlated?" -> {"test": true, "method": "correlation", "x": "amount", "y": "deals",
+  "sql": "SELECT amount, deals FROM sales"}
+- "Is status associated with region?" -> {"test": true, "method": "compare_categories", "x": "region",
+  "y": "status", "sql": "SELECT region, status FROM sales"}
+- "Do closed amounts differ significantly between teams?" -> {"test": true, "method": "compare_groups",
+  "x": "team", "y": "amount", "sql": "SELECT r.team, s.amount FROM sales s JOIN reps r ON s.rep_id = r.rep_id
+  WHERE s.status = 'closed'"}
+
+The schema is:
+"""
+
 REVIEW_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -164,6 +231,15 @@ PLOT_STEP_FORMAT = (
     '"y": <column from that step, omit for histogram/pie counts or a single box plot>, '
     '"color": <optional column; for heatmap, the value summed in each cell>, "title": str}\n'
     "  Use box for spread by group, heatmap for two dimensions, and area for totals over time."
+)
+TEST_STEP_FORMAT = (
+    '- {"name": str, "action": "test", "method": "compare_groups"|"compare_categories"|"correlation", '
+    '"data_source": <earlier sql step returning ONE ROW PER RECORD, not aggregated>, "x": <column>, '
+    '"y": <column>}\n'
+    "  Use a test step when the question asks whether a difference, association or relationship is real, "
+    "significant or just chance. compare_groups: x = group column, y = numeric measure. compare_categories: "
+    "x and y = two category columns. correlation: x and y = two numeric columns. Tested code runs the "
+    "statistics; never compute p-values in SQL."
 )
 
 
@@ -233,7 +309,7 @@ def validate_plan(raw: Any, schema: SchemaInfo, problems: list[str] | None = Non
         if step.name in names:
             problems.append(f"Step {index + 1} reuses the name {step.name!r}; step names must be unique")
             continue
-        if isinstance(step, PlotStep) and step.data_source not in sql_names:
+        if isinstance(step, PlotStep | StatStep) and step.data_source not in sql_names:
             problems.append(
                 f"Step {index + 1} ({step.name}) uses data_source {step.data_source!r}, which is not "
                 "the name of an earlier sql step"
@@ -436,6 +512,9 @@ Return a single JSON object with a top-level "steps" array, for example:
             self.last_clarification = self._check_ambiguity(goal, schema_text)
             if self.last_clarification is not None:
                 return Plan(steps=[])
+        if not getattr(self.llm, "offline", False) and STAT_CUES.search(goal):
+            if chosen := self._choose_test(goal, schema_text, memory):
+                return chosen
         messages = [{"role": "system", "content": system}, {"role": "user", "content": goal}]
         try:
             raw, _ = self._chat_json("plan", messages, PLAN_JSON_SCHEMA)
@@ -460,6 +539,26 @@ Return a single JSON object with a top-level "steps" array, for example:
                 "Planner falling back to profiling plan: %s", self.last_fallback_reason
             )
             return fallback_plan(goal, schema)
+
+    def _choose_test(self, goal: str, schema_text: str, memory: ConversationMemory | None) -> Plan | None:
+        system = STAT_CHOICE_PROMPT + schema_text
+        if memory and memory.turns:
+            system += f"\n\nConversation so far:\n{self.policy.memory_text(memory)}"
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": goal}]
+        try:
+            raw, _ = self._chat_json("test_choice", messages, STAT_CHOICE_JSON_SCHEMA)
+            if not (isinstance(raw, dict) and raw.get("test") is True):
+                return None
+            rows = SqlStep(name="rows", query=str(raw["sql"]))
+            test = StatStep(
+                name="significance_test", method=raw["method"], data_source="rows", x=raw["x"], y=raw["y"]
+            )
+            if not rows.query.strip() or not test.x or not test.y:
+                return None
+            return Plan(steps=[rows, test, SummaryStep(name="summary", focus="whether the result is real")])
+        except Exception as exc:
+            logging.getLogger("insightforge").warning("Test choice skipped: %s", describe_error(exc))
+        return None
 
     def _check_ambiguity(self, goal: str, schema_text: str) -> Clarification | None:
         messages = [
@@ -536,6 +635,7 @@ Decide whether the results directly answer the question.
 Step formats:
 {SQL_STEP_FORMAT}
 {PLOT_STEP_FORMAT}
+{TEST_STEP_FORMAT}
 Respond ONLY with JSON."""
         checks = "\n".join(f"- {finding}" for finding in findings) or "- none"
         user = (
