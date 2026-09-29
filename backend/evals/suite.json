@@ -1,6 +1,6 @@
 {
   "name": "insightforge-core",
-  "version": 8,
+  "version": 9,
   "datasets": {
     "hr": {
       "employees": "../tests/fixtures/hr.csv"
@@ -11,6 +11,9 @@
     },
     "experiment": {
       "users": "data/experiment.csv"
+    },
+    "churn": {
+      "subscribers": "data/subscribers.csv"
     }
   },
   "notes": {
@@ -515,6 +518,18 @@
         "type": "rows",
         "keys": 1,
         "sql": "SELECT department, MEDIAN(salary) FROM employees GROUP BY 1"
+      }
+    },
+    {
+      "id": "predict-churn-factors",
+      "dataset": "churn",
+      "question": "Which factors predict whether a subscriber churns? Build a model.",
+      "expect": {
+        "type": "stat",
+        "method": "predict",
+        "x": "signup_date",
+        "y": "churned",
+        "sql": "SELECT * FROM subscribers"
       }
     },
     {

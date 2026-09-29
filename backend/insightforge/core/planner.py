@@ -237,6 +237,38 @@ Examples, for a schema with sales(region, amount):
 
 The schema is:
 """
+PREDICT_CUES = re.compile(
+    r"\b(predict (?:which|whether|who|if|how likely)|what predicts|factors? (?:that )?predict\w*|"
+    r"build (?:a |an )?(?:prediction |predictive |machine learning )?model|machine learning|"
+    r"likely to (?:churn|buy|leave|convert|cancel|default|renew|respond))\b",
+    re.IGNORECASE,
+)
+PREDICT_CHOICE_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "predict": {"type": "boolean"},
+        "target": {"type": "string"},
+        "features": {"type": "array", "items": {"type": "string"}, "maxItems": 30},
+        "date": {"type": "string"},
+        "sql": {"type": "string"},
+    },
+    "required": ["predict"],
+}
+PREDICT_CHOICE_PROMPT = """You decide whether a data question asks to predict an outcome per record (which
+customers will churn, what price an item will sell for) or which factors predict it. Forecasts of a total
+over time are NOT predictions here. Respond only with JSON {"predict": false} or
+{"predict": true, "target": str, "features": [candidate predictor columns, or [] for all], "date": str,
+"sql": str}, where target is the column to predict, date is a date column for a time-ordered check (or ""),
+and sql is one DuckDB SELECT returning ONE ROW PER RECORD with the target, the predictors and the date
+column. Do not include columns that are only known after the outcome. Use only listed tables and columns.
+
+Examples, for a schema with subscribers(id, signup_date, plan, monthly_fee, tenure_months, churned):
+- "How many subscribers churned?" -> {"predict": false}
+- "Which factors predict whether a subscriber churns?" -> {"predict": true, "target": "churned",
+  "features": [], "date": "signup_date", "sql": "SELECT * FROM subscribers"}
+
+The schema is:
+"""
 _ENTITIES = r"(?:customers|users|clients|buyers|accounts|employees|products)"
 SEGMENT_CUES = re.compile(
     rf"\b(cluster\w*|personas?|(?:segment|group|split|divide|sort) (?:our |the |my |all )?{_ENTITIES}|"
@@ -702,6 +734,7 @@ Return a single JSON object with a top-level "steps" array, for example:
         if not getattr(self.llm, "offline", False):
             routes = (
                 *((("python", PYTHON_CUES),) if self.sandbox_enabled else ()),
+                ("predict", PREDICT_CUES),
                 ("change", CHANGE_CUES),
                 ("series", SERIES_CUES),
                 ("segments", SEGMENT_CUES),
@@ -737,7 +770,7 @@ Return a single JSON object with a top-level "steps" array, for example:
 
     def _choose_method(
         self,
-        kind: Literal["test", "change", "series", "segments", "python"],
+        kind: Literal["test", "change", "series", "segments", "python", "predict"],
         goal: str,
         schema_text: str,
         memory: ConversationMemory | None,
@@ -748,6 +781,7 @@ Return a single JSON object with a top-level "steps" array, for example:
             "series": (SERIES_CHOICE_PROMPT, SERIES_CHOICE_JSON_SCHEMA, "series"),
             "segments": (SEGMENT_CHOICE_PROMPT, SEGMENT_CHOICE_JSON_SCHEMA, "segments"),
             "python": (PYTHON_CHOICE_PROMPT, PYTHON_CHOICE_JSON_SCHEMA, "python"),
+            "predict": (PREDICT_CHOICE_PROMPT, PREDICT_CHOICE_JSON_SCHEMA, "predict"),
         }[kind]
         system = prompt + schema_text
         if memory and memory.turns:
@@ -785,6 +819,18 @@ Return a single JSON object with a top-level "steps" array, for example:
                     horizon=max(1, min(int(horizon), 36)) if isinstance(horizon, int | float) else None,
                 )
                 focus = "the forecast and its range" if method == "forecast" else "which periods are unusual"
+            elif kind == "predict":
+                step = StatStep(
+                    name="prediction_model",
+                    method="predict",
+                    data_source="rows",
+                    x=str(raw.get("date") or ""),
+                    y=str(raw.get("target") or ""),
+                    features=[str(column) for column in raw.get("features") or []][:30],
+                )
+                if not step.y or not rows.query.strip():
+                    return None
+                return Plan(steps=[rows, step, SummaryStep(name="summary", focus="how well it predicts")])
             elif kind == "segments":
                 features = [str(column) for column in raw.get("features") or []][:8]
                 k = raw.get("k")

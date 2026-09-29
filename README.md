@@ -185,6 +185,17 @@ Choose the mode under the chat box, or send `"mode": "deep"` to `POST /api/sessi
 - **A/B tests** (`ab_test`): a sample-ratio check flags splits far from 50/50. A 0/1 outcome gets a two-proportion z-test; a numeric outcome gets Welch's t-test, with CUPED variance reduction when a pre-experiment covariate is named. Results report the difference, a 95% CI, and relative lift.
 - **Robustness check:** every group comparison, correlation, regression, and A/B test is re-run under reasonable alternatives: the other test family, the top and bottom 1% of values removed, no controls, no CUPED, or capped outcomes. The result says whether the conclusion holds in each, and a caution appears when it doesn't.
 
+**Predict this column** (`predict`, Phase 3a). "Which factors predict whether a subscriber churns?" builds a prediction model with scikit-learn:
+
+- **Problem type:** classification or regression, detected from the target.
+- **Columns left out:** constants, ID-like columns, high-cardinality text, and dates.
+- **Leakage:** any column that predicts the target almost perfectly (98% purity or |r| > 0.98) is dropped and named as possible leakage.
+- **Holdout:** a time-ordered 80/20 split when a date column is given, otherwise a seeded random split (stratified for classes).
+- **Leaderboard:** a baseline against linear or logistic regression, random forest, and gradient boosting, chosen by cross-validation on the training part only and scored on held-out rows (balanced accuracy or mean absolute error, plus ROC AUC or R²).
+- **Explanation:** permutation importance for the best model.
+
+Cautions cover small data, a model barely better than the baseline, and "importance is not cause".
+
 **Python sandbox (free-form code).** With Docker running and `SANDBOX_ENABLED=true`, questions that explicitly ask for Python, a simulation, or a bootstrap ("Using Python, compute the median salary for each department") get a `python` step. The AI writes code that reads the SQL result as `df` and assigns `result`. The code runs in the `insightforge-sandbox:1` container:
 
 - no network

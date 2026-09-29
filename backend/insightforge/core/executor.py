@@ -188,6 +188,8 @@ class Executor:
         try:
             if truncated and guarded.full_sql:
                 columns = ", ".join(f'"{column.replace(chr(34), chr(34) * 2)}"' for column in needed)
+                if step.method == "predict" and not step.features:
+                    columns = "*"
                 frame = self._source_query(guarded.full_sql)(
                     f"SELECT {columns} FROM src USING SAMPLE reservoir({STAT_MAX_ROWS} ROWS) REPEATABLE (42)"
                 )

@@ -24,6 +24,7 @@ export type StatResult = {
   checks?: string[];
   cautions?: string[];
   robustness?: { analysis: string; p_value: number; holds: boolean }[];
+  importance?: { feature: string; importance: number; spread: number }[];
   interpretation: string;
   note?: string | null;
 };
@@ -37,6 +38,7 @@ const STATISTIC_LABELS: Record<string, string> = {
   forecast: "Next period forecast",
   anomalies: "Unusual periods",
   segments: "Groups found",
+  predict: "Held-out score",
 };
 const pText = (value: number) => (value < 0.001 ? "< 0.001" : `= ${value.toFixed(3)}`);
 
@@ -138,6 +140,18 @@ export function StatResultCard({ result }: { result: StatResult }) {
             ))}
           </ul>
         </details>
+      )}
+      {(result.importance ?? []).length > 0 && (
+        <div data-testid="importance" className="text-xs">
+          <p className="font-medium">What the model relies on (permutation importance)</p>
+          <ul className="mt-0.5 space-y-0.5">
+            {(result.importance ?? []).map((row) => (
+              <li key={row.feature}>
+                {row.feature}: {number(row.importance)} (± {number(row.spread)})
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {(result.robustness ?? []).length > 0 && (
         <div data-testid="robustness" className="text-xs">

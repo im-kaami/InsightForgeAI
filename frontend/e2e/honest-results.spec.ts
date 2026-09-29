@@ -377,6 +377,52 @@ test("statistical test results show the method, verdict, effect size and caution
   await expect(code).toContainText("network none, 512m memory, 30 s limit");
   await expect(code).toContainText("result = df.groupby('department')['salary'].median()");
   await expect(code.getByRole("row")).toHaveCount(2);
+
+  await page.unroute(/\/api\/sessions\/[a-f0-9]+$/);
+  await page.route(/\/api\/sessions\/[a-f0-9]+$/, async (route) => {
+    const response = await route.fetch(upstream(route));
+    const session = await response.json();
+    const model = {
+      ...cutOffRun(session.id),
+      goal: "Which factors predict whether a subscriber churns?",
+      summary: "Tenure matters most.",
+      warnings: [],
+      verification_status: "exploratory",
+      provenance: { privacy_mode: "local" },
+      artifacts: [
+        {
+          type: "stat",
+          name: "prediction_model",
+          trust: "tested method",
+          method: "predict",
+          test: "Prediction model (logistic regression)",
+          data_source: "rows",
+          x: "signup_date",
+          y: "churned",
+          n: 1200,
+          statistic: 0.734,
+          p_value: null,
+          groups: [
+            { model: "baseline (most common class)", cv_score: 0.5, holdout_score: 0.5 },
+            { model: "logistic regression", cv_score: 0.72, holdout_score: 0.734 },
+          ],
+          importance: [{ feature: "tenure_months", importance: 0.12, spread: 0.02 }],
+          checks: ["Check: time-based: trained on the earliest 80% by signup_date."],
+          cautions: [
+            "cancellation_reason predicted churned almost perfectly and were left out; they may only be known after the outcome (leakage).",
+          ],
+          interpretation: "The logistic regression model predicts churned on held-out rows.",
+        },
+      ],
+    };
+    await route.fulfill({ response, json: { ...session, runs: [model] } });
+  });
+  await page.reload();
+  const prediction = page.getByTestId("stat-result");
+  await expect(prediction).toContainText("Tested method: Prediction model (logistic regression)");
+  await expect(prediction).toContainText("Held-out score");
+  await expect(prediction.getByTestId("importance")).toContainText("tenure_months: 0.12");
+  await expect(prediction).toContainText("(leakage)");
 });
 
 test("charts switch type in the browser and the health check lists findings", async ({ page }) => {

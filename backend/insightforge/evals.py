@@ -185,6 +185,17 @@ def _score_stat(expect: Expectation, expected: pd.DataFrame, result: RunResult) 
         )
         return False, f"the test step failed: {failed.message}" if failed else "no statistical test was run"
     wanted = (expect.x, expect.y)
+    if expect.method == "predict":
+        models = [test for test in tests if test.method == "predict"]
+        if not models:
+            return False, f"expected predict({expect.y}); ran {', '.join(test.method for test in tests)}"
+        model = models[0]
+        if model.y != expect.y:
+            return False, f"predicted {model.y!r} instead of {expect.y!r}"
+        top, wanted_top = (model.importance or [{}])[0].get("feature"), reference.importance[0]["feature"]
+        if top == wanted_top:
+            return True, f"{model.test} on {model.y}; top predictor {top} matches the reference"
+        return False, f"{model.test} ran but its top predictor is {top}, expected {wanted_top}"
     symmetric = expect.method in {"compare_categories", "correlation"}
     for test in tests:
         columns = (test.x, test.y)

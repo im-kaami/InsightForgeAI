@@ -10,6 +10,7 @@ from statsmodels.stats.multitest import multipletests
 from statsmodels.stats.oneway import anova_oneway
 
 from insightforge.core.experiments import ExperimentError, ab_test, conclusion_holds
+from insightforge.core.predict import PredictError, predict
 from insightforge.core.segments import SegmentError, segments
 from insightforge.core.timeseries import SeriesError, anomalies, forecast
 
@@ -23,6 +24,7 @@ TestMethod = Literal[
     "anomalies",
     "segments",
     "ab_test",
+    "predict",
 ]
 
 ALPHA = 0.05
@@ -66,6 +68,7 @@ class StatArtifact(BaseModel):
     horizon: int | None = None
     features: list[str] = Field(default_factory=list)
     robustness: list[dict[str, Any]] = Field(default_factory=list)
+    importance: list[dict[str, Any]] = Field(default_factory=list)
     history: list[dict[str, Any]] = Field(default_factory=list)
     statistic: float | None = None
     p_value: float | None = None
@@ -770,9 +773,12 @@ def run_test(
             result = segments(frame, features, k)
         elif method == "ab_test":
             result = ab_test(frame, x, y, controls[0] if controls else None)
+        elif method == "predict":
+            result = predict(frame, y, features, x or None)
+            features = result.pop("features")
         else:
             result = METHODS[method](frame, x, y)
-    except (SeriesError, SegmentError, ExperimentError) as error:
+    except (SeriesError, SegmentError, ExperimentError, PredictError) as error:
         raise StatError(str(error)) from error
     n = result.pop("n")
     effect, p_value = result.get("effect_size"), result.get("p_value")
@@ -803,7 +809,7 @@ def run_test(
         y=y,
         by=by if method == "explain_change" else [],
         controls=controls if method in {"regression", "ab_test"} else [],
-        features=features if method == "segments" else [],
+        features=features if method in {"segments", "predict"} else [],
         robustness=robustness,
         n=n,
         note=note,
