@@ -30,6 +30,8 @@ class Expectation(BaseModel):
     controls: list[str] = Field(default_factory=list)
     grain: Literal["day", "week", "month"] | None = None
     horizon: int | None = None
+    features: list[str] = Field(default_factory=list)
+    k: int | None = None
 
 
 class EvalCase(BaseModel):
@@ -166,6 +168,8 @@ def _score_stat(expect: Expectation, expected: pd.DataFrame, result: RunResult) 
         controls=expect.controls,
         grain=expect.grain,
         horizon=expect.horizon,
+        features=expect.features,
+        k=expect.k,
     )
     tests = [artifact for artifact in result.artifacts if isinstance(artifact, StatArtifact)]
     if not tests:
@@ -179,7 +183,7 @@ def _score_stat(expect: Expectation, expected: pd.DataFrame, result: RunResult) 
     for test in tests:
         columns = (test.x, test.y)
         same_columns = (
-            expect.method == "explain_change"
+            expect.method in {"explain_change", "segments"}
             or columns == wanted
             or (symmetric and columns == wanted[::-1])
         )

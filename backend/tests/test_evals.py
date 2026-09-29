@@ -35,7 +35,10 @@ def _agent_answering(answers: dict[str, object]) -> InsightForgeAgent:
         if test:
             steps.append(
                 {"name": "test", "action": "test", "data_source": "answer"}
-                | {key: test[key] for key in ("method", "x", "y", "by", "controls", "grain", "horizon")}
+                | {
+                    key: test[key]
+                    for key in ("method", "x", "y", "by", "controls", "grain", "horizon", "features", "k")
+                }
             )
         return json.dumps({"steps": [*steps, {"name": "summary", "action": "summary"}]})
 

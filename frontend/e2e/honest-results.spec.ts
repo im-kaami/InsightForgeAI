@@ -258,6 +258,10 @@ test("statistical test results show the method, verdict, effect size and caution
             { location: "Remote", n: 13, mean: 77923, median: 72000, sd: 9000 },
           ],
           pairwise: [],
+          robustness: [
+            { analysis: "Welch's t-test on means", p_value: 0.03, holds: true },
+            { analysis: "without the top and bottom 1% of values", p_value: 0.08, holds: false },
+          ],
           checks: ["Normality: not met for Remote, so a rank-based test compares typical values."],
           cautions: ["Small groups (New York, Remote have fewer than 10 values)."],
           interpretation: "Median salary is 85,000 for New York and 72,000 for Remote.",
@@ -277,6 +281,12 @@ test("statistical test results show the method, verdict, effect size and caution
   await expect(card).toContainText("Median salary is 85,000 for New York and 72,000 for Remote.");
   await expect(card.getByRole("row")).toHaveCount(3);
   await expect(card).toContainText("Small groups (New York, Remote have fewer than 10 values).");
+  await expect(card.getByTestId("robustness")).toContainText(
+    "Holds: Welch's t-test on means (p = 0.030)",
+  );
+  await expect(card.getByTestId("robustness")).toContainText(
+    "Changes: without the top and bottom 1% of values (p = 0.080)",
+  );
 
   await page.unroute(/\/api\/sessions\/[a-f0-9]+$/);
   await page.route(/\/api\/sessions\/[a-f0-9]+$/, async (route) => {

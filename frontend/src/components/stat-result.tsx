@@ -23,6 +23,7 @@ export type StatResult = {
   }[];
   checks?: string[];
   cautions?: string[];
+  robustness?: { analysis: string; p_value: number; holds: boolean }[];
   interpretation: string;
   note?: string | null;
 };
@@ -35,6 +36,7 @@ const STATISTIC_LABELS: Record<string, string> = {
   explain_change: "Total change",
   forecast: "Next period forecast",
   anomalies: "Unusual periods",
+  segments: "Groups found",
 };
 const pText = (value: number) => (value < 0.001 ? "< 0.001" : `= ${value.toFixed(3)}`);
 
@@ -136,6 +138,18 @@ export function StatResultCard({ result }: { result: StatResult }) {
             ))}
           </ul>
         </details>
+      )}
+      {(result.robustness ?? []).length > 0 && (
+        <div data-testid="robustness" className="text-xs">
+          <p className="font-medium">Robustness check</p>
+          <ul className="mt-0.5 space-y-0.5">
+            {(result.robustness ?? []).map((row) => (
+              <li key={row.analysis}>
+                {row.holds ? "Holds" : "Changes"}: {row.analysis} (p {pText(row.p_value)})
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       <ul className="list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
         {(result.checks ?? []).map((check) => (

@@ -223,17 +223,14 @@ def test_significance_questions_get_a_dedicated_test_choice(schema):
     planner = Planner(llm, privacy_mode="schema_only")
     plan = planner.plan("Is the salary difference between departments significant?", schema)
     assert [step.action for step in plan.steps] == ["sql", "test", "summary"]
-    assert plan.steps[1].model_dump() == {
+    step = plan.steps[1].model_dump()
+    assert {key: step[key] for key in ("name", "action", "method", "data_source", "x", "y")} == {
         "name": "significance_test",
         "action": "test",
         "method": "compare_groups",
         "data_source": "rows",
         "x": "department",
         "y": "salary",
-        "by": [],
-        "controls": [],
-        "grain": None,
-        "horizon": None,
     }
     assert len(llm.calls) == 1 and "Engineering" not in llm.calls[0][0]["content"]
 

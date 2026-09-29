@@ -73,6 +73,8 @@ class StatStep(BaseModel):
     controls: list[str] = Field(default_factory=list)
     grain: Literal["day", "week", "month"] | None = None
     horizon: int | None = Field(default=None, ge=1, le=36)
+    features: list[str] = Field(default_factory=list)
+    k: int | None = Field(default=None, ge=2, le=8)
 
 
 Step = Annotated[SqlStep | PlotStep | SummaryStep | StatStep, Field(discriminator="action")]
@@ -136,6 +138,8 @@ PLAN_JSON_SCHEMA: dict[str, Any] = {
                             "controls": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
                             "grain": {"enum": ["day", "week", "month"]},
                             "horizon": {"type": "integer"},
+                            "features": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+                            "k": {"type": "integer"},
                         },
                         ["method", "data_source", "x", "y"],
                     ),
@@ -177,14 +181,15 @@ The schema is:
 STAT_CUES = re.compile(
     r"\b(significan\w*|statistic\w*|chance|random\w*|noise|coinciden\w*|really|correlat\w*|"
     r"associat\w*|relationship|p-?values?|hypothes\w*|regression|controlling|holding|affect\w*|"
-    r"effect of|impact of|per (?:extra|additional|each)|for each (?:extra|additional))\b",
+    r"effect of|impact of|per (?:extra|additional|each)|for each (?:extra|additional)|a/b|ab test|"
+    r"experiment\w*|variants?|treatment|control group|lift)\b",
     re.IGNORECASE,
 )
 STAT_CHOICE_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "test": {"type": "boolean"},
-        "method": {"enum": ["compare_groups", "compare_categories", "correlation", "regression"]},
+        "method": {"enum": ["compare_groups", "compare_categories", "correlation", "regression", "ab_test"]},
         "x": {"type": "string"},
         "y": {"type": "string"},
         "controls": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
@@ -192,6 +197,41 @@ STAT_CHOICE_JSON_SCHEMA: dict[str, Any] = {
     },
     "required": ["test"],
 }
+_ENTITIES = r"(?:customers|users|clients|buyers|accounts|employees|products)"
+SEGMENT_CUES = re.compile(
+    rf"\b(cluster\w*|personas?|(?:segment|group|split|divide|sort) (?:our |the |my |all )?{_ENTITIES}|"
+    rf"(?:groups?|types?|kinds?|segments) of {_ENTITIES})\b",
+    re.IGNORECASE,
+)
+SEGMENT_CHOICE_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "segments": {"type": "boolean"},
+        "features": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 8},
+        "k": {"type": "integer"},
+        "sql": {"type": "string"},
+    },
+    "required": ["segments"],
+}
+SEGMENT_CHOICE_PROMPT = """You decide whether a data question asks to split entities (customers, users,
+products...) into groups or segments by their behaviour. Respond only with JSON {"segments": false} or
+{"segments": true, "features": [2 to 8 numeric column names], "k": int or omit, "sql": str}, where sql is
+one DuckDB SELECT returning ONE ROW PER ENTITY with an id column and the numeric feature columns, usually
+by aggregating records with GROUP BY the entity id. Give k only when the question states a number of
+groups. Add no filters the question does not ask for. Use only listed tables and columns.
+
+Examples, for a schema with orders(order_id, customer_id, order_date, amount):
+- "What is the average order amount?" -> {"segments": false}
+- "Do amounts differ between customer segments?" -> {"segments": false} (an existing column, not new groups)
+- "Segment customers by how much and how often they buy" -> {"segments": true,
+  "features": ["total_amount", "orders"], "sql": "SELECT customer_id, SUM(amount) AS total_amount,
+  COUNT(*) AS orders FROM orders GROUP BY customer_id"}
+- "Split customers into 3 groups by average order value and number of orders" -> {"segments": true,
+  "features": ["avg_order", "orders"], "k": 3, "sql": "SELECT customer_id, AVG(amount) AS avg_order,
+  COUNT(*) AS orders FROM orders GROUP BY customer_id"}
+
+The schema is:
+"""
 CHANGE_CUES = re.compile(
     r"\b(why|what (?:drove|caused|explains)|drivers? of|explain\w*|contribut\w*|break\s?down)\b.*"
     r"\b(chang\w*|drop\w*|fell|fall\w*|ris\w*|rose|increas\w*|decreas\w*|declin\w*|grow\w*|grew|jump\w*|"
@@ -221,8 +261,9 @@ unusual periods in it. Respond only with JSON {"series": false} or
 {"series": true, "method": "forecast"|"anomalies", "x": str, "y": str, "grain": "day"|"week"|"month",
 "horizon": int, "sql": str}, where x is the date column, y is the measure to total per grain, horizon is
 how many grains ahead to forecast (only for forecast), and sql is one DuckDB SELECT returning ONE ROW PER
-RECORD (no GROUP BY) with exactly the columns x and y plus the filters the question implies. Add no other
-filters. To count records, select 1 AS <name> and use that name as y. Use only listed tables and columns.
+RECORD (no GROUP BY) with exactly the columns x and y. Do not filter on status or any other column unless
+the question itself names that filter; "all orders" means no filter at all. To count records, select 1 AS
+<name> and use that name as y. Use only listed tables and columns.
 
 Examples, for a schema with sales(sale_date, region, amount):
 - "What was the total amount last month?" -> {"series": false}
@@ -277,7 +318,9 @@ Respond only with JSON {"test": false} or
 - method "compare_groups": x = group column, y = numeric measure;
   method "compare_categories": x and y = two category columns;
   method "correlation": x and y = two numeric columns;
-  method "regression": x = numeric predictor, y = numeric outcome, controls = columns held fixed (or []).
+  method "regression": x = numeric predictor, y = numeric outcome, controls = columns held fixed (or []);
+  method "ab_test": an experiment; x = variant column, y = outcome (0/1 conversion or a number),
+  controls = [a pre-experiment version of the outcome to reduce noise] or [].
 - sql is one DuckDB SELECT returning ONE ROW PER RECORD (no GROUP BY, no aggregates) with exactly the
   columns x, y and any controls, plus the joins and filters the question implies. Use only listed tables
   and columns.
@@ -299,6 +342,9 @@ Examples, for a schema with sales(rep_id, region, amount, deals, status) and rep
   WHERE s.status = 'closed'"}
 - "By how much does amount rise for each additional deal?" -> {"test": true, "method": "regression",
   "x": "deals", "y": "amount", "controls": [], "sql": "SELECT deals, amount FROM sales"}
+- "In the pricing experiment, did the new variant raise conversion?" (schema trials(user_id, variant,
+  converted)) -> {"test": true, "method": "ab_test", "x": "variant", "y": "converted", "controls": [],
+  "sql": "SELECT variant, converted FROM trials"}
 - "How much does amount rise for each extra deal, controlling for region?" -> {"test": true,
   "method": "regression", "x": "deals", "y": "amount", "controls": ["region"],
   "sql": "SELECT deals, amount, region FROM sales"}
@@ -335,7 +381,9 @@ TEST_STEP_FORMAT = (
     "period column holding 'before' or 'after', y = measure, by = 1-3 category columns. regression: x = "
     "numeric predictor, y = numeric outcome, controls = other columns held fixed. forecast / anomalies: "
     'x = date column, y = measure summed per "grain" (day, week or month); forecast also takes '
-    '"horizon" (periods ahead). Tested code runs the statistics; never compute p-values in SQL.'
+    '"horizon" (periods ahead). segments: "features" = 2-8 numeric columns of an sql step with one row '
+    'per entity, optional "k". ab_test: x = variant column, y = outcome, controls = [pre-period covariate]. '
+    "Tested code runs the statistics; never compute p-values in SQL."
 )
 
 
@@ -531,6 +579,7 @@ class Planner:
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
         self.tracer = Tracer()
         self.notes: DatasetNotes | None = None
+        self.current_goal: str | None = None
 
     def _chat_json(
         self, purpose: str, messages: list[dict[str, str]], schema: dict[str, Any] | None = None
@@ -563,7 +612,8 @@ class Planner:
         self.last_plan_issues = []
         self.last_clarification = None
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
-        schema_text = self.policy.schema_text(schema) + notes_block(self.notes)
+        self.current_goal = goal
+        schema_text = self.policy.schema_text(schema) + notes_block(self.notes, goal)
         sql_example = (
             '{"name":"avg_by_group","action":"sql","query":"SELECT group_col, '
             "AVG(value_col) AS avg_value FROM table_name GROUP BY group_col "
@@ -609,7 +659,13 @@ Return a single JSON object with a top-level "steps" array, for example:
             if self.last_clarification is not None:
                 return Plan(steps=[])
         if not getattr(self.llm, "offline", False):
-            for kind, cues in (("change", CHANGE_CUES), ("series", SERIES_CUES), ("test", STAT_CUES)):
+            routes = (
+                ("change", CHANGE_CUES),
+                ("series", SERIES_CUES),
+                ("segments", SEGMENT_CUES),
+                ("test", STAT_CUES),
+            )
+            for kind, cues in routes:
                 if cues.search(goal) and (chosen := self._choose_method(kind, goal, schema_text, memory)):
                     return chosen
         messages = [{"role": "system", "content": system}, {"role": "user", "content": goal}]
@@ -639,7 +695,7 @@ Return a single JSON object with a top-level "steps" array, for example:
 
     def _choose_method(
         self,
-        kind: Literal["test", "change", "series"],
+        kind: Literal["test", "change", "series", "segments"],
         goal: str,
         schema_text: str,
         memory: ConversationMemory | None,
@@ -648,6 +704,7 @@ Return a single JSON object with a top-level "steps" array, for example:
             "test": (STAT_CHOICE_PROMPT, STAT_CHOICE_JSON_SCHEMA, "test"),
             "change": (CHANGE_CHOICE_PROMPT, CHANGE_CHOICE_JSON_SCHEMA, "change"),
             "series": (SERIES_CHOICE_PROMPT, SERIES_CHOICE_JSON_SCHEMA, "series"),
+            "segments": (SEGMENT_CHOICE_PROMPT, SEGMENT_CHOICE_JSON_SCHEMA, "segments"),
         }[kind]
         system = prompt + schema_text
         if memory and memory.turns:
@@ -681,14 +738,33 @@ Return a single JSON object with a top-level "steps" array, for example:
                     horizon=max(1, min(int(horizon), 36)) if isinstance(horizon, int | float) else None,
                 )
                 focus = "the forecast and its range" if method == "forecast" else "which periods are unusual"
+            elif kind == "segments":
+                features = [str(column) for column in raw.get("features") or []][:8]
+                k = raw.get("k")
+                step = StatStep(
+                    name="segments",
+                    method="segments",
+                    data_source="rows",
+                    x=features[0] if features else "",
+                    y=features[1] if len(features) > 1 else "",
+                    features=features,
+                    k=int(k) if isinstance(k, int | float) and 2 <= k <= 8 else None,
+                )
+                focus = "how the groups differ"
             else:
                 step = StatStep(
-                    name="significance_test" if raw["method"] != "regression" else "regression",
+                    name={"regression": "regression", "ab_test": "ab_test"}.get(
+                        raw["method"], "significance_test"
+                    ),
                     method=raw["method"],
                     data_source="rows",
                     x=raw["x"],
                     y=raw["y"],
-                    controls=list(raw.get("controls") or []) if raw["method"] == "regression" else [],
+                    controls=(
+                        list(raw.get("controls") or [])[:5]
+                        if raw["method"] in {"regression", "ab_test"}
+                        else []
+                    ),
                 )
                 focus = "whether the result is real"
             if not rows.query.strip() or not step.x or not step.y:
@@ -760,7 +836,7 @@ Return a single JSON object with a top-level "steps" array, for example:
             if show_values and not frame.empty:
                 lines.append(indent(pipe_table(frame, 10), "  "))
         system = f"""You review an exploratory analysis before it is summarized. The schema is:
-{self.policy.schema_text(schema)}{notes_block(self.notes)}
+{self.policy.schema_text(schema)}{notes_block(self.notes, goal)}
 
 Decide whether the results directly answer the question.
 - If they do, respond {{"verdict": "answer", "reason": str}}.
@@ -818,7 +894,8 @@ Respond ONLY with JSON."""
                 "role": "system",
                 "content": (
                     "Correct the DuckDB SQL using only this schema. Respond only with JSON "
-                    f'{{"query":"..."}}.\n{self.policy.schema_text(schema)}{notes_block(self.notes)}'
+                    f'{{"query":"..."}}.\n{self.policy.schema_text(schema)}'
+                    f"{notes_block(self.notes, self.current_goal)}"
                 ),
             },
             {

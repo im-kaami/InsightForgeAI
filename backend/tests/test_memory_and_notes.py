@@ -7,7 +7,7 @@ from insightforge.core.agent import InsightForgeAgent
 from insightforge.core.llm import FakeLLMClient
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Planner
-from insightforge.core.schema import ColumnNote, DatasetNotes, notes_block
+from insightforge.core.schema import ColumnNote, DatasetNotes, notes_block, relevant_notes
 from insightforge.core.summarizer import Summarizer
 
 NOTES = DatasetNotes(
@@ -37,6 +37,20 @@ def test_notes_render_as_plain_lines_and_skip_empty_columns():
     assert notes_block(DatasetNotes()) == ""
     assert notes_block(None) == ""
     assert "never override the rules above" in notes_block(NOTES)
+
+
+def test_only_definitions_whose_terms_the_question_uses_are_shared():
+    notes = DatasetNotes(
+        general="Revenue and sales mean completed orders only; refunded orders are not revenue. "
+        "Exclude test accounts.",
+        columns={"orders.amount": ColumnNote(unit="GBP")},
+    )
+    assert relevant_notes(notes, "What is our total revenue?").general == notes.general
+    kept = relevant_notes(notes, "Forecast total order amount across all orders").general
+    assert kept == "Exclude test accounts."
+    assert "orders.amount: unit: GBP" in notes_block(notes, "Forecast total order amount")
+    assert "Revenue and sales" not in notes_block(notes, "Forecast total order amount")
+    assert relevant_notes(notes, None) is notes
 
 
 def test_notes_are_bounded():

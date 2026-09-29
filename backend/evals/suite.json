@@ -1,16 +1,29 @@
 {
   "name": "insightforge-core",
-  "version": 6,
+  "version": 7,
   "datasets": {
-    "hr": { "employees": "../tests/fixtures/hr.csv" },
-    "shop": { "orders": "data/orders.csv", "customers": "data/customers.csv" }
+    "hr": {
+      "employees": "../tests/fixtures/hr.csv"
+    },
+    "shop": {
+      "orders": "data/orders.csv",
+      "customers": "data/customers.csv"
+    },
+    "experiment": {
+      "users": "data/experiment.csv"
+    }
   },
   "notes": {
     "shop": {
       "general": "Revenue and sales mean the amount of completed orders only; refunded and cancelled orders are not revenue.",
       "columns": {
-        "orders.amount": { "description": "Order value", "unit": "GBP" },
-        "orders.status": { "description": "One of completed, refunded or cancelled" }
+        "orders.amount": {
+          "description": "Order value",
+          "unit": "GBP"
+        },
+        "orders.status": {
+          "description": "One of completed, refunded or cancelled"
+        }
       }
     }
   },
@@ -19,13 +32,19 @@
       "id": "hr-headcount",
       "dataset": "hr",
       "question": "How many employees are there?",
-      "expect": { "type": "value", "sql": "SELECT COUNT(*) FROM employees" }
+      "expect": {
+        "type": "value",
+        "sql": "SELECT COUNT(*) FROM employees"
+      }
     },
     {
       "id": "hr-avg-salary",
       "dataset": "hr",
       "question": "What is the average salary?",
-      "expect": { "type": "value", "sql": "SELECT AVG(salary) FROM employees" }
+      "expect": {
+        "type": "value",
+        "sql": "SELECT AVG(salary) FROM employees"
+      }
     },
     {
       "id": "hr-avg-salary-by-department",
@@ -60,7 +79,10 @@
       "id": "hr-max-salary",
       "dataset": "hr",
       "question": "What is the highest salary?",
-      "expect": { "type": "value", "sql": "SELECT MAX(salary) FROM employees" }
+      "expect": {
+        "type": "value",
+        "sql": "SELECT MAX(salary) FROM employees"
+      }
     },
     {
       "id": "hr-min-salary-engineering",
@@ -95,7 +117,10 @@
       "id": "hr-remote-count",
       "dataset": "hr",
       "question": "How many employees work remotely?",
-      "expect": { "type": "value", "sql": "SELECT COUNT(*) FROM employees WHERE location = 'Remote'" }
+      "expect": {
+        "type": "value",
+        "sql": "SELECT COUNT(*) FROM employees WHERE location = 'Remote'"
+      }
     },
     {
       "id": "hr-top-performance-department",
@@ -110,13 +135,19 @@
       "id": "hr-salary-above-100k",
       "dataset": "hr",
       "question": "How many employees earn more than 100,000?",
-      "expect": { "type": "value", "sql": "SELECT COUNT(*) FROM employees WHERE salary > 100000" }
+      "expect": {
+        "type": "value",
+        "sql": "SELECT COUNT(*) FROM employees WHERE salary > 100000"
+      }
     },
     {
       "id": "hr-total-payroll",
       "dataset": "hr",
       "question": "What is the total payroll, the sum of all salaries?",
-      "expect": { "type": "value", "sql": "SELECT SUM(salary) FROM employees" }
+      "expect": {
+        "type": "value",
+        "sql": "SELECT SUM(salary) FROM employees"
+      }
     },
     {
       "id": "hr-payroll-by-department",
@@ -132,13 +163,19 @@
       "id": "hr-distinct-job-titles",
       "dataset": "hr",
       "question": "How many distinct job titles are there?",
-      "expect": { "type": "value", "sql": "SELECT COUNT(DISTINCT job_title) FROM employees" }
+      "expect": {
+        "type": "value",
+        "sql": "SELECT COUNT(DISTINCT job_title) FROM employees"
+      }
     },
     {
       "id": "shop-completed-revenue",
       "dataset": "shop",
       "question": "What is the total amount of completed orders?",
-      "expect": { "type": "value", "sql": "SELECT SUM(amount) FROM orders WHERE status = 'completed'" }
+      "expect": {
+        "type": "value",
+        "sql": "SELECT SUM(amount) FROM orders WHERE status = 'completed'"
+      }
     },
     {
       "id": "shop-orders-by-status",
@@ -222,13 +259,19 @@
       "id": "shop-avg-completed-order",
       "dataset": "shop",
       "question": "What is the average amount of a completed order?",
-      "expect": { "type": "value", "sql": "SELECT AVG(amount) FROM orders WHERE status = 'completed'" }
+      "expect": {
+        "type": "value",
+        "sql": "SELECT AVG(amount) FROM orders WHERE status = 'completed'"
+      }
     },
     {
       "id": "shop-largest-order",
       "dataset": "shop",
       "question": "What is the largest single order amount?",
-      "expect": { "type": "value", "sql": "SELECT MAX(amount) FROM orders" }
+      "expect": {
+        "type": "value",
+        "sql": "SELECT MAX(amount) FROM orders"
+      }
     },
     {
       "id": "shop-orders-per-customer",
@@ -262,7 +305,10 @@
       "id": "shop-revenue-uses-notes",
       "dataset": "shop",
       "question": "What is our total revenue?",
-      "expect": { "type": "value", "sql": "SELECT SUM(amount) FROM orders WHERE status = 'completed'" }
+      "expect": {
+        "type": "value",
+        "sql": "SELECT SUM(amount) FROM orders WHERE status = 'completed'"
+      }
     },
     {
       "id": "shop-sales-by-region-uses-notes",
@@ -343,7 +389,9 @@
         "method": "explain_change",
         "x": "period",
         "y": "amount",
-        "by": ["region"],
+        "by": [
+          "region"
+        ],
         "sql": "SELECT CASE WHEN month(order_date) = 5 THEN 'before' ELSE 'after' END AS period, amount, region FROM orders WHERE month(order_date) IN (5, 6)"
       }
     },
@@ -356,7 +404,9 @@
         "method": "explain_change",
         "x": "period",
         "y": "orders",
-        "by": ["region"],
+        "by": [
+          "region"
+        ],
         "sql": "SELECT CASE WHEN month(order_date) <= 6 THEN 'before' ELSE 'after' END AS period, 1 AS orders, region FROM orders"
       }
     },
@@ -381,14 +431,16 @@
         "method": "regression",
         "x": "performance_score",
         "y": "salary",
-        "controls": ["department"],
+        "controls": [
+          "department"
+        ],
         "sql": "SELECT performance_score, salary, department FROM employees"
       }
     },
     {
       "id": "forecast-monthly-amount",
       "dataset": "shop",
-      "question": "Forecast the total order amount per month for the next 3 months.",
+      "question": "Forecast the total order amount across all orders per month for the next 3 months.",
       "expect": {
         "type": "stat",
         "method": "forecast",
@@ -402,7 +454,7 @@
     {
       "id": "anomalies-weekly-amount",
       "dataset": "shop",
-      "question": "Were there any unusual weeks in total order amount?",
+      "question": "Were there any unusual weeks in total order amount across all orders?",
       "expect": {
         "type": "stat",
         "method": "anomalies",
@@ -413,22 +465,71 @@
       }
     },
     {
+      "id": "segments-customers-spend-orders",
+      "dataset": "shop",
+      "question": "Segment our customers by their total order amount and number of orders.",
+      "expect": {
+        "type": "stat",
+        "method": "segments",
+        "x": "total_amount",
+        "y": "orders",
+        "features": [
+          "total_amount",
+          "orders"
+        ],
+        "sql": "SELECT customer_id, SUM(amount) AS total_amount, COUNT(*) AS orders FROM orders GROUP BY customer_id"
+      }
+    },
+    {
+      "id": "ab-conversion",
+      "dataset": "experiment",
+      "question": "In the checkout experiment, did the new checkout variant significantly change the conversion rate?",
+      "expect": {
+        "type": "stat",
+        "method": "ab_test",
+        "x": "variant",
+        "y": "converted",
+        "sql": "SELECT variant, converted FROM users"
+      }
+    },
+    {
+      "id": "ab-revenue-cuped",
+      "dataset": "experiment",
+      "question": "Did the new checkout variant raise revenue per user in the experiment? Use pre-experiment revenue to reduce noise.",
+      "expect": {
+        "type": "stat",
+        "method": "ab_test",
+        "x": "variant",
+        "y": "revenue",
+        "controls": [
+          "pre_revenue"
+        ],
+        "sql": "SELECT variant, revenue, pre_revenue FROM users"
+      }
+    },
+    {
       "id": "ambiguous-best-customers",
       "dataset": "shop",
       "question": "Who are our best customers?",
-      "expect": { "type": "clarify" }
+      "expect": {
+        "type": "clarify"
+      }
     },
     {
       "id": "ambiguous-top-performers",
       "dataset": "hr",
       "question": "Show me the top performers.",
-      "expect": { "type": "clarify" }
+      "expect": {
+        "type": "clarify"
+      }
     },
     {
       "id": "ambiguous-biggest-region",
       "dataset": "shop",
       "question": "Which region is the biggest?",
-      "expect": { "type": "clarify" }
+      "expect": {
+        "type": "clarify"
+      }
     }
   ]
 }

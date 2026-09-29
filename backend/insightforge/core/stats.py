@@ -9,6 +9,8 @@ from scipy import stats
 from statsmodels.stats.multitest import multipletests
 from statsmodels.stats.oneway import anova_oneway
 
+from insightforge.core.experiments import ExperimentError, ab_test, conclusion_holds
+from insightforge.core.segments import SegmentError, segments
 from insightforge.core.timeseries import SeriesError, anomalies, forecast
 
 TestMethod = Literal[
@@ -19,6 +21,8 @@ TestMethod = Literal[
     "regression",
     "forecast",
     "anomalies",
+    "segments",
+    "ab_test",
 ]
 
 ALPHA = 0.05
@@ -60,6 +64,8 @@ class StatArtifact(BaseModel):
     controls: list[str] = Field(default_factory=list)
     grain: str | None = None
     horizon: int | None = None
+    features: list[str] = Field(default_factory=list)
+    robustness: list[dict[str, Any]] = Field(default_factory=list)
     history: list[dict[str, Any]] = Field(default_factory=list)
     statistic: float | None = None
     p_value: float | None = None
@@ -665,6 +671,75 @@ METHODS = {
 }
 
 
+def _trimmed(frame: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    keep = pd.Series(True, index=frame.index)
+    for column in columns:
+        values = pd.to_numeric(frame[column], errors="coerce")
+        low, high = values.quantile(0.01), values.quantile(0.99)
+        keep &= values.between(low, high) | values.isna()
+    return frame[keep]
+
+
+def _alternatives(
+    method: str, frame: pd.DataFrame, x: str, y: str, controls: list[str], result: dict[str, Any]
+) -> list[tuple[str, float, float]]:
+    alternatives: list[tuple[str, float, float]] = []
+    if method == "compare_groups":
+        data = pd.DataFrame({"g": frame[x], "v": pd.to_numeric(frame[y], errors="coerce")}).dropna()
+        samples = [part["v"].to_numpy() for _, part in data.groupby("g", sort=True) if len(part) >= 2]
+        rank_based = result["test"] in {"Mann-Whitney U test", "Kruskal-Wallis test"}
+        if len(samples) == 2:
+            a, b = samples
+            if rank_based:
+                p_value = float(stats.ttest_ind(a, b, equal_var=False).pvalue)
+                label, sign = "Welch's t-test on means", float(np.mean(a) - np.mean(b))
+            else:
+                p_value = float(stats.mannwhitneyu(a, b, alternative="two-sided").pvalue)
+                label, sign = "rank-based Mann-Whitney test", float(np.median(a) - np.median(b))
+        else:
+            if rank_based:
+                p_value = float(anova_oneway(samples, use_var="unequal").pvalue)
+                label = "Welch's ANOVA on means"
+            else:
+                p_value = float(stats.kruskal(*samples).pvalue)
+                label = "rank-based Kruskal-Wallis test"
+            sign = 1.0
+        alternatives.append((label, p_value, sign))
+        trimmed = compare_groups(_trimmed(frame, [y]), x, y)
+        first, *rest = trimmed["groups"]
+        trimmed_sign = first["mean"] - rest[0]["mean"] if len(rest) == 1 else 1.0
+        alternatives.append(("without the top and bottom 1% of values", trimmed["p_value"], trimmed_sign))
+    elif method == "correlation":
+        pearson, spearman = result["groups"][0], result["groups"][1]
+        other = spearman if result["test"] == "Pearson correlation" else pearson
+        label = "Spearman rank correlation" if other is spearman else "Pearson correlation"
+        alternatives.append((label, other["p_value"], other["value"]))
+        trimmed = correlation(_trimmed(frame, [x, y]), x, y)
+        alternatives.append(
+            ("without the top and bottom 1% of values", trimmed["p_value"], trimmed["statistic"])
+        )
+    elif method == "regression":
+        trimmed = regression(_trimmed(frame, [y]), x, y, controls)
+        alternatives.append(
+            ("without the top and bottom 1% of outcomes", trimmed["p_value"], trimmed["statistic"])
+        )
+        if controls:
+            simple = regression(frame, x, y, [])
+            alternatives.append(("without the controls", simple["p_value"], simple["statistic"]))
+    elif method == "ab_test":
+        clipped = frame.copy()
+        values = pd.to_numeric(clipped[y], errors="coerce")
+        if not set(values.dropna().unique()) <= {0.0, 1.0}:
+            clipped[y] = values.clip(values.quantile(0.01), values.quantile(0.99))
+            capped = ab_test(clipped, x, y, controls[0] if controls else None)
+            alternatives.append(("with outcomes capped at the 1st and 99th percentiles", capped["p_value"],
+                                 capped["statistic"]))
+        if controls:
+            plain = ab_test(frame, x, y, None)
+            alternatives.append(("without CUPED", plain["p_value"], plain["statistic"]))
+    return alternatives
+
+
 def run_test(
     name: str,
     method: TestMethod,
@@ -677,8 +752,10 @@ def run_test(
     controls: list[str] | None = None,
     grain: str | None = None,
     horizon: int | None = None,
+    features: list[str] | None = None,
+    k: int | None = None,
 ) -> StatArtifact:
-    by, controls = list(by or []), list(controls or [])
+    by, controls, features = list(by or []), list(controls or []), list(features or [])
     try:
         if method == "explain_change":
             result = explain_change(frame, x, y, by)
@@ -688,17 +765,36 @@ def run_test(
             result = forecast(frame, x, y, grain, horizon)
         elif method == "anomalies":
             result = anomalies(frame, x, y, grain)
+        elif method == "segments":
+            features = features or [column for column in (x, y) if column]
+            result = segments(frame, features, k)
+        elif method == "ab_test":
+            result = ab_test(frame, x, y, controls[0] if controls else None)
         else:
             result = METHODS[method](frame, x, y)
-    except SeriesError as error:
+    except (SeriesError, SegmentError, ExperimentError) as error:
         raise StatError(str(error)) from error
     n = result.pop("n")
     effect, p_value = result.get("effect_size"), result.get("p_value")
-    if p_value is not None and p_value >= ALPHA and effect and effect.magnitude in {"medium", "large"}:
+    magnitude = effect.magnitude if isinstance(effect, EffectSize) else (effect or {}).get("magnitude")
+    if p_value is not None and p_value >= ALPHA and magnitude in {"medium", "large"}:
         result["cautions"].append(
             "The observed effect is sizeable, but there is not enough data to rule out chance; "
             "more data would settle it."
         )
+    robustness: list[dict[str, Any]] = []
+    if p_value is not None and method in {"compare_groups", "correlation", "regression", "ab_test"}:
+        try:
+            alternatives = _alternatives(method, frame, x, y, controls, result)
+        except Exception:
+            alternatives = []
+        if alternatives:
+            sign = result.get("statistic") or 1.0
+            robustness, message, holds = conclusion_holds(p_value, sign, alternatives)
+            result["checks"].append(message)
+            if not holds:
+                changed = ", ".join(row["analysis"] for row in robustness if not row["holds"])
+                result["cautions"].append(f"The conclusion changes {changed}; treat it as fragile.")
     return StatArtifact(
         name=name,
         method=method,
@@ -706,7 +802,9 @@ def run_test(
         x=x,
         y=y,
         by=by if method == "explain_change" else [],
-        controls=controls if method == "regression" else [],
+        controls=controls if method in {"regression", "ab_test"} else [],
+        features=features if method == "segments" else [],
+        robustness=robustness,
         n=n,
         note=note,
         **result,

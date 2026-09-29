@@ -143,7 +143,9 @@ class Executor:
 
     def _retry_test_data(self, state: ExecutionState, step: StatStep, error: StatError) -> Artifact | None:
         guarded = state.sources[step.data_source][0]
-        columns = ", ".join(dict.fromkeys([step.x, step.y, *step.by, *step.controls]))
+        columns = ", ".join(
+            dict.fromkeys(c for c in [step.x, step.y, *step.by, *step.controls, *step.features] if c)
+        )
         hint = (
             f"Question: {state.goal}\nThe tested method {step.method} could not use this query's result. "
             f"Return one row per record with the columns {columns} and only the filters the question states."
@@ -167,7 +169,9 @@ class Executor:
         started = time.perf_counter()
         guarded, truncated, full_row_count = state.sources[step.data_source]
         note = None
-        needed = dict.fromkeys([step.x, step.y, *step.by, *step.controls])
+        needed = dict.fromkeys(
+            column for column in [step.x, step.y, *step.by, *step.controls, *step.features] if column
+        )
         try:
             if truncated and guarded.full_sql:
                 columns = ", ".join(f'"{column.replace(chr(34), chr(34) * 2)}"' for column in needed)
@@ -191,6 +195,8 @@ class Executor:
                 controls=step.controls,
                 grain=step.grain,
                 horizon=step.horizon,
+                features=step.features,
+                k=step.k,
             )
         except Exception as error:
             self.tracer.record(

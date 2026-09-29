@@ -1,3 +1,4 @@
+import re
 from typing import Annotated
 
 from pydantic import BaseModel, Field
@@ -29,7 +30,40 @@ class DatasetNotes(BaseModel):
         return "\n".join(lines)
 
 
-def notes_block(notes: DatasetNotes | None) -> str:
+_DEFINING = re.compile(r"\b(means?|is|are|refers? to|stands? for)\b", re.IGNORECASE)
+_FILLER = {"the", "and", "or", "of", "a", "an", "all", "our", "any", "only", "not", "for", "in", "to"}
+
+
+def _stem(word: str) -> str:
+    word = word.lower()
+    return word[:-1] if len(word) > 3 and word.endswith("s") else word
+
+
+def relevant_notes(notes: DatasetNotes | None, question: str | None) -> DatasetNotes | None:
+    if notes is None or not question:
+        return notes
+    def words(text: str) -> set[str]:
+        return {_stem(word) for word in re.findall(r"[A-Za-z]+", text)} - _FILLER
+
+    asked = words(question)
+    clauses = [clause for clause in re.split(r"(?<=[.;])\s+|\n+", notes.general.strip()) if clause.strip()]
+    subjects: dict[int, list[set[str]]] = {}
+    for index, clause in enumerate(clauses):
+        if match := _DEFINING.search(clause):
+            options = re.split(r",|\band\b|\bor\b|/", clause[: match.start()], flags=re.IGNORECASE)
+            subjects[index] = [terms for option in options if (terms := words(option))]
+
+    def matches(index: int, vocabulary: set[str]) -> bool:
+        return any(terms <= vocabulary for terms in subjects[index])
+
+    kept = {index for index in range(len(clauses)) if not subjects.get(index) or matches(index, asked)}
+    defined = set().union(*(terms for index in kept for terms in subjects.get(index, [])))
+    kept |= {index for index in subjects if words(clauses[index]) & defined}
+    return notes.model_copy(update={"general": " ".join(clauses[index] for index in sorted(kept))})
+
+
+def notes_block(notes: DatasetNotes | None, question: str | None = None) -> str:
+    notes = relevant_notes(notes, question)
     text = notes.to_prompt() if notes else ""
     if not text:
         return ""
