@@ -1,4 +1,5 @@
 import math
+import re
 from typing import Any, Literal
 
 import numpy as np
@@ -8,7 +9,17 @@ from scipy import stats
 from statsmodels.stats.multitest import multipletests
 from statsmodels.stats.oneway import anova_oneway
 
-TestMethod = Literal["compare_groups", "compare_categories", "correlation"]
+from insightforge.core.timeseries import SeriesError, anomalies, forecast
+
+TestMethod = Literal[
+    "compare_groups",
+    "compare_categories",
+    "correlation",
+    "explain_change",
+    "regression",
+    "forecast",
+    "anomalies",
+]
 
 ALPHA = 0.05
 NORMAL_ENOUGH_N = 30
@@ -45,8 +56,13 @@ class StatArtifact(BaseModel):
     x: str
     y: str
     n: int
+    by: list[str] = Field(default_factory=list)
+    controls: list[str] = Field(default_factory=list)
+    grain: str | None = None
+    horizon: int | None = None
+    history: list[dict[str, Any]] = Field(default_factory=list)
     statistic: float | None = None
-    p_value: float
+    p_value: float | None = None
     p_adjusted: float | None = None
     effect_size: EffectSize | None = None
     interval: Interval | None = None
@@ -58,7 +74,9 @@ class StatArtifact(BaseModel):
     note: str | None = None
 
     def key_table(self) -> pd.DataFrame:
-        row: dict[str, Any] = {"test": self.test, "n": self.n, "p_value": self.p_value}
+        row: dict[str, Any] = {"test": self.test, "n": self.n}
+        if self.p_value is not None:
+            row["p_value"] = self.p_value
         if self.statistic is not None:
             row["statistic"] = self.statistic
         if self.p_adjusted is not None:
@@ -410,6 +428,236 @@ def correlation(frame: pd.DataFrame, first: str, second: str) -> dict[str, Any]:
     }
 
 
+
+def _period_order(labels: list[Any]) -> tuple[Any, Any, str | None]:
+    lowered = {str(label).strip().lower(): label for label in labels}
+    if set(lowered) == {"before", "after"}:
+        return lowered["before"], lowered["after"], None
+    for convert in (pd.to_datetime, pd.to_numeric):
+        try:
+            values = list(convert(pd.Series([str(label) for label in labels])))
+        except (ValueError, TypeError):
+            continue
+        return (labels[0], labels[1], None) if values[0] <= values[1] else (labels[1], labels[0], None)
+    first, second = sorted(labels, key=str)
+    return first, second, f"Period order was assumed alphabetical: {first} before {second}."
+
+
+def _change_table(old: pd.DataFrame, new: pd.DataFrame, column: str) -> pd.DataFrame:
+    table = pd.DataFrame(
+        {
+            "before": old.groupby(column)["value"].sum(),
+            "after": new.groupby(column)["value"].sum(),
+            "rows_before": old.groupby(column)["value"].size(),
+            "rows_after": new.groupby(column)["value"].size(),
+        }
+    ).fillna(0.0)
+    if len(table) > MAX_CATEGORIES:
+        raise StatError(f"{column} has {len(table)} values; break changes down by at most {MAX_CATEGORIES}")
+    table["change"] = table["after"] - table["before"]
+    mean_before = (table["before"] / table["rows_before"]).where(table["rows_before"] > 0)
+    mean_after = (table["after"] / table["rows_after"]).where(table["rows_after"] > 0)
+    mean_before, mean_after = mean_before.fillna(mean_after), mean_after.fillna(mean_before)
+    share_before, share_after = table["rows_before"] / len(old), table["rows_after"] / len(new)
+    table["mix_effect"] = (share_after - share_before) * (mean_before + mean_after) / 2
+    table["rate_effect"] = (mean_after - mean_before) * (share_before + share_after) / 2
+    return table.reindex(table["change"].abs().sort_values(ascending=False).index)
+
+
+def explain_change(frame: pd.DataFrame, period: str, measure: str, by: list[str]) -> dict[str, Any]:
+    if not by:
+        raise StatError("Explaining a change needs at least one column to break it down by")
+    if len(by) > 3:
+        raise StatError("Break a change down by at most 3 columns")
+    counted = measure not in frame.columns and re.fullmatch(r"\d+(\.\d+)?", measure.strip()) is not None
+    values = pd.Series(float(measure), index=frame.index) if counted else _numeric(frame, measure)
+    measure = "rows" if counted else measure
+    data = pd.DataFrame({"period": _column(frame, period), "value": values})
+    for column in by:
+        data[column] = _column(frame, column).astype("string").fillna("(missing)")
+    data = data.dropna(subset=["period", "value"])
+    labels = list(pd.unique(data["period"]))
+    if len(labels) != 2:
+        shown = ", ".join(map(str, labels[:5]))
+        raise StatError(
+            f"Explaining a change needs exactly two periods in {period!r}; found {len(labels)}: {shown}"
+        )
+    before, after, order_caution = _period_order(labels)
+    old, new = data[data["period"] == before], data[data["period"] == after]
+    total_old, total_new = float(old["value"].sum()), float(new["value"].sum())
+    change = total_new - total_old
+    mean_old, mean_new = float(old["value"].mean()), float(new["value"].mean())
+    groups: list[dict[str, Any]] = []
+    cautions = ["This shows where the change happened, not why it happened."]
+    if order_caution:
+        cautions.append(order_caution)
+    summaries = []
+    for column in by:
+        table = _change_table(old, new, column)
+        spread = float(table["change"].abs().sum())
+        concentration = float(table["change"].abs().iloc[0]) / spread if spread else 0.0
+        summaries.append((concentration, column, table))
+        for segment, row in table.head(10).iterrows():
+            groups.append(
+                {
+                    "dimension": column,
+                    "segment": str(segment),
+                    "before": float(row["before"]),
+                    "after": float(row["after"]),
+                    "change": float(row["change"]),
+                    "share_of_change": float(row["change"] / change) if change else None,
+                    "mix_effect": float(row["mix_effect"]),
+                    "rate_effect": float(row["rate_effect"]),
+                }
+            )
+        thin = [
+            str(key) for key, row in table.iterrows() if 0 < min(row["rows_before"], row["rows_after"]) < 5
+        ]
+        appeared = [str(key) for key, row in table.iterrows() if row["rows_before"] == 0]
+        vanished = [str(key) for key, row in table.iterrows() if row["rows_after"] == 0]
+        if thin:
+            cautions.append(f"{column}: fewer than 5 rows in a period for {', '.join(thin[:5])}.")
+        if appeared or vanished:
+            cautions.append(
+                f"{column}: new in {after}: {', '.join(appeared[:5]) or 'none'}; "
+                f"gone in {after}: {', '.join(vanished[:5]) or 'none'}."
+            )
+    concentration, primary, table = max(summaries, key=lambda item: item[0])
+    top = [
+        f"{segment} ({_num(float(row['change']))}"
+        + (f", {row['change'] / change:.0%} of the change)" if change else ")")
+        for segment, row in table.head(2).iterrows()
+    ]
+    mix, rate = float(table["mix_effect"].sum()), float(table["rate_effect"].sum())
+    direction = "rose" if change > 0 else "fell" if change < 0 else "did not change"
+    percent = f" ({change / total_old:+.1%})" if total_old else ""
+    average = (
+        ""
+        if data["value"].nunique() <= 1
+        else f" The average {measure} per row moved from {_num(mean_old)} to {_num(mean_new)}: "
+        f"{_num(mix)} of that came from a shift in the mix of {primary} and {_num(rate)} from changes "
+        f"within each {primary}."
+    )
+    return {
+        "test": "Change breakdown (mix and rate)",
+        "statistic": change,
+        "p_value": None,
+        "groups": groups,
+        "checks": [
+            f"{len(old):,} rows in {before} and {len(new):,} rows in {after}.",
+            "Segment changes add up to the total change; mix and rate effects add up exactly to the change "
+            "in the average (symmetric split).",
+            f"{primary} concentrates the change most: its largest segment accounts for {concentration:.0%} "
+            "of the movement.",
+        ],
+        "cautions": cautions,
+        "interpretation": (
+            f"Total {measure} {direction} from {_num(total_old)} ({before}) to {_num(total_new)} ({after}), "
+            f"a change of {_num(change)}{percent}. By {primary}, the largest contributors were "
+            f"{' and '.join(top)}.{average}"
+        ),
+        "n": len(data),
+    }
+
+
+def _design(data: pd.DataFrame, predictor: str, controls: list[str]) -> pd.DataFrame:
+    import statsmodels.api as sm
+
+    design = pd.DataFrame({predictor: pd.to_numeric(data[predictor], errors="coerce").astype(float)})
+    for column in controls:
+        numeric = pd.to_numeric(data[column], errors="coerce")
+        if numeric.notna().all():
+            design[column] = numeric.astype(float)
+        else:
+            dummies = pd.get_dummies(
+                data[column].astype(str), prefix=column, prefix_sep="=", drop_first=True
+            )
+            design = design.join(dummies.astype(float))
+    return sm.add_constant(design, has_constant="add")
+
+
+def regression(frame: pd.DataFrame, predictor: str, outcome: str, controls: list[str]) -> dict[str, Any]:
+    import statsmodels.api as sm
+    from statsmodels.stats.diagnostic import het_breuschpagan
+    from statsmodels.stats.outliers_influence import variance_inflation_factor
+    from statsmodels.stats.stattools import jarque_bera
+
+    if len({outcome, predictor, *controls}) != 2 + len(controls):
+        raise StatError("The outcome, predictor and controls must be different columns")
+    data = pd.DataFrame({column: _column(frame, column) for column in [outcome, predictor, *controls]})
+    data = data.dropna()
+    y = pd.to_numeric(data[outcome], errors="coerce")
+    if y.isna().any() or pd.to_numeric(data[predictor], errors="coerce").isna().any():
+        raise StatError(
+            f"Regression needs numeric {outcome} and {predictor}; compare groups instead for a category"
+        )
+    design = _design(data, predictor, controls)
+    if len(data) < design.shape[1] + 3:
+        raise StatError(f"Regression needs more rows than predictors; only {len(data)} usable rows")
+    if design[predictor].nunique() < 2:
+        raise StatError(f"{predictor} does not vary, so its effect cannot be estimated")
+    y = y.astype(float)
+    model = sm.OLS(y, design).fit()
+    checks = []
+    cautions = ["Regression shows association, not proof that one causes the other."]
+    breusch_p = float(het_breuschpagan(model.resid, design)[1])
+    if breusch_p < ALPHA:
+        model = sm.OLS(y, design).fit(cov_type="HC3")
+        checks.append(
+            f"Uneven spread of errors (Breusch-Pagan p {format_p(breusch_p)}); robust HC3 errors are used."
+        )
+    else:
+        checks.append(f"Even spread of errors (Breusch-Pagan p {format_p(breusch_p)}).")
+    jarque_p = float(jarque_bera(model.resid)[1])
+    checks.append(f"Residual normality: Jarque-Bera p {format_p(jarque_p)}.")
+    if jarque_p < ALPHA and len(data) < 50:
+        cautions.append("Errors are not bell-shaped and the sample is small; p-values may be off.")
+    terms = [column for column in design.columns if column != "const"]
+    if len(terms) > 1:
+        inflation = {
+            column: float(variance_inflation_factor(design.to_numpy(), list(design.columns).index(column)))
+            for column in terms
+        }
+        checks.append(f"Largest variance inflation factor: {max(inflation.values()):.1f}.")
+        if high := [column for column, value in inflation.items() if value > 5]:
+            cautions.append(
+                f"{', '.join(high)} overlap strongly with other predictors; effects are unstable."
+            )
+    if len(data) < 10 * len(terms):
+        cautions.append(f"Only {len(data)} rows for {len(terms)} predictors; estimates are imprecise.")
+    bounds = model.conf_int()
+    coefficient, p_value = float(model.params[predictor]), float(model.pvalues[predictor])
+    low, high = float(bounds.loc[predictor, 0]), float(bounds.loc[predictor, 1])
+    r2 = float(model.rsquared)
+    held = f", holding {', '.join(controls)} fixed" if controls else ""
+    amount = f"{_num(abs(coefficient))} {'more' if coefficient >= 0 else 'less'}"
+    return {
+        "test": "Linear regression (OLS)",
+        "statistic": coefficient,
+        "p_value": p_value,
+        "effect_size": EffectSize(name="r_squared", value=r2, magnitude=_magnitude(r2, (0.02, 0.13, 0.26))),
+        "interval": Interval(label=f"change in {outcome} per 1 {predictor}", low=low, high=high),
+        "groups": [
+            {
+                "term": term,
+                "coefficient": float(model.params[term]),
+                "ci_low": float(bounds.loc[term, 0]),
+                "ci_high": float(bounds.loc[term, 1]),
+                "p_value": float(model.pvalues[term]),
+            }
+            for term in list(design.columns)[:20]
+        ],
+        "checks": checks,
+        "cautions": cautions,
+        "interpretation": (
+            f"Each additional 1 {predictor} is associated with {amount} {outcome} "
+            f"(95% CI {_num(low)} to {_num(high)}){held}. The model explains {r2:.0%} of the variation in "
+            f"{outcome} (R-squared = {_num(r2)}, n = {len(data):,}). {predictor}: {_verdict(p_value)}"
+        ),
+        "n": len(data),
+    }
+
+
 METHODS = {
     "compare_groups": compare_groups,
     "compare_categories": compare_categories,
@@ -425,28 +673,57 @@ def run_test(
     y: str,
     frame: pd.DataFrame,
     note: str | None = None,
+    by: list[str] | None = None,
+    controls: list[str] | None = None,
+    grain: str | None = None,
+    horizon: int | None = None,
 ) -> StatArtifact:
-    result = METHODS[method](frame, x, y)
+    by, controls = list(by or []), list(controls or [])
+    try:
+        if method == "explain_change":
+            result = explain_change(frame, x, y, by)
+        elif method == "regression":
+            result = regression(frame, x, y, controls)
+        elif method == "forecast":
+            result = forecast(frame, x, y, grain, horizon)
+        elif method == "anomalies":
+            result = anomalies(frame, x, y, grain)
+        else:
+            result = METHODS[method](frame, x, y)
+    except SeriesError as error:
+        raise StatError(str(error)) from error
     n = result.pop("n")
-    effect = result.get("effect_size")
-    if result["p_value"] >= ALPHA and effect and effect.magnitude in {"medium", "large"}:
+    effect, p_value = result.get("effect_size"), result.get("p_value")
+    if p_value is not None and p_value >= ALPHA and effect and effect.magnitude in {"medium", "large"}:
         result["cautions"].append(
             "The observed effect is sizeable, but there is not enough data to rule out chance; "
             "more data would settle it."
         )
-    return StatArtifact(name=name, method=method, data_source=data_source, x=x, y=y, n=n, note=note, **result)
+    return StatArtifact(
+        name=name,
+        method=method,
+        data_source=data_source,
+        x=x,
+        y=y,
+        by=by if method == "explain_change" else [],
+        controls=controls if method == "regression" else [],
+        n=n,
+        note=note,
+        **result,
+    )
 
 
 def adjust_for_multiple_tests(artifacts: list[StatArtifact]) -> None:
-    if len(artifacts) < 2:
+    tested = [artifact for artifact in artifacts if artifact.p_value is not None]
+    if len(tested) < 2:
         return
-    adjusted = multipletests([artifact.p_value for artifact in artifacts], method="holm")[1]
-    for artifact, p_adjusted in zip(artifacts, adjusted, strict=True):
+    adjusted = multipletests([artifact.p_value for artifact in tested], method="holm")[1]
+    for artifact, p_adjusted in zip(tested, adjusted, strict=True):
         artifact.p_adjusted = float(p_adjusted)
         artifact.checks.append(
-            f"{len(artifacts)} tests in this analysis; Holm-adjusted p {format_p(p_adjusted)}."
+            f"{len(tested)} tests in this analysis; Holm-adjusted p {format_p(p_adjusted)}."
         )
-        if artifact.p_value < ALPHA <= p_adjusted:
+        if artifact.p_value is not None and artifact.p_value < ALPHA <= p_adjusted:
             artifact.cautions.append(
                 "Not significant after adjusting for the number of tests in this analysis."
             )

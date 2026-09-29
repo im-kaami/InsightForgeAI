@@ -28,11 +28,16 @@ export const test = base.extend<{ isolatedApi: void }>({
             return;
           }
           const url = new URL(requested.pathname + requested.search, upstream);
-          try {
-            const response = await route.fetch({ url: url.toString() });
-            await route.fulfill({ response });
-          } catch (error) {
-            if (!/disposed|has been closed/i.test(String(error))) throw error;
+          const idempotent = ["GET", "HEAD"].includes(route.request().method());
+          for (let attempt = 1; ; attempt += 1) {
+            try {
+              const response = await route.fetch({ url: url.toString() });
+              await route.fulfill({ response });
+              return;
+            } catch (error) {
+              if (/disposed|has been closed/i.test(String(error))) return;
+              if (!(idempotent && attempt === 1 && /ECONNRESET/.test(String(error)))) throw error;
+            }
           }
         });
       }

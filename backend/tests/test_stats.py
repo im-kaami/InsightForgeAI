@@ -158,8 +158,9 @@ def test_plans_accept_test_steps_only_on_earlier_sql_steps(schema):
     validate_plan(bad, schema, problems)
     assert "not the name of an earlier sql step" in problems[0]
     test_schema = PLAN_JSON_SCHEMA["properties"]["steps"]["items"]["anyOf"][-1]
-    methods = ["compare_groups", "compare_categories", "correlation"]
-    assert test_schema["properties"]["method"]["enum"] == methods
+    methods = test_schema["properties"]["method"]["enum"]
+    assert methods[:3] == ["compare_groups", "compare_categories", "correlation"]
+    assert {"explain_change", "regression", "forecast", "anomalies"} <= set(methods)
 
 
 def test_test_steps_are_offered_to_deep_mode_reviews_but_not_the_plan_prompt(schema):
@@ -229,6 +230,10 @@ def test_significance_questions_get_a_dedicated_test_choice(schema):
         "data_source": "rows",
         "x": "department",
         "y": "salary",
+        "by": [],
+        "controls": [],
+        "grain": None,
+        "horizon": None,
     }
     assert len(llm.calls) == 1 and "Engineering" not in llm.calls[0][0]["content"]
 

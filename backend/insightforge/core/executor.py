@@ -19,10 +19,10 @@ from insightforge.core.chart_data import AUTO_CHART_NOTE, QueryRunner, prepare_c
 from insightforge.core.checks import SERIOUS_FINDINGS, ResultFinding, check_result
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Plan, Planner, PlotStep, SqlStep, StatStep, Step, SummaryStep
-from insightforge.core.plotter import figure_to_png, make_figure
+from insightforge.core.plotter import figure_to_png, make_figure, series_figure
 from insightforge.core.schema import SchemaInfo
 from insightforge.core.sql_guard import GuardedQuery, guard_query
-from insightforge.core.stats import StatArtifact, adjust_for_multiple_tests, run_test
+from insightforge.core.stats import StatArtifact, StatError, adjust_for_multiple_tests, run_test
 from insightforge.core.summarizer import Summarizer
 from insightforge.core.trace import Tracer
 
@@ -141,15 +141,36 @@ class Executor:
             self.tracer.record(step.name, "chart", started, ok=False, error=str(error)[:300])
             return ErrorArtifact(name=step.name, action=step.action, message=str(error))
 
-    def _test(self, state: ExecutionState, step: StatStep, frame: pd.DataFrame) -> Artifact:
+    def _retry_test_data(self, state: ExecutionState, step: StatStep, error: StatError) -> Artifact | None:
+        guarded = state.sources[step.data_source][0]
+        columns = ", ".join(dict.fromkeys([step.x, step.y, *step.by, *step.controls]))
+        hint = (
+            f"Question: {state.goal}\nThe tested method {step.method} could not use this query's result. "
+            f"Return one row per record with the columns {columns} and only the filters the question states."
+        )
+        try:
+            repaired = self.planner.repair_sql(
+                SqlStep(name=step.data_source, query=guarded.full_sql or guarded.sql),
+                f"{hint}\nThe method reported: {error}",
+                state.schema,
+                hint=hint,
+            )
+        except Exception:
+            return None
+        self.run_steps(state, [repaired])
+        frame = state.results.get(step.data_source)
+        return None if frame is None else self._test(state, step, frame, retry=False)
+
+    def _test(
+        self, state: ExecutionState, step: StatStep, frame: pd.DataFrame, retry: bool = True
+    ) -> Artifact:
         started = time.perf_counter()
         guarded, truncated, full_row_count = state.sources[step.data_source]
         note = None
+        needed = dict.fromkeys([step.x, step.y, *step.by, *step.controls])
         try:
             if truncated and guarded.full_sql:
-                columns = ", ".join(
-                    f'"{column.replace(chr(34), chr(34) * 2)}"' for column in (step.x, step.y)
-                )
+                columns = ", ".join(f'"{column.replace(chr(34), chr(34) * 2)}"' for column in needed)
                 frame = self._source_query(guarded.full_sql)(
                     f"SELECT {columns} FROM src USING SAMPLE reservoir({STAT_MAX_ROWS} ROWS) REPEATABLE (42)"
                 )
@@ -158,11 +179,26 @@ class Executor:
                     if full_row_count and full_row_count > STAT_MAX_ROWS
                     else f"Computed on all {len(frame):,} rows, not only the {self.result_limit:,} shown."
                 )
-            artifact = run_test(step.name, step.method, step.data_source, step.x, step.y, frame, note)
+            artifact = run_test(
+                step.name,
+                step.method,
+                step.data_source,
+                step.x,
+                step.y,
+                frame,
+                note,
+                by=step.by,
+                controls=step.controls,
+                grain=step.grain,
+                horizon=step.horizon,
+            )
         except Exception as error:
             self.tracer.record(
                 step.name, "test", started, ok=False, method=step.method, error=str(error)[:300]
             )
+            if retry and isinstance(error, StatError):
+                if retried := self._retry_test_data(state, step, error):
+                    return retried
             return ErrorArtifact(name=step.name, action=step.action, message=str(error))
         state.results[step.name] = artifact.key_table()
         state.notes[step.name] = f"{artifact.test} (tested method): {artifact.interpretation}"
@@ -176,6 +212,30 @@ class Executor:
             rows_sampled=bool(note),
         )
         return artifact
+
+    def _series_chart(self, artifact: StatArtifact) -> PlotArtifact:
+        forecasting = artifact.method == "forecast"
+        title = f"{'Forecast' if forecasting else 'Unusual values'}: total {artifact.y} per {artifact.grain}"
+        figure = series_figure(
+            title,
+            artifact.history,
+            forecast=artifact.groups if forecasting else None,
+            flagged=None if forecasting else artifact.groups,
+        )
+        name = f"{artifact.name}_chart"
+        png_path = None
+        if self.render_png and self.artifact_dir:
+            path = figure_to_png(figure, self.artifact_dir / f"{sanitize_identifier(name)}.png")
+            png_path = str(path) if path else None
+        return PlotArtifact(
+            name=name,
+            kind=artifact.method,
+            title=title,
+            figure=figure,
+            note=f"Drawn from the {artifact.test} result.",
+            data_source=artifact.data_source,
+            png_path=png_path,
+        )
 
     def _emit(self, event: dict[str, Any]) -> None:
         if self.on_event:
@@ -196,7 +256,12 @@ class Executor:
             schema=schema,
             memory=memory,
             step_names={step.name for step in plan.steps},
-            auto_chart=self.auto_chart and not any(isinstance(step, PlotStep) for step in plan.steps),
+            auto_chart=self.auto_chart
+            and not any(
+                isinstance(step, PlotStep)
+                or (isinstance(step, StatStep) and step.method in {"forecast", "anomalies"})
+                for step in plan.steps
+            ),
         )
         self.last_results = state.results
         self.last_row_counts = state.row_counts
@@ -351,7 +416,11 @@ class Executor:
                     )
                     state.artifacts.append(ErrorArtifact(name=step.name, action=step.action, message=message))
                 else:
-                    state.artifacts.append(self._test(state, step, frame))
+                    artifact = self._test(state, step, frame)
+                    state.artifacts.append(artifact)
+                    if isinstance(artifact, StatArtifact) and artifact.history:
+                        state.artifacts.append(self._series_chart(artifact))
+                        state.auto_chart = False
             elif isinstance(step, SummaryStep):
                 try:
                     summary, response = self.summarizer.summarize(

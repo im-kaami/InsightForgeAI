@@ -1,6 +1,6 @@
 {
   "name": "insightforge-core",
-  "version": 4,
+  "version": 6,
   "datasets": {
     "hr": { "employees": "../tests/fixtures/hr.csv" },
     "shop": { "orders": "data/orders.csv", "customers": "data/customers.csv" }
@@ -332,6 +332,84 @@
         "x": "segment",
         "y": "amount",
         "sql": "SELECT c.segment, o.amount FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.status = 'completed'"
+      }
+    },
+    {
+      "id": "change-amount-may-to-june",
+      "dataset": "shop",
+      "question": "Why did total order amount across all orders drop from May to June 2025?",
+      "expect": {
+        "type": "stat",
+        "method": "explain_change",
+        "x": "period",
+        "y": "amount",
+        "by": ["region"],
+        "sql": "SELECT CASE WHEN month(order_date) = 5 THEN 'before' ELSE 'after' END AS period, amount, region FROM orders WHERE month(order_date) IN (5, 6)"
+      }
+    },
+    {
+      "id": "change-order-count-halves",
+      "dataset": "shop",
+      "question": "What drove the change in the number of orders between the first half and the second half of 2025?",
+      "expect": {
+        "type": "stat",
+        "method": "explain_change",
+        "x": "period",
+        "y": "orders",
+        "by": ["region"],
+        "sql": "SELECT CASE WHEN month(order_date) <= 6 THEN 'before' ELSE 'after' END AS period, 1 AS orders, region FROM orders"
+      }
+    },
+    {
+      "id": "regression-salary-on-performance",
+      "dataset": "hr",
+      "question": "By how much does salary rise for each additional point of performance score?",
+      "expect": {
+        "type": "stat",
+        "method": "regression",
+        "x": "performance_score",
+        "y": "salary",
+        "sql": "SELECT performance_score, salary FROM employees"
+      }
+    },
+    {
+      "id": "regression-salary-controlling-department",
+      "dataset": "hr",
+      "question": "How much does performance score affect salary, controlling for department?",
+      "expect": {
+        "type": "stat",
+        "method": "regression",
+        "x": "performance_score",
+        "y": "salary",
+        "controls": ["department"],
+        "sql": "SELECT performance_score, salary, department FROM employees"
+      }
+    },
+    {
+      "id": "forecast-monthly-amount",
+      "dataset": "shop",
+      "question": "Forecast the total order amount per month for the next 3 months.",
+      "expect": {
+        "type": "stat",
+        "method": "forecast",
+        "x": "order_date",
+        "y": "amount",
+        "grain": "month",
+        "horizon": 3,
+        "sql": "SELECT order_date, amount FROM orders"
+      }
+    },
+    {
+      "id": "anomalies-weekly-amount",
+      "dataset": "shop",
+      "question": "Were there any unusual weeks in total order amount?",
+      "expect": {
+        "type": "stat",
+        "method": "anomalies",
+        "x": "order_date",
+        "y": "amount",
+        "grain": "week",
+        "sql": "SELECT order_date, amount FROM orders"
       }
     },
     {

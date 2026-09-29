@@ -123,8 +123,11 @@ def render_markdown(run: Run, artifacts: list[Artifact]) -> str:
 
 
 def _stat_lines(name: str, payload: dict) -> list[str]:
-    p_value = float(payload.get("p_value", 1.0))
-    numbers = [f"p {format_p(p_value)}", f"n = {payload.get('n')}"]
+    numbers = [f"n = {payload.get('n')}"]
+    if payload.get("p_value") is not None:
+        numbers.insert(0, f"p {format_p(float(payload['p_value']))}")
+    elif payload.get("statistic") is not None:
+        numbers.insert(0, f"change = {float(payload['statistic']):,.4g}")
     if payload.get("p_adjusted") is not None:
         numbers.append(f"adjusted p {format_p(float(payload['p_adjusted']))}")
     if effect := payload.get("effect_size"):

@@ -277,6 +277,58 @@ test("statistical test results show the method, verdict, effect size and caution
   await expect(card).toContainText("Median salary is 85,000 for New York and 72,000 for Remote.");
   await expect(card.getByRole("row")).toHaveCount(3);
   await expect(card).toContainText("Small groups (New York, Remote have fewer than 10 values).");
+
+  await page.unroute(/\/api\/sessions\/[a-f0-9]+$/);
+  await page.route(/\/api\/sessions\/[a-f0-9]+$/, async (route) => {
+    const response = await route.fetch(upstream(route));
+    const session = await response.json();
+    const change = {
+      ...cutOffRun(session.id),
+      goal: "Why did total amount drop from May to June?",
+      summary: "Amount fell.",
+      warnings: [],
+      verification_status: "exploratory",
+      provenance: { privacy_mode: "local" },
+      artifacts: [
+        {
+          type: "stat",
+          name: "change_breakdown",
+          trust: "tested method",
+          method: "explain_change",
+          test: "Change breakdown (mix and rate)",
+          data_source: "rows",
+          x: "period",
+          y: "amount",
+          by: ["region"],
+          n: 69,
+          statistic: -2083.14,
+          p_value: null,
+          groups: [
+            {
+              dimension: "region",
+              segment: "West",
+              before: 1223.95,
+              after: 455.43,
+              change: -768.52,
+            },
+          ],
+          checks: ["43 rows in before and 26 rows in after."],
+          cautions: ["This shows where the change happened, not why it happened."],
+          interpretation: "Total amount fell from 4,418 (before) to 2,335 (after).",
+        },
+      ],
+    };
+    await route.fulfill({ response, json: { ...session, runs: [change] } });
+  });
+  await page.reload();
+  const breakdown = page.getByTestId("stat-result");
+  await expect(breakdown).toContainText("Tested method: Change breakdown (mix and rate)");
+  await expect(breakdown).toContainText("Total change");
+  await expect(breakdown).toContainText("-2,083");
+  await expect(breakdown).not.toContainText("chance");
+  await expect(breakdown).toContainText(
+    "This shows where the change happened, not why it happened.",
+  );
 });
 
 test("charts switch type in the browser and the health check lists findings", async ({ page }) => {

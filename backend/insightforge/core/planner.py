@@ -69,6 +69,10 @@ class StatStep(BaseModel):
     data_source: str
     x: str
     y: str
+    by: list[str] = Field(default_factory=list)
+    controls: list[str] = Field(default_factory=list)
+    grain: Literal["day", "week", "month"] | None = None
+    horizon: int | None = Field(default=None, ge=1, le=36)
 
 
 Step = Annotated[SqlStep | PlotStep | SummaryStep | StatStep, Field(discriminator="action")]
@@ -128,6 +132,10 @@ PLAN_JSON_SCHEMA: dict[str, Any] = {
                             "data_source": {"type": "string"},
                             "x": {"type": "string"},
                             "y": {"type": "string"},
+                            "by": {"type": "array", "items": {"type": "string"}, "maxItems": 3},
+                            "controls": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
+                            "grain": {"enum": ["day", "week", "month"]},
+                            "horizon": {"type": "integer"},
                         },
                         ["method", "data_source", "x", "y"],
                     ),
@@ -168,32 +176,112 @@ The schema is:
 
 STAT_CUES = re.compile(
     r"\b(significan\w*|statistic\w*|chance|random\w*|noise|coinciden\w*|really|correlat\w*|"
-    r"associat\w*|relationship|p-?values?|hypothes\w*)\b",
+    r"associat\w*|relationship|p-?values?|hypothes\w*|regression|controlling|holding|affect\w*|"
+    r"effect of|impact of|per (?:extra|additional|each)|for each (?:extra|additional))\b",
     re.IGNORECASE,
 )
 STAT_CHOICE_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "test": {"type": "boolean"},
-        "method": {"enum": list(get_args(TestMethod))},
+        "method": {"enum": ["compare_groups", "compare_categories", "correlation", "regression"]},
         "x": {"type": "string"},
         "y": {"type": "string"},
+        "controls": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
         "sql": {"type": "string"},
     },
     "required": ["test"],
 }
+CHANGE_CUES = re.compile(
+    r"\b(why|what (?:drove|caused|explains)|drivers? of|explain\w*|contribut\w*|break\s?down)\b.*"
+    r"\b(chang\w*|drop\w*|fell|fall\w*|ris\w*|rose|increas\w*|decreas\w*|declin\w*|grow\w*|grew|jump\w*|"
+    r"spik\w*|went (?:up|down)|higher|lower)\b",
+    re.IGNORECASE,
+)
+SERIES_CUES = re.compile(
+    r"\b(forecast\w*|predict\w*|project\w*|outlook|next (?:\d+ )?(?:days?|weeks?|months?|quarters?|years?)|"
+    r"coming (?:days?|weeks?|months?)|unusual|anomal\w*|outliers?|abnormal|strange|odd)\b",
+    re.IGNORECASE,
+)
+SERIES_CHOICE_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "series": {"type": "boolean"},
+        "method": {"enum": ["forecast", "anomalies"]},
+        "x": {"type": "string"},
+        "y": {"type": "string"},
+        "grain": {"enum": ["day", "week", "month"]},
+        "horizon": {"type": "integer"},
+        "sql": {"type": "string"},
+    },
+    "required": ["series"],
+}
+SERIES_CHOICE_PROMPT = """You decide whether a data question asks to forecast a number over time or to find
+unusual periods in it. Respond only with JSON {"series": false} or
+{"series": true, "method": "forecast"|"anomalies", "x": str, "y": str, "grain": "day"|"week"|"month",
+"horizon": int, "sql": str}, where x is the date column, y is the measure to total per grain, horizon is
+how many grains ahead to forecast (only for forecast), and sql is one DuckDB SELECT returning ONE ROW PER
+RECORD (no GROUP BY) with exactly the columns x and y plus the filters the question implies. Add no other
+filters. To count records, select 1 AS <name> and use that name as y. Use only listed tables and columns.
+
+Examples, for a schema with sales(sale_date, region, amount):
+- "What was the total amount last month?" -> {"series": false}
+- "Forecast total amount for the next 3 months" -> {"series": true, "method": "forecast", "x": "sale_date",
+  "y": "amount", "grain": "month", "horizon": 3, "sql": "SELECT sale_date, amount FROM sales"}
+- "Predict the number of sales per week for the next 8 weeks in the West" -> {"series": true,
+  "method": "forecast", "x": "sale_date", "y": "sales", "grain": "week", "horizon": 8,
+  "sql": "SELECT sale_date, 1 AS sales FROM sales WHERE region = 'West'"}
+- "Were there any unusual weeks in total amount?" -> {"series": true, "method": "anomalies",
+  "x": "sale_date", "y": "amount", "grain": "week", "sql": "SELECT sale_date, amount FROM sales"}
+
+The schema is:
+"""
+CHANGE_CHOICE_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "change": {"type": "boolean"},
+        "y": {"type": "string"},
+        "by": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 3},
+        "sql": {"type": "string"},
+    },
+    "required": ["change"],
+}
+CHANGE_CHOICE_PROMPT = """You decide whether a data question asks WHY a number changed between two periods,
+or what drove or contributed to that change. Respond only with JSON {"change": false} or
+{"change": true, "y": str, "by": [1 to 3 category columns to break the change down by], "sql": str}, where
+sql is one DuckDB SELECT returning ONE ROW PER RECORD (no GROUP BY) with exactly these columns: period
+(the text 'before' for the earlier period or 'after' for the later one), the measure column y, and the
+by columns. Filter to the two periods only; add no other filters unless the question asks for them. End
+date ranges with an exclusive bound on the day after the period (all of 2025: < DATE '2026-01-01').
+To count records, select 1 AS <name> and use that name as y. Use only listed tables and columns; JOIN
+tables when a by column lives in another table.
+
+Examples, for a schema with sales(sale_date, region, product, amount, status):
+- "What was the total amount in April?" -> {"change": false}
+- "Why did total amount drop from March to April 2025?" -> {"change": true, "y": "amount",
+  "by": ["region", "product"], "sql": "SELECT CASE WHEN month(sale_date) = 3 THEN 'before' ELSE 'after' END
+  AS period, amount, region, product FROM sales WHERE sale_date >= DATE '2025-03-01'
+  AND sale_date < DATE '2025-05-01'"}
+- "What drove the change in the number of sales between 2024 and 2025?" -> {"change": true, "y": "sales",
+  "by": ["region", "product"], "sql": "SELECT CASE WHEN year(sale_date) = 2024 THEN 'before' ELSE 'after'
+  END AS period, 1 AS sales, region, product FROM sales WHERE year(sale_date) IN (2024, 2025)"}
+
+The schema is:
+"""
 STAT_CHOICE_PROMPT = """You decide whether a data question asks for a statistical test: whether a difference,
 association or relationship is real, statistically significant, or could be chance. Descriptive questions
 (what is the average, which is highest, how many, how do values differ) do NOT need a test.
+Questions about how much one number changes with another, holding others fixed, need a regression.
 Respond only with JSON {"test": false} or
-{"test": true, "method": str, "x": str, "y": str, "sql": str}, where:
+{"test": true, "method": str, "x": str, "y": str, "controls": [str], "sql": str}, where:
 - method "compare_groups": x = group column, y = numeric measure;
   method "compare_categories": x and y = two category columns;
-  method "correlation": x and y = two numeric columns.
+  method "correlation": x and y = two numeric columns;
+  method "regression": x = numeric predictor, y = numeric outcome, controls = columns held fixed (or []).
 - sql is one DuckDB SELECT returning ONE ROW PER RECORD (no GROUP BY, no aggregates) with exactly the
-  columns x and y, plus any joins and filters the question implies. Use only listed tables and columns.
-
-- If x and y are in different tables, JOIN them on their shared key column.
+  columns x, y and any controls, plus the joins and filters the question implies. Use only listed tables
+  and columns.
+- If the columns are in different tables, JOIN them on their shared key column.
 
 Examples, for a schema with sales(rep_id, region, amount, deals, status) and reps(rep_id, team):
 - "Which region has the highest total amount?" -> {"test": false}
@@ -209,6 +297,11 @@ Examples, for a schema with sales(rep_id, region, amount, deals, status) and rep
 - "Do closed amounts differ significantly between teams?" -> {"test": true, "method": "compare_groups",
   "x": "team", "y": "amount", "sql": "SELECT r.team, s.amount FROM sales s JOIN reps r ON s.rep_id = r.rep_id
   WHERE s.status = 'closed'"}
+- "By how much does amount rise for each additional deal?" -> {"test": true, "method": "regression",
+  "x": "deals", "y": "amount", "controls": [], "sql": "SELECT deals, amount FROM sales"}
+- "How much does amount rise for each extra deal, controlling for region?" -> {"test": true,
+  "method": "regression", "x": "deals", "y": "amount", "controls": ["region"],
+  "sql": "SELECT deals, amount, region FROM sales"}
 
 The schema is:
 """
@@ -233,13 +326,16 @@ PLOT_STEP_FORMAT = (
     "  Use box for spread by group, heatmap for two dimensions, and area for totals over time."
 )
 TEST_STEP_FORMAT = (
-    '- {"name": str, "action": "test", "method": "compare_groups"|"compare_categories"|"correlation", '
-    '"data_source": <earlier sql step returning ONE ROW PER RECORD, not aggregated>, "x": <column>, '
-    '"y": <column>}\n'
+    '- {"name": str, "action": "test", "method": "compare_groups"|"compare_categories"|"correlation"|'
+    '"explain_change"|"regression", "data_source": <earlier sql step returning ONE ROW PER RECORD, not '
+    'aggregated>, "x": <column>, "y": <column>, "by": [<category columns>], "controls": [<columns>]}\n'
     "  Use a test step when the question asks whether a difference, association or relationship is real, "
     "significant or just chance. compare_groups: x = group column, y = numeric measure. compare_categories: "
-    "x and y = two category columns. correlation: x and y = two numeric columns. Tested code runs the "
-    "statistics; never compute p-values in SQL."
+    "x and y = two category columns. correlation: x and y = two numeric columns. explain_change: x = a "
+    "period column holding 'before' or 'after', y = measure, by = 1-3 category columns. regression: x = "
+    "numeric predictor, y = numeric outcome, controls = other columns held fixed. forecast / anomalies: "
+    'x = date column, y = measure summed per "grain" (day, week or month); forecast also takes '
+    '"horizon" (periods ahead). Tested code runs the statistics; never compute p-values in SQL.'
 )
 
 
@@ -512,9 +608,10 @@ Return a single JSON object with a top-level "steps" array, for example:
             self.last_clarification = self._check_ambiguity(goal, schema_text)
             if self.last_clarification is not None:
                 return Plan(steps=[])
-        if not getattr(self.llm, "offline", False) and STAT_CUES.search(goal):
-            if chosen := self._choose_test(goal, schema_text, memory):
-                return chosen
+        if not getattr(self.llm, "offline", False):
+            for kind, cues in (("change", CHANGE_CUES), ("series", SERIES_CUES), ("test", STAT_CUES)):
+                if cues.search(goal) and (chosen := self._choose_method(kind, goal, schema_text, memory)):
+                    return chosen
         messages = [{"role": "system", "content": system}, {"role": "user", "content": goal}]
         try:
             raw, _ = self._chat_json("plan", messages, PLAN_JSON_SCHEMA)
@@ -540,24 +637,65 @@ Return a single JSON object with a top-level "steps" array, for example:
             )
             return fallback_plan(goal, schema)
 
-    def _choose_test(self, goal: str, schema_text: str, memory: ConversationMemory | None) -> Plan | None:
-        system = STAT_CHOICE_PROMPT + schema_text
+    def _choose_method(
+        self,
+        kind: Literal["test", "change", "series"],
+        goal: str,
+        schema_text: str,
+        memory: ConversationMemory | None,
+    ) -> Plan | None:
+        prompt, schema, flag = {
+            "test": (STAT_CHOICE_PROMPT, STAT_CHOICE_JSON_SCHEMA, "test"),
+            "change": (CHANGE_CHOICE_PROMPT, CHANGE_CHOICE_JSON_SCHEMA, "change"),
+            "series": (SERIES_CHOICE_PROMPT, SERIES_CHOICE_JSON_SCHEMA, "series"),
+        }[kind]
+        system = prompt + schema_text
         if memory and memory.turns:
             system += f"\n\nConversation so far:\n{self.policy.memory_text(memory)}"
         messages = [{"role": "system", "content": system}, {"role": "user", "content": goal}]
         try:
-            raw, _ = self._chat_json("test_choice", messages, STAT_CHOICE_JSON_SCHEMA)
-            if not (isinstance(raw, dict) and raw.get("test") is True):
+            raw, _ = self._chat_json(f"{kind}_choice", messages, schema)
+            if not (isinstance(raw, dict) and raw.get(flag) is True):
                 return None
             rows = SqlStep(name="rows", query=str(raw["sql"]))
-            test = StatStep(
-                name="significance_test", method=raw["method"], data_source="rows", x=raw["x"], y=raw["y"]
-            )
-            if not rows.query.strip() or not test.x or not test.y:
+            if kind == "change":
+                step = StatStep(
+                    name="change_breakdown",
+                    method="explain_change",
+                    data_source="rows",
+                    x="period",
+                    y=raw["y"],
+                    by=list(raw.get("by") or []),
+                )
+                focus = "where the change came from"
+            elif kind == "series":
+                method = raw["method"]
+                horizon = raw.get("horizon") if method == "forecast" else None
+                step = StatStep(
+                    name=method,
+                    method=method,
+                    data_source="rows",
+                    x=raw["x"],
+                    y=raw["y"],
+                    grain=raw.get("grain"),
+                    horizon=max(1, min(int(horizon), 36)) if isinstance(horizon, int | float) else None,
+                )
+                focus = "the forecast and its range" if method == "forecast" else "which periods are unusual"
+            else:
+                step = StatStep(
+                    name="significance_test" if raw["method"] != "regression" else "regression",
+                    method=raw["method"],
+                    data_source="rows",
+                    x=raw["x"],
+                    y=raw["y"],
+                    controls=list(raw.get("controls") or []) if raw["method"] == "regression" else [],
+                )
+                focus = "whether the result is real"
+            if not rows.query.strip() or not step.x or not step.y:
                 return None
-            return Plan(steps=[rows, test, SummaryStep(name="summary", focus="whether the result is real")])
+            return Plan(steps=[rows, step, SummaryStep(name="summary", focus=focus)])
         except Exception as exc:
-            logging.getLogger("insightforge").warning("Test choice skipped: %s", describe_error(exc))
+            logging.getLogger("insightforge").warning("%s choice skipped: %s", kind, describe_error(exc))
         return None
 
     def _check_ambiguity(self, goal: str, schema_text: str) -> Clarification | None:
@@ -673,7 +811,8 @@ Respond ONLY with JSON."""
             decision.steps.append(step)
         return decision
 
-    def repair_sql(self, step: SqlStep, error: str, schema: SchemaInfo) -> SqlStep:
+    def repair_sql(self, step: SqlStep, error: str, schema: SchemaInfo, hint: str | None = None) -> SqlStep:
+        detail = hint if hint and not self.policy.values_visible_to_model else self.policy.repair_error(error)
         messages = [
             {
                 "role": "system",
@@ -684,7 +823,7 @@ Respond ONLY with JSON."""
             },
             {
                 "role": "user",
-                "content": f"Query:\n{step.query}\n\nError:\n{self.policy.repair_error(error)}",
+                "content": f"Query:\n{step.query}\n\nError:\n{detail}",
             },
         ]
         raw, _ = self._chat_json(f"sql_repair:{step.name}", messages)

@@ -26,6 +26,10 @@ class Expectation(BaseModel):
     method: TestMethod | None = None
     x: str | None = None
     y: str | None = None
+    by: list[str] = Field(default_factory=list)
+    controls: list[str] = Field(default_factory=list)
+    grain: Literal["day", "week", "month"] | None = None
+    horizon: int | None = None
 
 
 class EvalCase(BaseModel):
@@ -151,7 +155,18 @@ def _native(value: Any) -> Any:
 
 def _score_stat(expect: Expectation, expected: pd.DataFrame, result: RunResult) -> tuple[bool, str]:
     assert expect.method and expect.x and expect.y
-    reference = run_test("reference", expect.method, "reference", expect.x, expect.y, expected)
+    reference = run_test(
+        "reference",
+        expect.method,
+        "reference",
+        expect.x,
+        expect.y,
+        expected,
+        by=expect.by,
+        controls=expect.controls,
+        grain=expect.grain,
+        horizon=expect.horizon,
+    )
     tests = [artifact for artifact in result.artifacts if isinstance(artifact, StatArtifact)]
     if not tests:
         failed = next(
@@ -160,16 +175,26 @@ def _score_stat(expect: Expectation, expected: pd.DataFrame, result: RunResult) 
         )
         return False, f"the test step failed: {failed.message}" if failed else "no statistical test was run"
     wanted = (expect.x, expect.y)
+    symmetric = expect.method in {"compare_categories", "correlation"}
     for test in tests:
         columns = (test.x, test.y)
-        same_columns = columns == wanted or (expect.method != "compare_groups" and columns == wanted[::-1])
+        same_columns = (
+            expect.method == "explain_change"
+            or columns == wanted
+            or (symmetric and columns == wanted[::-1])
+        )
         if test.method != expect.method or not same_columns:
             continue
-        if math.isclose(test.p_value, reference.p_value, rel_tol=1e-6, abs_tol=1e-12):
-            return True, f"{test.test} on {test.x} and {test.y}, p matches the reference"
+        label = "p" if reference.p_value is not None and expect.method != "regression" else "value"
+        got, want = (
+            (test.p_value, reference.p_value) if label == "p" else (test.statistic, reference.statistic)
+        )
+        if got is not None and want is not None and math.isclose(got, want, rel_tol=1e-6, abs_tol=1e-12):
+            return True, f"{test.test} on {test.x} and {test.y}, {label} matches the reference"
         return False, (
-            f"{test.test} ran on the right columns but p = {test.p_value:.4g}, "
-            f"expected {reference.p_value:.4g}"
+            f"{test.test} ran on the right columns but {label} = {got:.4g}, expected {want:.4g}"
+            if got is not None and want is not None
+            else f"{test.test} ran on the right columns but produced no {label}"
         )
     found = ", ".join(f"{test.method}({test.x}, {test.y})" for test in tests)
     return False, f"expected {expect.method}({expect.x}, {expect.y}); ran {found}"

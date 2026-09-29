@@ -6,7 +6,8 @@ export type StatResult = {
   name: string;
   test: string;
   n: number;
-  p_value: number;
+  method?: string;
+  p_value?: number | null;
   p_adjusted?: number | null;
   statistic?: number | null;
   effect_size?: Effect | null;
@@ -30,27 +31,43 @@ const number = (value: unknown) =>
   typeof value === "number"
     ? value.toLocaleString(undefined, { maximumSignificantDigits: 4 })
     : String(value ?? "");
+const STATISTIC_LABELS: Record<string, string> = {
+  explain_change: "Total change",
+  forecast: "Next period forecast",
+  anomalies: "Unusual periods",
+};
 const pText = (value: number) => (value < 0.001 ? "< 0.001" : `= ${value.toFixed(3)}`);
 
 export function StatResultCard({ result }: { result: StatResult }) {
   const groups = result.groups ?? [];
   const columns = groups.length ? Object.keys(groups[0]) : [];
-  const significant = (result.p_adjusted ?? result.p_value) < 0.05;
+  const p = result.p_adjusted ?? result.p_value;
   return (
     <section data-testid="stat-result" className="space-y-3 rounded-md border p-4 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="font-medium">{result.name}</h3>
         <Badge variant="outline">Tested method: {result.test}</Badge>
-        <Badge variant={significant ? "default" : "secondary"}>
-          {significant ? "Unlikely to be chance" : "Could be chance"}
-        </Badge>
+        {p != null && (
+          <Badge variant={p < 0.05 ? "default" : "secondary"}>
+            {p < 0.05 ? "Unlikely to be chance" : "Could be chance"}
+          </Badge>
+        )}
       </div>
       <p>{result.interpretation}</p>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground md:grid-cols-4">
-        <div>
-          <dt className="text-xs">p-value</dt>
-          <dd className="text-foreground">p {pText(result.p_value)}</dd>
-        </div>
+        {result.p_value != null ? (
+          <div>
+            <dt className="text-xs">p-value</dt>
+            <dd className="text-foreground">p {pText(result.p_value)}</dd>
+          </div>
+        ) : (
+          result.statistic != null && (
+            <div>
+              <dt className="text-xs">{STATISTIC_LABELS[result.method ?? ""] ?? "Result"}</dt>
+              <dd className="text-foreground">{number(result.statistic)}</dd>
+            </div>
+          )
+        )}
         {result.p_adjusted != null && (
           <div>
             <dt className="text-xs">Adjusted for several tests</dt>

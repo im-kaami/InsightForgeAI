@@ -63,6 +63,65 @@ def make_figure(
     return json.loads(figure.to_json())
 
 
+def series_figure(
+    title: str,
+    history: list[dict[str, Any]],
+    forecast: list[dict[str, Any]] | None = None,
+    flagged: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    import plotly.graph_objects as go
+
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scatter(
+            x=[row["period"] for row in history],
+            y=[row["value"] for row in history],
+            mode="lines",
+            name="Actual",
+        )
+    )
+    if history and "expected" in history[0]:
+        figure.add_trace(
+            go.Scatter(
+                x=[row["period"] for row in history],
+                y=[row["expected"] for row in history],
+                mode="lines",
+                name="Expected",
+                line={"dash": "dot"},
+            )
+        )
+    if forecast:
+        periods = [row["period"] for row in forecast]
+        figure.add_trace(
+            go.Scatter(
+                x=periods + periods[::-1],
+                y=[row["high"] for row in forecast] + [row["low"] for row in forecast][::-1],
+                fill="toself",
+                line={"width": 0},
+                opacity=0.25,
+                name="Approximate 95% range",
+                hoverinfo="skip",
+            )
+        )
+        figure.add_trace(
+            go.Scatter(
+                x=periods, y=[row["forecast"] for row in forecast], mode="lines+markers", name="Forecast"
+            )
+        )
+    if flagged:
+        figure.add_trace(
+            go.Scatter(
+                x=[row["period"] for row in flagged],
+                y=[row["value"] for row in flagged],
+                mode="markers",
+                marker={"size": 11, "symbol": "x"},
+                name="Unusual",
+            )
+        )
+    figure.update_layout(title=title)
+    return json.loads(figure.to_json())
+
+
 def figure_to_png(figure: dict[str, Any], path: Path) -> Path | None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
