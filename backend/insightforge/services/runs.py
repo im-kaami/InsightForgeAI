@@ -18,6 +18,7 @@ from insightforge.core.llm import LLMClient, build_llm, build_local_llm, llm_mod
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Plan, PlotStep, SqlStep, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
+from insightforge.core.sandbox import build_sandbox
 from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.verified_report import (
     ReportPeriod,
@@ -279,6 +280,7 @@ def execute_run(
                 deep_max_rounds=settings.deep_max_rounds,
                 deep_max_seconds=settings.deep_max_seconds,
                 deep_max_tokens=settings.deep_max_tokens,
+                sandbox=build_sandbox(settings),
             )
             saved_schema = (
                 SchemaInfo.model_validate(version.schema_json)

@@ -77,7 +77,14 @@ class StatStep(BaseModel):
     k: int | None = Field(default=None, ge=2, le=8)
 
 
-Step = Annotated[SqlStep | PlotStep | SummaryStep | StatStep, Field(discriminator="action")]
+class PythonStep(BaseModel):
+    name: str
+    action: Literal["python"] = "python"
+    data_source: str
+    code: str = Field(min_length=1, max_length=8000)
+
+
+Step = Annotated[SqlStep | PlotStep | SummaryStep | StatStep | PythonStep, Field(discriminator="action")]
 
 
 class Plan(BaseModel):
@@ -197,6 +204,39 @@ STAT_CHOICE_JSON_SCHEMA: dict[str, Any] = {
     },
     "required": ["test"],
 }
+PYTHON_CUES = re.compile(
+    r"\b(python|pandas|numpy|script|write (?:some )?code|simulat\w*|monte carlo|bootstrap\w*)\b",
+    re.IGNORECASE,
+)
+PYTHON_CHOICE_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "python": {"type": "boolean"},
+        "sql": {"type": "string"},
+        "code": {"type": "string"},
+    },
+    "required": ["python"],
+}
+PYTHON_CHOICE_PROMPT = """You decide whether a data question explicitly asks for Python code, a simulation or
+a bootstrap. Respond only with JSON {"python": false} or {"python": true, "sql": str, "code": str}, where sql
+is one DuckDB SELECT that loads the rows the code needs (no aggregation unless the question asks), and code
+is Python that reads the pandas DataFrame df (the sql result), may use pd, np, scipy, statsmodels and
+sklearn, and assigns its answer to the variable result (a DataFrame, Series or number). The code runs
+offline in a sandbox: no files, no network, no plots, no input(). Use a fixed random seed. Use only listed
+tables and columns.
+
+Examples, for a schema with sales(region, amount):
+- "What is the total amount?" -> {"python": false}
+- "Using Python, compute the median amount per region" -> {"python": true,
+  "sql": "SELECT region, amount FROM sales",
+  "code": "result = df.groupby('region')['amount'].median().reset_index(name='median_amount')"}
+- "Bootstrap a 95% interval for the average amount" -> {"python": true, "sql": "SELECT amount FROM sales",
+  "code": "rng = np.random.default_rng(42)\\nmeans = [df['amount'].sample(frac=1, replace=True,
+  random_state=int(rng.integers(1e9))).mean() for _ in range(2000)]\\nresult = pd.DataFrame({'low':
+  [np.percentile(means, 2.5)], 'high': [np.percentile(means, 97.5)]})"}
+
+The schema is:
+"""
 _ENTITIES = r"(?:customers|users|clients|buyers|accounts|employees|products)"
 SEGMENT_CUES = re.compile(
     rf"\b(cluster\w*|personas?|(?:segment|group|split|divide|sort) (?:our |the |my |all )?{_ENTITIES}|"
@@ -453,7 +493,7 @@ def validate_plan(raw: Any, schema: SchemaInfo, problems: list[str] | None = Non
         if step.name in names:
             problems.append(f"Step {index + 1} reuses the name {step.name!r}; step names must be unique")
             continue
-        if isinstance(step, PlotStep | StatStep) and step.data_source not in sql_names:
+        if isinstance(step, PlotStep | StatStep | PythonStep) and step.data_source not in sql_names:
             problems.append(
                 f"Step {index + 1} ({step.name}) uses data_source {step.data_source!r}, which is not "
                 "the name of an earlier sql step"
@@ -580,6 +620,7 @@ class Planner:
         self.tracer = Tracer()
         self.notes: DatasetNotes | None = None
         self.current_goal: str | None = None
+        self.sandbox_enabled = False
 
     def _chat_json(
         self, purpose: str, messages: list[dict[str, str]], schema: dict[str, Any] | None = None
@@ -660,6 +701,7 @@ Return a single JSON object with a top-level "steps" array, for example:
                 return Plan(steps=[])
         if not getattr(self.llm, "offline", False):
             routes = (
+                *((("python", PYTHON_CUES),) if self.sandbox_enabled else ()),
                 ("change", CHANGE_CUES),
                 ("series", SERIES_CUES),
                 ("segments", SEGMENT_CUES),
@@ -695,7 +737,7 @@ Return a single JSON object with a top-level "steps" array, for example:
 
     def _choose_method(
         self,
-        kind: Literal["test", "change", "series", "segments"],
+        kind: Literal["test", "change", "series", "segments", "python"],
         goal: str,
         schema_text: str,
         memory: ConversationMemory | None,
@@ -705,6 +747,7 @@ Return a single JSON object with a top-level "steps" array, for example:
             "change": (CHANGE_CHOICE_PROMPT, CHANGE_CHOICE_JSON_SCHEMA, "change"),
             "series": (SERIES_CHOICE_PROMPT, SERIES_CHOICE_JSON_SCHEMA, "series"),
             "segments": (SEGMENT_CHOICE_PROMPT, SEGMENT_CHOICE_JSON_SCHEMA, "segments"),
+            "python": (PYTHON_CHOICE_PROMPT, PYTHON_CHOICE_JSON_SCHEMA, "python"),
         }[kind]
         system = prompt + schema_text
         if memory and memory.turns:
@@ -715,6 +758,10 @@ Return a single JSON object with a top-level "steps" array, for example:
             if not (isinstance(raw, dict) and raw.get(flag) is True):
                 return None
             rows = SqlStep(name="rows", query=str(raw["sql"]))
+            if kind == "python":
+                code = PythonStep(name="python_analysis", data_source="rows", code=str(raw.get("code") or ""))
+                summary = SummaryStep(name="summary", focus="the code result")
+                return Plan(steps=[rows, code, summary]) if rows.query.strip() else None
             if kind == "change":
                 step = StatStep(
                     name="change_breakdown",

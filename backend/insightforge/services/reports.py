@@ -2,6 +2,7 @@ import base64
 import html
 import json
 import re
+import uuid
 from pathlib import Path
 
 from insightforge.core.executor import truncation_note
@@ -105,6 +106,19 @@ def render_markdown(run: Run, artifacts: list[Artifact]) -> str:
         elif artifact.type == "stat":
             title, *details = _stat_lines(artifact.name, payload)
             lines.extend([f"### {_safe(title)}", *[f"- {_safe(line)}" for line in details]])
+        elif artifact.type == "code":
+            lines.extend(
+                [
+                    f"### {_safe(artifact.name)} (free-form code, sandboxed)",
+                    _code_block(str(payload.get("code", "")), "python"),
+                ]
+            )
+            if payload.get("error"):
+                lines.append(_code_block(str(payload["error"]), "text"))
+            if payload.get("columns"):
+                lines.append(_table(payload))
+            elif payload.get("value") is not None:
+                lines.append(f"Result: {_safe(payload['value'])}")
     lines.extend(
         [
             "## Provenance",
@@ -120,6 +134,113 @@ def render_markdown(run: Run, artifacts: list[Artifact]) -> str:
         if step.get("query"):
             lines.append(_code_block(str(step["query"]), "sql"))
     return "\n\n".join(lines)
+
+
+def _cell(kind: str, source: str, outputs: list[dict] | None = None) -> dict:
+    cell: dict = {
+        "cell_type": kind,
+        "id": uuid.uuid4().hex[:12],
+        "metadata": {},
+        "source": source.splitlines(keepends=True),
+    }
+    if kind == "code":
+        cell |= {"execution_count": None, "outputs": outputs or []}
+    return cell
+
+
+def _text_output(text: str) -> list[dict]:
+    return [{"output_type": "stream", "name": "stdout", "text": text.splitlines(keepends=True)}]
+
+
+def _identifier(name: str) -> str:
+    cleaned = re.sub(r"\W+", "_", name).strip("_") or "result"
+    return f"t_{cleaned}" if cleaned[0].isdigit() else cleaned
+
+
+def render_ipynb(run: Run, artifacts: list[Artifact]) -> str:
+    provenance = run.provenance_json or {}
+    cells = [
+        _cell(
+            "markdown",
+            f"# {run.goal}\n\nExported from InsightForge on {run.created_at.date().isoformat()}. "
+            f"Model: {provenance.get('model', 'unknown')}. Status: {run.verification_status}.\n\n"
+            "Each step below is one cell, in the order it ran. Outputs are the saved results; load your "
+            "data into DuckDB in the first cell to rerun them.",
+        ),
+        _cell(
+            "code",
+            "import duckdb\nimport pandas as pd\n\ncon = duckdb.connect()\n"
+            "# Load the dataset's tables before rerunning, for example:\n"
+            "# con.execute(\"CREATE TABLE orders AS SELECT * FROM 'orders.csv'\")",
+        ),
+    ]
+    for artifact in artifacts:
+        payload = artifact.payload_json
+        name = _identifier(artifact.name)
+        if artifact.type == "table":
+            preview = {**payload, "rows": payload.get("rows", [])[:20]}
+            cells.append(_cell("markdown", f"## {artifact.name}\nSQL checked by the read-only guard."))
+            cells.append(
+                _cell(
+                    "code",
+                    f"{name} = con.sql({str(payload.get('sql', ''))!r}).df()\n{name}.head(20)",
+                    _text_output(_table(preview)),
+                )
+            )
+        elif artifact.type == "stat":
+            title, *details = _stat_lines(artifact.name, payload)
+            cells.append(_cell("markdown", f"## {title}\n\n" + "\n".join(f"- {line}" for line in details)))
+            arguments = ", ".join(
+                f"{key}={payload[key]!r}"
+                for key in ("by", "controls", "features", "grain", "horizon")
+                if payload.get(key)
+            )
+            source = _identifier(str(payload.get("data_source", "rows")))
+            call = (
+                f"from insightforge.core.stats import run_test\n\n{name} = run_test({artifact.name!r}, "
+                f"{payload.get('method')!r}, {payload.get('data_source')!r}, {payload.get('x')!r}, "
+                f"{payload.get('y')!r}, {source}{', ' + arguments if arguments else ''})\n"
+                f"print({name}.interpretation)"
+            )
+            cells.append(_cell("code", call, _text_output(str(payload.get("interpretation", "")))))
+        elif artifact.type == "code":
+            source = _identifier(str(payload.get("data_source", "rows")))
+            cells.append(
+                _cell(
+                    "markdown",
+                    f"## {artifact.name}\nFree-form code written by the AI and run in the sandbox. Check it.",
+                )
+            )
+            output = payload.get("error") or (
+                _table(payload) if payload.get("columns") else f"{payload.get('value')}"
+            )
+            cells.append(
+                _cell(
+                    "code",
+                    f"df = {source}.copy()\n{payload.get('code', '')}\nresult",
+                    _text_output(str(output)),
+                )
+            )
+        elif artifact.type == "plot":
+            cells.append(_cell("markdown", f"*Chart: {payload.get('title') or artifact.name}*"))
+        elif artifact.type == "text":
+            cells.append(_cell("markdown", f"## Summary\n\n{payload.get('text', '')}"))
+    assumptions = _assumptions(run)
+    if assumptions or run.warnings_json:
+        notes = [f"- Warning: {item}" for item in run.warnings_json or []]
+        notes += [f"- {item}" for item in assumptions]
+        cells.append(_cell("markdown", "## Assumptions and warnings\n\n" + "\n".join(notes)))
+    notebook = {
+        "cells": cells,
+        "metadata": {
+            "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+            "language_info": {"name": "python"},
+            "insightforge": {"run_id": run.id, "privacy_mode": provenance.get("privacy_mode")},
+        },
+        "nbformat": 4,
+        "nbformat_minor": 5,
+    }
+    return json.dumps(notebook, indent=1, default=str)
 
 
 def _stat_lines(name: str, payload: dict) -> list[str]:
@@ -206,6 +327,15 @@ def render_html(run: Run, artifacts: list[Artifact]) -> str:
                 + "".join(f"<li>{_safe(line)}</li>" for line in details)
                 + "</ul>"
             )
+        elif artifact.type == "code":
+            sections.append(f"<h3>{_safe(artifact.name)} (free-form code, sandboxed)</h3>")
+            sections.append(f"<pre><code>{_safe(payload.get('code', ''))}</code></pre>")
+            if payload.get("error"):
+                sections.append(f"<pre>{_safe(payload['error'])}</pre>")
+            if payload.get("columns"):
+                sections.append(_html_table(payload))
+            elif payload.get("value") is not None:
+                sections.append(f"<p>Result: {_safe(payload['value'])}</p>")
     sections.extend(
         [
             "<h2>Provenance</h2>",

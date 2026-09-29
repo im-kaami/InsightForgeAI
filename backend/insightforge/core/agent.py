@@ -17,6 +17,7 @@ from insightforge.core.llm import LLMClient, describe_error
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Plan, Planner, SummaryStep
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
+from insightforge.core.sandbox import DockerSandbox
 from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.summarizer import Summarizer
 from insightforge.core.trace import Tracer
@@ -51,12 +52,15 @@ class InsightForgeAgent:
         deep_max_rounds: int = 3,
         deep_max_seconds: float = 300,
         deep_max_tokens: int = 40000,
+        sandbox: DockerSandbox | None = None,
     ):
         self.deep_max_rounds = deep_max_rounds
         self.deep_max_seconds = deep_max_seconds
         self.deep_max_tokens = deep_max_tokens
+        self.sandbox = sandbox
         self.policy = PromptPolicy(privacy_mode, local_model=local_llm is not None)
         self.planner = Planner(llm, privacy_mode=privacy_mode, local_llm=local_llm)
+        self.planner.sandbox_enabled = sandbox is not None
         self.summarizer = Summarizer(
             llm, max_rows=summary_max_rows, privacy_mode=privacy_mode, local_llm=local_llm
         )
@@ -126,6 +130,7 @@ class InsightForgeAgent:
             render_png=self.render_png,
             on_event=on_event,
             query_timeout=self.query_timeout,
+            sandbox=self.sandbox,
         )
         executor.tracer = tracer
         rounds, reviews, deep_notes = 1, [], []

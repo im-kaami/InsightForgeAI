@@ -12,6 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CodeResultCard, type CodeResult } from "@/components/code-result";
 import { DataTable } from "@/components/data-table";
 import { Markdown } from "@/components/markdown";
 import { Plot } from "@/components/plot";
@@ -171,6 +172,7 @@ export function RunCard({
                   ["Markdown", "md"],
                   ["HTML", "html"],
                   ["PDF", "pdf"],
+                  ["Notebook (.ipynb)", "ipynb"],
                 ].map(([label, format]) => (
                   <DropdownMenuItem key={format} onClick={() => download(format)}>
                     {label}
@@ -242,6 +244,8 @@ export function RunCard({
               return <Markdown key={index}>{String(item.text ?? "")}</Markdown>;
             if (item.type === "stat")
               return <StatResultCard key={index} result={item as unknown as StatResult} />;
+            if (item.type === "code")
+              return <CodeResultCard key={index} result={item as unknown as CodeResult} />;
             if (item.type === "error")
               return (
                 <div

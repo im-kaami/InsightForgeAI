@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-TraceKind = Literal["model", "sql", "chart", "check", "decision", "test"]
+TraceKind = Literal["model", "sql", "chart", "check", "decision", "test", "code"]
 
 
 class TraceEvent(BaseModel):

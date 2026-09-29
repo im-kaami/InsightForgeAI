@@ -12,6 +12,7 @@ from insightforge.db.models import Artifact, Run, User
 from insightforge.services.reports import (
     ReportFormatUnavailable,
     render_html,
+    render_ipynb,
     render_markdown,
     render_pdf,
 )
@@ -64,6 +65,12 @@ def report(
     artifacts = db.scalars(
         select(Artifact).where(Artifact.run_id == run.id).order_by(Artifact.position)
     ).all()
+    if format == "ipynb":
+        return Response(
+            render_ipynb(run, artifacts),
+            media_type="application/x-ipynb+json",
+            headers={"Content-Disposition": f'attachment; filename="run-{run.id}.ipynb"'},
+        )
     text = render_markdown(run, artifacts)
     if format == "md":
         return Response(
@@ -80,7 +87,7 @@ def report(
         except ReportFormatUnavailable as error:
             raise HTTPException(501, str(error)) from error
         return Response(content, media_type="application/pdf")
-    raise HTTPException(422, "format must be md, html, or pdf")
+    raise HTTPException(422, "format must be md, html, pdf, or ipynb")
 
 
 @router.get("/{run_id}/artifacts/{position}/csv")

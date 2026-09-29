@@ -185,6 +185,27 @@ Choose the mode under the chat box, or send `"mode": "deep"` to `POST /api/sessi
 - **A/B tests** (`ab_test`): a sample-ratio check flags splits far from 50/50. A 0/1 outcome gets a two-proportion z-test; a numeric outcome gets Welch's t-test, with CUPED variance reduction when a pre-experiment covariate is named. Results report the difference, a 95% CI, and relative lift.
 - **Robustness check:** every group comparison, correlation, regression, and A/B test is re-run under reasonable alternatives: the other test family, the top and bottom 1% of values removed, no controls, no CUPED, or capped outcomes. The result says whether the conclusion holds in each, and a caution appears when it doesn't.
 
+**Python sandbox (free-form code).** With Docker running and `SANDBOX_ENABLED=true`, questions that explicitly ask for Python, a simulation, or a bootstrap ("Using Python, compute the median salary for each department") get a `python` step. The AI writes code that reads the SQL result as `df` and assigns `result`. The code runs in the `insightforge-sandbox:1` container:
+
+- no network
+- read-only root filesystem, with the input table mounted read-only
+- all Linux capabilities dropped and no privilege escalation
+- user 65534
+- 512 MB memory with no swap, 1 CPU, 128 processes, and a 30-second limit
+
+Build the image once with `docker build -t insightforge-sandbox:1 backend/sandbox`; it is pinned to `python:3.11.15-slim-bookworm` by digest and the backend's library versions. Results are labelled **Free-form code (sandboxed)**, the least trusted tier, and the code, output, and errors are shown in full. When the sandbox is off, the step reports that instead of running anything.
+
+**Notebook export.** **Download report → Notebook (.ipynb)** (or `GET /api/runs/{id}/report?format=ipynb`) turns a run into a Jupyter notebook in the order the steps ran:
+
+- the question and model
+- a DuckDB setup cell
+- each guarded SQL query with its saved preview
+- each tested method as a `run_test(...)` call with its interpretation, checks, and cautions
+- sandboxed code with its output
+- the summary, assumptions, and warnings
+
+Load the data in the first cell to rerun it. The file passes `nbformat` validation.
+
 When a tested method rejects its data (for example only one period came back), the AI gets one chance to rewrite the data query. In schema-only mode it sees only a value-free description of the problem.
 
 Every result carries a "tested method" label, a plain-language reading written by code, and the assumption checks. Cautions cover small groups, sparse tables, "not proof of cause", and effects too uncertain to call. Several tests in one answer are Holm-adjusted. Questions asking *why* a number changed get a separate change-choice call, and questions about forecasts or unusual periods a series-choice call. Questions containing words such as *significant*, *chance*, *really*, *correlated*, *associated*, *controlling for* or *for each additional* first get a short test-choice call, because `qwen3:4b` never added test steps from the general planning prompt. The call picks the method, the columns, and the row-level SQL. It follows the privacy mode like planning does, so schema-only sends no values.

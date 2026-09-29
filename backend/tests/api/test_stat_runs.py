@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from insightforge.core.llm import FakeLLMClient
 from insightforge.db.models import Run
 from insightforge.db.session import SessionLocal
@@ -70,3 +72,17 @@ async def test_test_steps_are_stored_shown_and_exported(client, auth_headers, hr
     assert "- p &lt; 0.001; n = 60; epsilon_squared = 0.361 (large)" in report.text
     html = await client.get(f"/api/runs/{run_id}/report?format=html", headers=auth_headers)
     assert "<h3>salary_by_department: Kruskal-Wallis test (tested method)</h3>" in html.text
+
+    notebook = await client.get(f"/api/runs/{run_id}/report?format=ipynb", headers=auth_headers)
+    assert notebook.status_code == 200
+    assert notebook.headers["content-disposition"].endswith('.ipynb"')
+    document = notebook.json()
+    assert document["nbformat"] == 4
+    sources = ["".join(cell["source"]) for cell in document["cells"]]
+    assert sources[0].startswith("# Do salaries really differ by department?")
+    assert f"rows = con.sql('SELECT department, salary FROM \"{table}\" LIMIT 10000').df()" in sources[3]
+    call = "run_test('salary_by_department', 'compare_groups', 'rows', 'department', 'salary', rows)"
+    assert any(call in source for source in sources)
+    assert document["metadata"]["insightforge"]["privacy_mode"] == "schema_only"
+    nbformat = pytest.importorskip("nbformat")
+    nbformat.validate(nbformat.reads(notebook.text, as_version=4))

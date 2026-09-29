@@ -339,6 +339,44 @@ test("statistical test results show the method, verdict, effect size and caution
   await expect(breakdown).toContainText(
     "This shows where the change happened, not why it happened.",
   );
+
+  await page.unroute(/\/api\/sessions\/[a-f0-9]+$/);
+  await page.route(/\/api\/sessions\/[a-f0-9]+$/, async (route) => {
+    const response = await route.fetch(upstream(route));
+    const session = await response.json();
+    const coded = {
+      ...cutOffRun(session.id),
+      goal: "Using Python, compute the median salary per department",
+      summary: "Engineering is highest.",
+      warnings: [],
+      verification_status: "exploratory",
+      provenance: { privacy_mode: "local" },
+      artifacts: [
+        {
+          type: "code",
+          name: "python_analysis",
+          trust: "free-form code",
+          code: "result = df.groupby('department')['salary'].median()",
+          data_source: "rows",
+          ok: true,
+          stdout: "",
+          error: null,
+          columns: ["department", "salary"],
+          rows: [{ department: "Engineering", salary: 107000 }],
+          total_rows: 1,
+          value: null,
+          limits: { network: "none", memory: "512m", timeout_seconds: "30" },
+        },
+      ],
+    };
+    await route.fulfill({ response, json: { ...session, runs: [coded] } });
+  });
+  await page.reload();
+  const code = page.getByTestId("code-result");
+  await expect(code).toContainText("Free-form code (sandboxed)");
+  await expect(code).toContainText("network none, 512m memory, 30 s limit");
+  await expect(code).toContainText("result = df.groupby('department')['salary'].median()");
+  await expect(code.getByRole("row")).toHaveCount(2);
 });
 
 test("charts switch type in the browser and the health check lists findings", async ({ page }) => {

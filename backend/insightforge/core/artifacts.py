@@ -38,6 +38,23 @@ class TextArtifact(BaseModel):
     text: str
 
 
+class CodeArtifact(BaseModel):
+    name: str
+    type: Literal["code"] = "code"
+    trust: Literal["free-form code"] = "free-form code"
+    code: str
+    data_source: str
+    ok: bool
+    stdout: str = ""
+    error: str | None = None
+    columns: list[str] = Field(default_factory=list)
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+    total_rows: int = 0
+    value: Any = None
+    note: str | None = None
+    limits: dict[str, str] = Field(default_factory=dict)
+
+
 class ErrorArtifact(BaseModel):
     name: str
     type: Literal["error"] = "error"
@@ -46,7 +63,8 @@ class ErrorArtifact(BaseModel):
 
 
 Artifact = Annotated[
-    TableArtifact | PlotArtifact | TextArtifact | ErrorArtifact | StatArtifact, Field(discriminator="type")
+    TableArtifact | PlotArtifact | TextArtifact | ErrorArtifact | StatArtifact | CodeArtifact,
+    Field(discriminator="type"),
 ]
 
 

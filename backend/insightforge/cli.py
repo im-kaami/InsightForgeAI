@@ -8,6 +8,7 @@ from typing import Any
 from insightforge.config import get_settings
 from insightforge.core.agent import InsightForgeAgent
 from insightforge.core.artifacts import (
+    CodeArtifact,
     ErrorArtifact,
     PlotArtifact,
     StatArtifact,
@@ -17,6 +18,7 @@ from insightforge.core.artifacts import (
 from insightforge.core.catalog import DataCatalog
 from insightforge.core.executor import truncation_note
 from insightforge.core.llm import build_llm, build_local_llm, llm_mode, offline_fake_llm, resolved_model
+from insightforge.core.sandbox import build_sandbox
 from insightforge.evals import DEFAULT_SUITE, CaseResult, compare, load_report, load_suite, run_suite
 from insightforge.ingest import IngestError, load_any
 
@@ -99,6 +101,16 @@ def _print_result(result: Any) -> None:
             print(artifact.interpretation)
             for line in [*artifact.checks, *artifact.cautions]:
                 print(f"- {line}")
+        elif isinstance(artifact, CodeArtifact):
+            outcome = "ran" if artifact.ok else "failed"
+            print(f"\nCode: {artifact.name} (free-form code, sandboxed; {outcome})")
+            print(artifact.code)
+            if artifact.error:
+                print(artifact.error)
+            if artifact.columns:
+                print(_pipe_rows(artifact.columns, artifact.rows))
+            elif artifact.value is not None:
+                print(f"Result: {artifact.value}")
         elif isinstance(artifact, ErrorArtifact):
             print(f"\nError: {artifact.name}: {artifact.message}")
         elif isinstance(artifact, TextArtifact):
@@ -159,6 +171,7 @@ def _schema(args: argparse.Namespace) -> int:
 
 def _eval_agent_factory(model: str) -> Callable[[], InsightForgeAgent]:
     settings = get_settings()
+    sandbox = build_sandbox(settings)
     if model == "offline":
         return lambda: InsightForgeAgent(offline_fake_llm(), privacy_mode="full")
     if model == "local":
@@ -167,7 +180,9 @@ def _eval_agent_factory(model: str) -> Callable[[], InsightForgeAgent]:
             raise SystemExit(
                 "Set LOCAL_LLM_MODEL (and a localhost LOCAL_LLM_BASE_URL) to evaluate a local model"
             )
-        return lambda: InsightForgeAgent(offline_fake_llm(), privacy_mode="local", local_llm=local)
+        return lambda: InsightForgeAgent(
+            offline_fake_llm(), privacy_mode="local", local_llm=local, sandbox=sandbox
+        )
     cloud = build_llm(settings)
     if llm_mode(cloud) == "fake":
         raise SystemExit("No cloud model is configured; set LLM_API_KEY or LLM_BASE_URL")
@@ -175,7 +190,7 @@ def _eval_agent_factory(model: str) -> Callable[[], InsightForgeAgent]:
         f"Note: the evaluation datasets are synthetic; questions and results are sent to "
         f"{settings.llm_provider} ({resolved_model(settings)})."
     )
-    return lambda: InsightForgeAgent(cloud, privacy_mode="full")
+    return lambda: InsightForgeAgent(cloud, privacy_mode="full", sandbox=sandbox)
 
 
 def _eval(args: argparse.Namespace) -> int:

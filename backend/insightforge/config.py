@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     deep_max_rounds: int = Field(default=3, ge=1, le=5)
     deep_max_seconds: int = Field(default=300, ge=10)
     deep_max_tokens: int = Field(default=40000, ge=1000)
+    sandbox_enabled: bool = False
+    sandbox_image: str = "insightforge-sandbox:1"
+    sandbox_timeout_seconds: int = Field(default=30, ge=5, le=300)
+    sandbox_memory: str = "512m"
+    sandbox_cpus: str = "1"
 
     @field_validator("llm_api_key", mode="before")
     @classmethod

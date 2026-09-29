@@ -1,6 +1,6 @@
 {
   "name": "insightforge-core",
-  "version": 7,
+  "version": 8,
   "datasets": {
     "hr": {
       "employees": "../tests/fixtures/hr.csv"
@@ -505,6 +505,16 @@
           "pre_revenue"
         ],
         "sql": "SELECT variant, revenue, pre_revenue FROM users"
+      }
+    },
+    {
+      "id": "python-median-salary",
+      "dataset": "hr",
+      "question": "Using Python, compute the median salary for each department.",
+      "expect": {
+        "type": "rows",
+        "keys": 1,
+        "sql": "SELECT department, MEDIAN(salary) FROM employees GROUP BY 1"
       }
     },
     {

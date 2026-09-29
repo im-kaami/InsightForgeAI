@@ -9,6 +9,7 @@ import pandas as pd
 
 from insightforge.core.artifacts import (
     Artifact,
+    CodeArtifact,
     ErrorArtifact,
     PlotArtifact,
     TableArtifact,
@@ -18,8 +19,18 @@ from insightforge.core.catalog import DataCatalog, sanitize_identifier
 from insightforge.core.chart_data import AUTO_CHART_NOTE, QueryRunner, prepare_chart_data, suggest_chart
 from insightforge.core.checks import SERIOUS_FINDINGS, ResultFinding, check_result
 from insightforge.core.memory import ConversationMemory
-from insightforge.core.planner import Plan, Planner, PlotStep, SqlStep, StatStep, Step, SummaryStep
+from insightforge.core.planner import (
+    Plan,
+    Planner,
+    PlotStep,
+    PythonStep,
+    SqlStep,
+    StatStep,
+    Step,
+    SummaryStep,
+)
 from insightforge.core.plotter import figure_to_png, make_figure, series_figure
+from insightforge.core.sandbox import DockerSandbox
 from insightforge.core.schema import SchemaInfo
 from insightforge.core.sql_guard import GuardedQuery, guard_query
 from insightforge.core.stats import StatArtifact, StatError, adjust_for_multiple_tests, run_test
@@ -74,7 +85,9 @@ class Executor:
         query_timeout: float | None = None,
         result_limit: int = 10000,
         auto_chart: bool = True,
+        sandbox: DockerSandbox | None = None,
     ):
+        self.sandbox = sandbox
         self.catalog = catalog
         self.planner = planner
         self.summarizer = summarizer
@@ -216,6 +229,67 @@ class Executor:
             test=artifact.test,
             n=artifact.n,
             rows_sampled=bool(note),
+        )
+        return artifact
+
+    def _python(self, state: ExecutionState, step: PythonStep) -> Artifact:
+        started = time.perf_counter()
+        frame = state.results.get(step.data_source)
+        if frame is None:
+            return ErrorArtifact(
+                name=step.name, action=step.action, message=f"Unknown data source: {step.data_source}"
+            )
+        if self.sandbox is None:
+            return CodeArtifact(
+                name=step.name,
+                code=step.code,
+                data_source=step.data_source,
+                ok=False,
+                error="The Python sandbox is turned off (SANDBOX_ENABLED) or Docker is not available.",
+            )
+        guarded, truncated, full_row_count = state.sources[step.data_source]
+        note = None
+        if truncated and guarded.full_sql:
+            frame = self._source_query(guarded.full_sql)(
+                f"SELECT * FROM src USING SAMPLE reservoir({STAT_MAX_ROWS} ROWS) REPEATABLE (42)"
+            )
+            note = (
+                f"The code saw a random sample of {STAT_MAX_ROWS:,} of {full_row_count:,} rows."
+                if full_row_count and full_row_count > STAT_MAX_ROWS
+                else f"The code saw all {len(frame):,} rows, not only the {self.result_limit:,} shown."
+            )
+        outcome = self.sandbox.run(step.code, frame)
+        artifact = CodeArtifact(
+            name=step.name,
+            code=step.code,
+            data_source=step.data_source,
+            ok=outcome.ok,
+            stdout=outcome.stdout,
+            error=outcome.error,
+            note=note,
+            limits=outcome.limits,
+        )
+        if outcome.frame is not None:
+            artifact.columns = [str(column) for column in outcome.frame.columns]
+            artifact.rows = json.loads(
+                outcome.frame.head(self.row_limit).to_json(orient="records", date_format="iso")
+            )
+            artifact.total_rows = len(outcome.frame)
+            state.results[step.name] = outcome.frame
+        elif outcome.value is not None:
+            artifact.value = outcome.value
+            value = outcome.value if isinstance(outcome.value, dict) else {"result": outcome.value}
+            state.results[step.name] = pd.DataFrame([value])
+        if outcome.ok:
+            state.notes[step.name] = "Free-form code written by the AI and run in a sandbox; check it."
+        self.tracer.record(
+            step.name,
+            "code",
+            started,
+            ok=outcome.ok,
+            seconds=round(outcome.seconds, 2),
+            rows=artifact.total_rows,
+            error=(outcome.error or "")[:300] or None,
         )
         return artifact
 
@@ -427,6 +501,10 @@ class Executor:
                     if isinstance(artifact, StatArtifact) and artifact.history:
                         state.artifacts.append(self._series_chart(artifact))
                         state.auto_chart = False
+            elif isinstance(step, PythonStep):
+                self._forget(state, step.name)
+                artifact = self._python(state, step)
+                state.artifacts.append(artifact)
             elif isinstance(step, SummaryStep):
                 try:
                     summary, response = self.summarizer.summarize(

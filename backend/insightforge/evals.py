@@ -10,7 +10,13 @@ import pandas as pd
 from pydantic import BaseModel, Field
 
 from insightforge.core.agent import InsightForgeAgent
-from insightforge.core.artifacts import ErrorArtifact, RunResult, StatArtifact, TableArtifact
+from insightforge.core.artifacts import (
+    CodeArtifact,
+    ErrorArtifact,
+    RunResult,
+    StatArtifact,
+    TableArtifact,
+)
 from insightforge.core.catalog import DataCatalog, _quote
 from insightforge.core.schema import DatasetNotes
 from insightforge.core.stats import TestMethod, run_test
@@ -213,7 +219,11 @@ def score(case: EvalCase, expected: pd.DataFrame, result: RunResult) -> tuple[bo
         return False, f"asked a needless clarifying question: {result.clarification.question}"
     if case.expect.type == "stat":
         return _score_stat(case.expect, expected, result)
-    tables = [artifact for artifact in result.artifacts if isinstance(artifact, TableArtifact)]
+    tables = [
+        artifact
+        for artifact in result.artifacts
+        if isinstance(artifact, TableArtifact) or (isinstance(artifact, CodeArtifact) and artifact.columns)
+    ]
     if not tables:
         return False, "no result tables"
     if expected.empty:
@@ -229,7 +239,7 @@ def score(case: EvalCase, expected: pd.DataFrame, result: RunResult) -> tuple[bo
                 for cell in row.values()
             ):
                 return True, "value found in a result cell"
-            if target.is_integer() and target in {table.total_rows, table.full_row_count}:
+            if target.is_integer() and target in {table.total_rows, getattr(table, "full_row_count", None)}:
                 return True, "value matches the number of result rows"
         return False, f"expected {target:g}, which is not in any result table"
     if expect.type == "top":
