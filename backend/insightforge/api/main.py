@@ -7,7 +7,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
-from insightforge.api.routers import auth, connections, datasets, runs, schedules, sessions, verified_reports
+from insightforge.api.routers import (
+    auth,
+    connections,
+    datasets,
+    models,
+    runs,
+    schedules,
+    sessions,
+    verified_reports,
+)
 from insightforge.api.schemas import HealthOut, ImportOptions
 from insightforge.config import get_settings, validate_settings
 from insightforge.core.llm import build_llm, build_local_llm, llm_mode, resolved_model
@@ -77,6 +86,7 @@ def create_app() -> FastAPI:
         runs.router,
         schedules.router,
         verified_reports.router,
+        models.router,
     ):
         application.include_router(router, prefix="/api")
 

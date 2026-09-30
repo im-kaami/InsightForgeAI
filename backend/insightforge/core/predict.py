@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -71,25 +72,44 @@ def _screen_features(
     return kept, dropped, leaks
 
 
-def predict(
-    frame: pd.DataFrame, target: str, features: list[str] | None = None, date_column: str | None = None
-) -> dict[str, Any]:
-    from sklearn.compose import ColumnTransformer
-    from sklearn.dummy import DummyClassifier, DummyRegressor
-    from sklearn.ensemble import (
-        HistGradientBoostingClassifier,
-        HistGradientBoostingRegressor,
-        RandomForestClassifier,
-        RandomForestRegressor,
-    )
-    from sklearn.impute import SimpleImputer
-    from sklearn.inspection import permutation_importance
-    from sklearn.linear_model import LogisticRegression, Ridge
-    from sklearn.metrics import balanced_accuracy_score, mean_absolute_error, r2_score, roc_auc_score
-    from sklearn.model_selection import cross_val_score, train_test_split
-    from sklearn.pipeline import make_pipeline
-    from sklearn.preprocessing import OneHotEncoder, StandardScaler
+@dataclass
+class TrainedModel:
+    """Result of screening, splitting and choosing a model on a prepared frame.
 
+    Holds the fitted best pipeline, the fitted baseline, the kept feature list and
+    everything ``predict`` needs to build its report. ``model_store`` reuses the same
+    computation to save and reload models.
+    """
+
+    classify: bool
+    target: str
+    date_column: str | None
+    kept: list[str]
+    numeric: list[str]
+    categorical: list[str]
+    dropped: list[str]
+    leaks: list[str]
+    best_name: str
+    baseline_name: str
+    best_model: Any
+    baseline_model: Any
+    board: list[dict[str, Any]]
+    split: str
+    folds: int
+    metric: str
+    scoring: str
+    n: int
+    x_test: pd.DataFrame
+    y_test: pd.Series
+    y: pd.Series
+
+
+def prepare_frame(frame: pd.DataFrame, target: str) -> pd.DataFrame:
+    """Drop rows without the target, cap the row count and check the minimum.
+
+    Deterministic: the row cap uses a fixed random_state so training on the same
+    frame always sees the same rows.
+    """
     if target not in frame.columns:
         raise PredictError(
             f"Column {target!r} is not in the result; available: {', '.join(map(str, frame.columns))}"
@@ -104,6 +124,34 @@ def predict(
     classify = _is_classification(data[target])
     if classify and data[target].nunique() < 2:
         raise PredictError(f"{target} has only one value, so there is nothing to predict")
+    return data
+
+
+def train_model(
+    frame: pd.DataFrame, target: str, features: list[str] | None = None, date_column: str | None = None
+) -> TrainedModel:
+    """Screen features, split, cross-validate model choices and fit the best one.
+
+    This is the shared core of ``predict`` and ``model_store.train_final``. It is
+    deterministic (fixed seeds) so a reloaded model reproduces training predictions.
+    """
+    from sklearn.compose import ColumnTransformer
+    from sklearn.dummy import DummyClassifier, DummyRegressor
+    from sklearn.ensemble import (
+        HistGradientBoostingClassifier,
+        HistGradientBoostingRegressor,
+        RandomForestClassifier,
+        RandomForestRegressor,
+    )
+    from sklearn.impute import SimpleImputer
+    from sklearn.linear_model import LogisticRegression, Ridge
+    from sklearn.metrics import balanced_accuracy_score, mean_absolute_error
+    from sklearn.model_selection import cross_val_score, train_test_split
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+    data = prepare_frame(frame, target)
+    classify = _is_classification(data[target])
     kept, dropped, leaks = _screen_features(data, target, list(features or []), date_column)
     if not kept:
         raise PredictError("No usable predictor columns remain after removing IDs, constants and leaks")
@@ -193,15 +241,53 @@ def predict(
                 if classify
                 else mean_absolute_error(y_test, predicted)
             )
+    return TrainedModel(
+        classify=classify,
+        target=target,
+        date_column=date_column,
+        kept=kept,
+        numeric=numeric,
+        categorical=categorical,
+        dropped=dropped,
+        leaks=leaks,
+        best_name=best["model"],
+        baseline_name=baseline_name,
+        best_model=fitted[best["model"]],
+        baseline_model=fitted[baseline_name],
+        board=board,
+        split=split,
+        folds=folds,
+        metric=metric,
+        scoring=scoring,
+        n=len(data),
+        x_test=x_test,
+        y_test=y_test,
+        y=y,
+    )
+
+
+def predict(
+    frame: pd.DataFrame, target: str, features: list[str] | None = None, date_column: str | None = None
+) -> dict[str, Any]:
+    from sklearn.inspection import permutation_importance
+    from sklearn.metrics import r2_score, roc_auc_score
+
+    trained = train_model(frame, target, features, date_column)
+    classify = trained.classify
+    kept = trained.kept
+    board = trained.board
+    best_name = trained.best_name
+    best_model = trained.best_model
+
     extra = {}
-    if classify and y.nunique() == 2 and hasattr(fitted[best["model"]], "predict_proba"):
-        probabilities = fitted[best["model"]].predict_proba(x_test)[:, 1]
-        positive = fitted[best["model"]].classes_[1]
-        extra["roc_auc"] = float(roc_auc_score((y_test == positive).astype(int), probabilities))
+    if classify and trained.y.nunique() == 2 and hasattr(best_model, "predict_proba"):
+        probabilities = best_model.predict_proba(trained.x_test)[:, 1]
+        positive = best_model.classes_[1]
+        extra["roc_auc"] = float(roc_auc_score((trained.y_test == positive).astype(int), probabilities))
     if not classify:
-        extra["r_squared"] = float(r2_score(y_test, fitted[best["model"]].predict(x_test)))
+        extra["r_squared"] = float(r2_score(trained.y_test, best_model.predict(trained.x_test)))
     importance = permutation_importance(
-        fitted[best["model"]], x_test, y_test, n_repeats=5, random_state=42, scoring=scoring
+        best_model, trained.x_test, trained.y_test, n_repeats=5, random_state=42, scoring=trained.scoring
     )
     ranked = sorted(
         (
@@ -213,8 +299,8 @@ def predict(
         key=lambda row: row["importance"],
         reverse=True,
     )
-    best_score = next(row["holdout_score"] for row in board if row["model"] == best["model"])
-    base_score = next(row["holdout_score"] for row in board if row["model"] == baseline_name)
+    best_score = next(row["holdout_score"] for row in board if row["model"] == best_name)
+    base_score = next(row["holdout_score"] for row in board if row["model"] == trained.baseline_name)
     gain = (
         (best_score - base_score)
         if classify
@@ -225,23 +311,24 @@ def predict(
     checks = [
         f"Problem type: {'classification' if classify else 'regression'} of {target}; "
         f"{len(kept)} predictors.",
-        f"Check: {split}. Model choice used {folds}-fold cross-validation on the training part only.",
+        f"Check: {trained.split}. Model choice used {trained.folds}-fold cross-validation on the "
+        "training part only.",
         "Leaderboard ("
-        + metric
+        + trained.metric
         + "): "
         + "; ".join(f"{row['model']} {_fmt(row['cv_score'])}" for row in board)
         + ".",
     ]
-    if dropped:
-        checks.append(f"Left out: {', '.join(dropped[:8])}.")
+    if trained.dropped:
+        checks.append(f"Left out: {', '.join(trained.dropped[:8])}.")
     cautions = ["Importance shows what the model relies on, not what causes the outcome."]
-    if leaks:
+    if trained.leaks:
         cautions.append(
-            f"{', '.join(leaks)} predicted {target} almost perfectly and were left out; they may only be "
-            "known after the outcome (leakage)."
+            f"{', '.join(trained.leaks)} predicted {target} almost perfectly and were left out; they may "
+            "only be known after the outcome (leakage)."
         )
-    if len(data) < 500:
-        cautions.append(f"Only {len(data)} rows; scores may change noticeably with more data.")
+    if trained.n < 500:
+        cautions.append(f"Only {trained.n} rows; scores may change noticeably with more data.")
     if (classify and gain < 0.05) or (not classify and gain < 0.05):
         cautions.append("The best model is barely better than the baseline; its predictions add little.")
     top = ", ".join(row["feature"] for row in ranked[:3] if row["importance"] > 0) or "no single column"
@@ -253,7 +340,7 @@ def predict(
         "the average"
     )
     return {
-        "test": f"Prediction model ({best['model']})",
+        "test": f"Prediction model ({best_name})",
         "statistic": best_score,
         "p_value": None,
         "groups": board,
@@ -261,11 +348,11 @@ def predict(
         "checks": checks,
         "cautions": cautions,
         "interpretation": (
-            f"The {best['model']} model predicts {target} on held-out rows with {comparison}. "
+            f"The {best_name} model predicts {target} on held-out rows with {comparison}. "
             f"It relies most on {top}."
             + (f" ROC AUC {extra['roc_auc']:.2f}." if "roc_auc" in extra else "")
             + (f" R-squared {extra['r_squared']:.2f}." if "r_squared" in extra else "")
         ),
-        "n": len(data),
+        "n": trained.n,
         "features": kept,
     }

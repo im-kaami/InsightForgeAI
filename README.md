@@ -281,6 +281,16 @@ The in-process scheduler continues to run exploratory goals. It is not durable v
 
 **Suggestions.** **Suggest from health check** proposes steps (drop exact duplicates, convert numbers or dates stored as text, merge values that differ only in case or spaces) and rules the current data already meets. Suggestions come from fixed checks on the health check; no AI model is involved, and nothing is saved until you add it and save. Recipes and rules are not available for live database connections.
 
+## Saved models, scoring and drift
+
+**Save a model.** A "predict this column" result card has a **Save model** button with a name field. Saving re-runs the prediction's query on the exact dataset version the answer used, retrains the chosen model with the same fixed settings, and stores it with that version, the target, the features, and the held-out scores. If the retrained score differs from the one the answer reported, the model is still saved with a warning.
+
+**Score new data.** The dataset page's **Saved models** card lists each model. Pick any confirmed version (for example, next month's upload) and choose **Score and check drift**. You get a prediction for every row (plus a probability for yes/no targets), a preview, and a CSV download of the latest scores. When the new data also has the outcome column, the card compares accuracy on it with the held-out accuracy from training.
+
+**Drift.** For each input, the population stability index (PSI) compares the new values with the training values: below 0.1 is stable, 0.1 to 0.25 a moderate shift, and above 0.25 a major shift. The card also shows the share of category values never seen in training and the change in missing values. Retraining is recommended when any input shows a major shift, or when accuracy on the new data is clearly worse (balanced accuracy down more than 0.05, or the typical error up more than 20%) and at least a moderate shift is present. All of this is calculated by fixed code; no AI model is involved.
+
+Limits: drift compares the new data with the training data; it does not prove the model is right or wrong, and it says nothing about causes. Scoring stops when the chosen version is missing a feature column, or when it breaks a blocking validation rule. Scoring is on demand only (not scheduled). Models are stored as files under the storage directory and kept until you delete the model or its dataset. Model files are only ever written and read by the server; never replace them with files from elsewhere, because the format can run code when loaded.
+
 ## Safety
 
 - SQL is parsed with SQLGlot and restricted to one SELECT or UNION statement.

@@ -46,6 +46,16 @@ class Storage:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def model_dir(self, user_id: str, model_id: str) -> Path:
+        path = self.root / "users" / user_id / "models" / model_id
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def delete_model(self, user_id: str, model_id: str) -> None:
+        path = self.root / "users" / user_id / "models" / model_id
+        if path.is_dir():
+            shutil.rmtree(path)
+
     def delete_dataset(self, user_id: str, dataset_id: str) -> None:
         path = self.root / "users" / user_id / "datasets" / dataset_id
         if path.is_dir():

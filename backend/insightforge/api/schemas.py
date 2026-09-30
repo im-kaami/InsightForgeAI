@@ -211,3 +211,60 @@ class ScheduleUpdate(BaseModel):
     cron: str | None = None
     timezone: str | None = None
     enabled: bool | None = None
+
+class SaveModelIn(BaseModel):
+    name: str | None = None
+
+
+class ScoreModelIn(BaseModel):
+    version_id: str | None = None
+
+
+class SavedModelOut(BaseModel):
+    id: str
+    dataset_id: str
+    dataset_version_id: str
+    run_id: str
+    name: str
+    task: str
+    target: str
+    features: list[str]
+    date_column: str | None = None
+    model_type: str
+    metrics: dict[str, Any]
+    created_at: str | None = None
+    warning: str | None = None
+
+
+class DriftFeatureOut(BaseModel):
+    feature: str
+    kind: str
+    psi: float
+    band: str
+    unseen_share: float
+    missing_change: float
+
+
+class DriftReportOut(BaseModel):
+    features: list[DriftFeatureOut]
+    rows: int
+    unseen_row_share: float
+    max_psi: float
+
+
+class RecommendationOut(BaseModel):
+    verdict: str
+    detail: str
+    reasons: list[str]
+
+
+class ScoreOut(BaseModel):
+    model_id: str
+    version_id: str
+    rows_scored: int
+    preview_columns: list[str]
+    preview_rows: list[dict[str, Any]]
+    drift: DriftReportOut
+    new_data_metrics: dict[str, float] | None = None
+    holdout_metrics: dict[str, Any]
+    recommendation: RecommendationOut

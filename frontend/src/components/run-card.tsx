@@ -243,7 +243,14 @@ export function RunCard({
             if (item.type === "text")
               return <Markdown key={index}>{String(item.text ?? "")}</Markdown>;
             if (item.type === "stat")
-              return <StatResultCard key={index} result={item as unknown as StatResult} />;
+              return (
+                <StatResultCard
+                  key={index}
+                  result={item as unknown as StatResult}
+                  runId={run.status === "completed" ? run.id : undefined}
+                  position={index}
+                />
+              );
             if (item.type === "code")
               return <CodeResultCard key={index} result={item as unknown as CodeResult} />;
             if (item.type === "error")

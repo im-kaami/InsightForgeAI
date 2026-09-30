@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { AddDataDialog } from "@/components/add-data-dialog";
 import { DataTable } from "@/components/data-table";
 import { DatasetTrustPanel } from "@/components/dataset-trust-panel";
+import { SavedModels } from "@/components/saved-models";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -204,6 +205,9 @@ export default function DatasetPage() {
           void client.invalidateQueries({ queryKey: ["dataset-versions", id] });
         }}
       />
+      {dataset.kind !== "connection" && (
+        <SavedModels dataset={dataset} versions={versions.data ?? []} />
+      )}
       <VerifiedReportBuilder
         key={`${dataset.id}:${dataset.current_version_id ?? "draft"}`}
         dataset={dataset}

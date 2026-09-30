@@ -16,6 +16,8 @@ export type RecipeStep = NonNullable<components["schemas"]["CleaningRecipe"]["st
 export type ValidationRule = NonNullable<components["schemas"]["RuleSet"]["rules"]>[number];
 export type AppliedRecipe = components["schemas"]["AppliedRecipe"];
 export type ValidationReport = components["schemas"]["ValidationReport"];
+export type SavedModel = components["schemas"]["SavedModelOut"];
+export type ModelScore = components["schemas"]["ScoreOut"];
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -192,6 +194,17 @@ export const verifiedReports = {
     apiFetch<ReportDefinition>(`/datasets/${datasetId}/reports`, json(body)),
   run: (datasetId: string, definitionId: string, body: components["schemas"]["ReportRunCreate"]) =>
     apiFetch<Run>(`/datasets/${datasetId}/reports/${definitionId}/runs`, json(body)),
+};
+
+export const models = {
+  save: (runId: string, position: number, name: string) =>
+    apiFetch<SavedModel>(`/runs/${runId}/artifacts/${position}/model`, json({ name })),
+  list: (datasetId: string) => apiFetch<SavedModel[]>(`/datasets/${datasetId}/models`),
+  score: (id: string, versionId?: string) =>
+    apiFetch<ModelScore>(`/models/${id}/score`, json({ version_id: versionId ?? null })),
+  downloadScores: (id: string, name: string) =>
+    downloadBlob(`/models/${id}/scores/latest.csv`, `${name.replace(/[^\w-]+/g, "_")}-scores.csv`),
+  remove: (id: string) => apiFetch<void>(`/models/${id}`, { method: "DELETE" }),
 };
 
 export const schedules = {

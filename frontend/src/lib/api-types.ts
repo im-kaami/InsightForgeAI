@@ -642,6 +642,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{run_id}/artifacts/{position}/model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save Model */
+        post: operations["save_model_api_runs__run_id__artifacts__position__model_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/datasets/{dataset_id}/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Models */
+        get: operations["list_models_api_datasets__dataset_id__models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models/{model_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Model */
+        get: operations["get_model_api_models__model_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Model */
+        delete: operations["delete_model_api_models__model_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models/{model_id}/score": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Score Model */
+        post: operations["score_model_api_models__model_id__score_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models/{model_id}/scores/latest.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Latest Scores */
+        get: operations["latest_scores_api_models__model_id__scores_latest_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1073,6 +1159,32 @@ export interface components {
             /** Expression */
             expression: string;
         };
+        /** DriftFeatureOut */
+        DriftFeatureOut: {
+            /** Feature */
+            feature: string;
+            /** Kind */
+            kind: string;
+            /** Psi */
+            psi: number;
+            /** Band */
+            band: string;
+            /** Unseen Share */
+            unseen_share: number;
+            /** Missing Change */
+            missing_change: number;
+        };
+        /** DriftReportOut */
+        DriftReportOut: {
+            /** Features */
+            features: components["schemas"]["DriftFeatureOut"][];
+            /** Rows */
+            rows: number;
+            /** Unseen Row Share */
+            unseen_row_share: number;
+            /** Max Psi */
+            max_psi: number;
+        };
         /** DropDuplicates */
         DropDuplicates: {
             /** Table */
@@ -1278,6 +1390,15 @@ export interface components {
             step: components["schemas"]["RenameColumn"] | components["schemas"]["ChangeType"] | components["schemas"]["CleanText"] | components["schemas"]["MapValues"] | components["schemas"]["FillMissing"] | components["schemas"]["DropMissing"] | components["schemas"]["DropDuplicates"] | components["schemas"]["FilterRows"] | components["schemas"]["DeriveColumn"];
             /** Reason */
             reason: string;
+        };
+        /** RecommendationOut */
+        RecommendationOut: {
+            /** Verdict */
+            verdict: string;
+            /** Detail */
+            detail: string;
+            /** Reasons */
+            reasons: string[];
         };
         /** RenameColumn */
         RenameColumn: {
@@ -1523,6 +1644,42 @@ export interface components {
              */
             business_notes: string;
         };
+        /** SaveModelIn */
+        SaveModelIn: {
+            /** Name */
+            name?: string | null;
+        };
+        /** SavedModelOut */
+        SavedModelOut: {
+            /** Id */
+            id: string;
+            /** Dataset Id */
+            dataset_id: string;
+            /** Dataset Version Id */
+            dataset_version_id: string;
+            /** Run Id */
+            run_id: string;
+            /** Name */
+            name: string;
+            /** Task */
+            task: string;
+            /** Target */
+            target: string;
+            /** Features */
+            features: string[];
+            /** Date Column */
+            date_column?: string | null;
+            /** Model Type */
+            model_type: string;
+            /** Metrics */
+            metrics: {
+                [key: string]: unknown;
+            };
+            /** Created At */
+            created_at?: string | null;
+            /** Warning */
+            warning?: string | null;
+        };
         /** SavedRecipe */
         SavedRecipe: {
             /** Steps */
@@ -1619,6 +1776,36 @@ export interface components {
         SchemaInfo: {
             /** Tables */
             tables: components["schemas"]["TableInfo"][];
+        };
+        /** ScoreModelIn */
+        ScoreModelIn: {
+            /** Version Id */
+            version_id?: string | null;
+        };
+        /** ScoreOut */
+        ScoreOut: {
+            /** Model Id */
+            model_id: string;
+            /** Version Id */
+            version_id: string;
+            /** Rows Scored */
+            rows_scored: number;
+            /** Preview Columns */
+            preview_columns: string[];
+            /** Preview Rows */
+            preview_rows: {
+                [key: string]: unknown;
+            }[];
+            drift: components["schemas"]["DriftReportOut"];
+            /** New Data Metrics */
+            new_data_metrics?: {
+                [key: string]: number;
+            } | null;
+            /** Holdout Metrics */
+            holdout_metrics: {
+                [key: string]: unknown;
+            };
+            recommendation: components["schemas"]["RecommendationOut"];
         };
         /** SessionCreate */
         SessionCreate: {
@@ -3302,6 +3489,199 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_model_api_runs__run_id__artifacts__position__model_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                position: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveModelIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedModelOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_models_api_datasets__dataset_id__models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedModelOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_model_api_models__model_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedModelOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_model_api_models__model_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    score_model_api_models__model_id__score_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScoreModelIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoreOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    latest_scores_api_models__model_id__scores_latest_csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

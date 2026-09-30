@@ -155,3 +155,23 @@ class Schedule(Base):
     last_run_id: Mapped[str | None] = mapped_column(ForeignKey("runs.id"), nullable=True)
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+class SavedModel(Base):
+    __tablename__ = "saved_models"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("datasets.id"), index=True)
+    dataset_version_id: Mapped[str] = mapped_column(String(32))
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"))
+    artifact_position: Mapped[int] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(200))
+    task: Mapped[str] = mapped_column(String(20))
+    target: Mapped[str] = mapped_column(String(200))
+    features_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    date_column: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    source_sql: Mapped[str] = mapped_column(Text)
+    metrics_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    profile_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    model_type: Mapped[str] = mapped_column(String(100))
+    file_path: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

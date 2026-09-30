@@ -1,4 +1,12 @@
+"use client";
+
+import { useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { models } from "@/lib/api";
 
 type Effect = { name: string; value: number; magnitude: string };
 type Interval = { label: string; low: number; high: number; level: number };
@@ -7,6 +15,7 @@ export type StatResult = {
   test: string;
   n: number;
   method?: string;
+  y?: string;
   p_value?: number | null;
   p_adjusted?: number | null;
   statistic?: number | null;
@@ -42,7 +51,67 @@ const STATISTIC_LABELS: Record<string, string> = {
 };
 const pText = (value: number) => (value < 0.001 ? "< 0.001" : `= ${value.toFixed(3)}`);
 
-export function StatResultCard({ result }: { result: StatResult }) {
+function SaveModel({
+  runId,
+  position,
+  target,
+}: {
+  runId: string;
+  position: number;
+  target: string;
+}) {
+  const [name, setName] = useState(`${target} model`);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const fieldId = `model-name-${runId}-${position}`;
+  async function save() {
+    setBusy(true);
+    try {
+      await models.save(runId, position, name.trim());
+      setSaved(true);
+      toast.success("Model saved. Score new data from the dataset page.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save the model");
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (saved)
+    return (
+      <p data-testid="model-saved" className="text-xs text-muted-foreground">
+        Saved as “{name.trim()}”. Open the dataset page to score new data and check drift.
+      </p>
+    );
+  return (
+    <div data-testid="save-model" className="flex flex-wrap items-end gap-2">
+      <div className="space-y-1">
+        <Label htmlFor={fieldId} className="text-xs">
+          Model name
+        </Label>
+        <Input
+          id={fieldId}
+          className="h-8 w-56"
+          maxLength={200}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+      </div>
+      <Button size="sm" variant="outline" disabled={busy || !name.trim()} onClick={save}>
+        {busy ? "Saving..." : "Save model"}
+      </Button>
+    </div>
+  );
+}
+
+export function StatResultCard({
+  result,
+  runId,
+  position,
+}: {
+  result: StatResult;
+  runId?: string;
+  position?: number;
+}) {
   const groups = result.groups ?? [];
   const columns = groups.length ? Object.keys(groups[0]) : [];
   const p = result.p_adjusted ?? result.p_value;
@@ -176,6 +245,9 @@ export function StatResultCard({ result }: { result: StatResult }) {
         ))}
         {result.note && <li>{result.note}</li>}
       </ul>
+      {result.method === "predict" && runId && position != null && (
+        <SaveModel runId={runId} position={position} target={String(result.y ?? "target")} />
+      )}
     </section>
   );
 }

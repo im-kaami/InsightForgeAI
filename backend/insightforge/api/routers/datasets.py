@@ -537,6 +537,8 @@ def delete_dataset(
             db.execute(delete(Artifact).where(Artifact.run_id.in_(run_ids)))
             db.execute(delete(Run).where(Run.id.in_(run_ids)))
         db.execute(delete(ChatSession).where(ChatSession.id.in_(session_ids)))
+    from insightforge.services.models import delete_models_for_dataset
+    delete_models_for_dataset(db, user.id, dataset.id)
     db.delete(dataset)
     db.commit()
     storage.delete_dataset(user.id, dataset.id)
