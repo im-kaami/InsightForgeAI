@@ -4,7 +4,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from insightforge.core.profiling import DataProfile
+from insightforge.core.recipes import AppliedRecipe, RecipeSuggestion, SavedRecipe
 from insightforge.core.schema import DatasetNotes, SchemaInfo
+from insightforge.core.validation import RuleSuggestion, SavedRules, ValidationReport
 from insightforge.core.verified_report import ReportPeriod, SalesDefinition
 
 
@@ -52,8 +54,16 @@ class VersionOut(APIModel):
     sources: list[dict[str, Any]]
     schema_: SchemaInfo = Field(alias="schema")
     profile: DataProfile
+    recipe: AppliedRecipe | None = None
+    validation: ValidationReport | None = None
     created_at: datetime
     confirmed_at: datetime | None
+
+
+class Suggestions(BaseModel):
+    recipe_steps: list[RecipeSuggestion] = Field(default_factory=list)
+    rules: list[RuleSuggestion] = Field(default_factory=list)
+    method: str = "suggested by fixed checks on the data health check; no AI model is used"
 
 
 class VersionConfirm(BaseModel):
@@ -98,6 +108,8 @@ class DatasetOut(APIModel):
     current_version_id: str | None = None
     llm_policy: Literal["local", "schema_only", "full"] = "local"
     notes: DatasetNotes = Field(default_factory=DatasetNotes)
+    recipe: SavedRecipe = Field(default_factory=SavedRecipe)
+    rules: SavedRules = Field(default_factory=SavedRules)
     profile: DataProfile | None = None
     review_version_id: str | None = None
     created_at: datetime

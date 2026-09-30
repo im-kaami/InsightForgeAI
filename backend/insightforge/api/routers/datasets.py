@@ -15,14 +15,17 @@ from insightforge.api.schemas import (
     DatasetOut,
     ImportOptions,
     PrivacyUpdate,
+    Suggestions,
     URLDatasetCreate,
     VersionConfirm,
     VersionOut,
 )
 from insightforge.config import get_settings
 from insightforge.core.profiling import DataProfile
+from insightforge.core.recipes import AppliedRecipe, CleaningRecipe, SavedRecipe, suggest_steps
 from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.sql_guard import guard_sql
+from insightforge.core.validation import RuleSet, SavedRules, ValidationReport, suggest_rules
 from insightforge.db.models import (
     ChatSession,
     Connection,
@@ -45,7 +48,11 @@ from insightforge.services.datasets import (
     open_catalog,
     refresh_url_dataset,
     reprofile_version,
+    save_recipe,
+    save_rules,
     stage_files,
+    stage_recipe_version,
+    validate_version,
 )
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
@@ -100,6 +107,8 @@ def output(dataset: Dataset, review_version_id: str | None = None) -> DatasetOut
         current_version_id=dataset.current_version_id,
         llm_policy=dataset.llm_policy,
         notes=DatasetNotes.model_validate(dataset.notes_json or {}),
+        recipe=SavedRecipe.model_validate(dataset.recipe_json or {}),
+        rules=SavedRules.model_validate(dataset.rules_json or {}),
         profile=DataProfile.model_validate(dataset.profile_json) if dataset.profile_json else None,
         review_version_id=review_version_id,
         created_at=dataset.created_at,
@@ -115,6 +124,10 @@ def version_output(version: DatasetVersion) -> VersionOut:
         sources=version.sources_json,
         schema=SchemaInfo.model_validate(version.schema_json),
         profile=DataProfile.model_validate(version.profile_json),
+        recipe=AppliedRecipe.model_validate(version.recipe_json) if version.recipe_json else None,
+        validation=(
+            ValidationReport.model_validate(version.validation_json) if version.validation_json else None
+        ),
         created_at=_utc(version.created_at),
         confirmed_at=_utc(version.confirmed_at),
     )
@@ -317,6 +330,63 @@ def update_notes(dataset_id: str, body: DatasetNotes, db: Db, user: CurrentUser)
     db.commit()
     db.refresh(dataset)
     return output(dataset)
+
+
+def _versioned(dataset: Dataset) -> None:
+    if dataset.connection_id:
+        raise HTTPException(422, "Live connection datasets do not have immutable versions")
+
+
+@router.get("/{dataset_id}/suggestions", response_model=Suggestions)
+def suggestions(dataset_id: str, db: Db, user: CurrentUser):
+    dataset = owned(db, user, dataset_id)
+    _versioned(dataset)
+    ensure_current_version(db, dataset)
+    if not dataset.profile_json:
+        return Suggestions()
+    profile = DataProfile.model_validate(dataset.profile_json)
+    return Suggestions(recipe_steps=suggest_steps(profile), rules=suggest_rules(profile))
+
+
+@router.put("/{dataset_id}/recipe", response_model=DatasetOut)
+def update_recipe(dataset_id: str, body: CleaningRecipe, db: Db, user: CurrentUser):
+    dataset = owned(db, user, dataset_id)
+    _versioned(dataset)
+    save_recipe(db, dataset, body.steps, body.auto_apply)
+    return output(dataset, review_version_id=latest_draft_id(db, dataset))
+
+
+@router.post("/{dataset_id}/recipe/apply", response_model=VersionOut, status_code=201)
+def apply_saved_recipe(dataset_id: str, db: Db, user: CurrentUser):
+    dataset = owned(db, user, dataset_id)
+    try:
+        return version_output(stage_recipe_version(db, dataset))
+    except IngestError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@router.put("/{dataset_id}/rules", response_model=DatasetOut)
+def update_rules(dataset_id: str, body: RuleSet, db: Db, user: CurrentUser):
+    dataset = owned(db, user, dataset_id)
+    _versioned(dataset)
+    save_rules(db, dataset, body.rules)
+    current = ensure_current_version(db, dataset)
+    if current is not None:
+        try:
+            validate_version(db, dataset, current)
+        except IngestError as error:
+            raise HTTPException(400, str(error)) from error
+    return output(dataset, review_version_id=latest_draft_id(db, dataset))
+
+
+@router.post("/{dataset_id}/versions/{version_id}/validate", response_model=VersionOut)
+def recheck_version(dataset_id: str, version_id: str, db: Db, user: CurrentUser):
+    dataset = owned(db, user, dataset_id)
+    version = owned_version(db, user, dataset, version_id)
+    try:
+        return version_output(validate_version(db, dataset, version))
+    except IngestError as error:
+        raise HTTPException(400, str(error)) from error
 
 
 @router.patch("/{dataset_id}/privacy", response_model=DatasetOut)

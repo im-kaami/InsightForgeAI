@@ -273,6 +273,14 @@ Source freshness is recorded as unknown unless the source is a live connection. 
 
 The in-process scheduler continues to run exploratory goals. It is not durable verified-report automation and does not provide delivery guarantees or automatic approval/promotion.
 
+## Cleaning recipes and validation rules
+
+**Cleaning recipes.** On the dataset page, the **Cleaning recipe** card holds an ordered list of steps: rename a column, change a type (with an optional date format, and either stop or leave unconvertible values empty), trim or change the case of text, replace values, fill missing values (a value, the mean, median, or most common value), remove rows with a missing value, remove duplicate rows (all columns or chosen key columns, keeping the first), keep or remove rows by a condition, and add a calculated column. Calculated columns are single row-by-row SQL expressions checked by the SQL guard; subqueries, other tables, totals, and window functions are refused. **Apply to current data as a draft** runs the steps on a copy of the current version's imported data and opens the usual import review, which lists each step with rows before and after and the number of values changed. The original import is kept as `raw.duckdb` next to the cleaned catalog, so re-applying never cleans already cleaned rows. With **Apply automatically** on (the default), every new upload or refresh gets the recipe too. If a step no longer fits, for example a renamed source column, the draft keeps the imported data unchanged and the review explains which step failed.
+
+**Validation rules.** The **Validation rules** card checks, on every row, that a column is never missing, has no repeated values, stays in a number range, uses allowed values, matches a regular expression, or has a recent latest date, and that a table's row count is in a range. Rules are checked on every new version, when they are saved, and before every verified report. Each rule is a warning (the default) or blocking. A failing warning marks a verified report as Needs review; a failing blocking rule, or a blocking rule that cannot be checked, stops it with the result Blocked. The freshness rule looks at the dates in the data, not at when the source was last updated. Example failing values are shown except for columns flagged as sensitive.
+
+**Suggestions.** **Suggest from health check** proposes steps (drop exact duplicates, convert numbers or dates stored as text, merge values that differ only in case or spaces) and rules the current data already meets. Suggestions come from fixed checks on the health check; no AI model is involved, and nothing is saved until you add it and save. Recipes and rules are not available for live database connections.
+
 ## Safety
 
 - SQL is parsed with SQLGlot and restricted to one SELECT or UNION statement.

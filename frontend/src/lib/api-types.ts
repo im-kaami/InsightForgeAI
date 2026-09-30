@@ -244,6 +244,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/datasets/{dataset_id}/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Suggestions */
+        get: operations["suggestions_api_datasets__dataset_id__suggestions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/datasets/{dataset_id}/recipe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Recipe */
+        put: operations["update_recipe_api_datasets__dataset_id__recipe_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/datasets/{dataset_id}/recipe/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Saved Recipe */
+        post: operations["apply_saved_recipe_api_datasets__dataset_id__recipe_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/datasets/{dataset_id}/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Rules */
+        put: operations["update_rules_api_datasets__dataset_id__rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/datasets/{dataset_id}/versions/{version_id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recheck Version */
+        post: operations["recheck_version_api_datasets__dataset_id__versions__version_id__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/datasets/{dataset_id}/privacy": {
         parameters: {
             query?: never;
@@ -578,6 +663,56 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AllowedValuesRule */
+        AllowedValuesRule: {
+            /** Id */
+            id?: string;
+            /** Table */
+            table: string;
+            /**
+             * Severity
+             * @default warning
+             * @enum {string}
+             */
+            severity: "blocking" | "warning";
+            /** Column */
+            column: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "allowed_values";
+            /** Values */
+            values: string[];
+            /**
+             * Ignore Case
+             * @default false
+             */
+            ignore_case: boolean;
+        };
+        /** AppliedRecipe */
+        AppliedRecipe: {
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /** Steps */
+            steps?: (components["schemas"]["RenameColumn"] | components["schemas"]["ChangeType"] | components["schemas"]["CleanText"] | components["schemas"]["MapValues"] | components["schemas"]["FillMissing"] | components["schemas"]["DropMissing"] | components["schemas"]["DropDuplicates"] | components["schemas"]["FilterRows"] | components["schemas"]["DeriveColumn"])[];
+            /** Results */
+            results?: components["schemas"]["StepResult"][];
+            /** Error */
+            error?: string | null;
+            /** Failed Step */
+            failed_step?: number | null;
+            /** Applied At */
+            applied_at?: string | null;
+            /**
+             * Method
+             * @default deterministic DuckDB SQL; the original import is kept unchanged
+             */
+            method: string;
+        };
         /** ApprovedJoin */
         ApprovedJoin: {
             /** Table */
@@ -613,6 +748,69 @@ export interface components {
             review: boolean;
             /** Options Json */
             options_json?: string | null;
+        };
+        /** ChangeType */
+        ChangeType: {
+            /** Table */
+            table: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "change_type";
+            /** Column */
+            column: string;
+            /**
+             * To
+             * @enum {string}
+             */
+            to: "integer" | "number" | "text" | "date" | "timestamp" | "boolean";
+            /** Date Format */
+            date_format?: string | null;
+            /**
+             * On Error
+             * @default fail
+             * @enum {string}
+             */
+            on_error: "fail" | "empty";
+        };
+        /** CleanText */
+        CleanText: {
+            /** Table */
+            table: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "clean_text";
+            /** Column */
+            column: string;
+            /**
+             * Trim
+             * @default true
+             */
+            trim: boolean;
+            /**
+             * Collapse Spaces
+             * @default false
+             */
+            collapse_spaces: boolean;
+            /**
+             * Case
+             * @default keep
+             * @enum {string}
+             */
+            case: "keep" | "lower" | "upper";
+        };
+        /** CleaningRecipe */
+        CleaningRecipe: {
+            /** Steps */
+            steps?: (components["schemas"]["RenameColumn"] | components["schemas"]["ChangeType"] | components["schemas"]["CleanText"] | components["schemas"]["MapValues"] | components["schemas"]["FillMissing"] | components["schemas"]["DropMissing"] | components["schemas"]["DropDuplicates"] | components["schemas"]["FilterRows"] | components["schemas"]["DeriveColumn"])[];
+            /**
+             * Auto Apply
+             * @default true
+             */
+            auto_apply: boolean;
         };
         /** ColumnInfo */
         ColumnInfo: {
@@ -699,6 +897,18 @@ export interface components {
             table: string;
             /** Column */
             column: string;
+        };
+        /** Condition */
+        Condition: {
+            /** Column */
+            column: string;
+            /**
+             * Op
+             * @enum {string}
+             */
+            op: "equals" | "not_equals" | "greater_than" | "less_than" | "at_least" | "at_most" | "is_missing" | "is_not_missing";
+            /** Value */
+            value?: string | number | boolean | null;
         };
         /** ConnectionCreate */
         ConnectionCreate: {
@@ -804,6 +1014,8 @@ export interface components {
              */
             llm_policy: "local" | "schema_only" | "full";
             notes?: components["schemas"]["DatasetNotes"];
+            recipe?: components["schemas"]["SavedRecipe"];
+            rules?: components["schemas"]["SavedRules"];
             profile?: components["schemas"]["DataProfile"] | null;
             /** Review Version Id */
             review_version_id?: string | null;
@@ -847,6 +1059,103 @@ export interface components {
              */
             approved_at: string;
         };
+        /** DeriveColumn */
+        DeriveColumn: {
+            /** Table */
+            table: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "derive_column";
+            /** New Name */
+            new_name: string;
+            /** Expression */
+            expression: string;
+        };
+        /** DropDuplicates */
+        DropDuplicates: {
+            /** Table */
+            table: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "drop_duplicates";
+            /** Columns */
+            columns?: string[];
+        };
+        /** DropMissing */
+        DropMissing: {
+            /** Table */
+            table: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "drop_missing";
+            /** Columns */
+            columns: string[];
+        };
+        /** FillMissing */
+        FillMissing: {
+            /** Table */
+            table: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "fill_missing";
+            /** Column */
+            column: string;
+            /**
+             * Method
+             * @default value
+             * @enum {string}
+             */
+            method: "value" | "mean" | "median" | "most_common";
+            /** Value */
+            value?: string | number | boolean | null;
+        };
+        /** FilterRows */
+        FilterRows: {
+            /** Table */
+            table: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "filter_rows";
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "keep" | "remove";
+            /** Conditions */
+            conditions: components["schemas"]["Condition"][];
+        };
+        /** FreshnessRule */
+        FreshnessRule: {
+            /** Id */
+            id?: string;
+            /** Table */
+            table: string;
+            /**
+             * Severity
+             * @default warning
+             * @enum {string}
+             */
+            severity: "blocking" | "warning";
+            /** Column */
+            column: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "freshness";
+            /** Max Age Days */
+            max_age_days: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -865,6 +1174,67 @@ export interface components {
             /** Local Model */
             local_model?: string | null;
         };
+        /** MapValues */
+        MapValues: {
+            /** Table */
+            table: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "map_values";
+            /** Column */
+            column: string;
+            /** Mapping */
+            mapping: components["schemas"]["ValueMapping"][];
+            /**
+             * Ignore Case
+             * @default false
+             */
+            ignore_case: boolean;
+        };
+        /** NotNullRule */
+        NotNullRule: {
+            /** Id */
+            id?: string;
+            /** Table */
+            table: string;
+            /**
+             * Severity
+             * @default warning
+             * @enum {string}
+             */
+            severity: "blocking" | "warning";
+            /** Column */
+            column: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "not_null";
+        };
+        /** PatternRule */
+        PatternRule: {
+            /** Id */
+            id?: string;
+            /** Table */
+            table: string;
+            /**
+             * Severity
+             * @default warning
+             * @enum {string}
+             */
+            severity: "blocking" | "warning";
+            /** Column */
+            column: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "pattern";
+            /** Pattern */
+            pattern: string;
+        };
         /** PrivacyUpdate */
         PrivacyUpdate: {
             /**
@@ -877,6 +1247,51 @@ export interface components {
              * @constant
              */
             acknowledged: true;
+        };
+        /** RangeRule */
+        RangeRule: {
+            /** Id */
+            id?: string;
+            /** Table */
+            table: string;
+            /**
+             * Severity
+             * @default warning
+             * @enum {string}
+             */
+            severity: "blocking" | "warning";
+            /** Column */
+            column: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "range";
+            /** Min */
+            min?: number | null;
+            /** Max */
+            max?: number | null;
+        };
+        /** RecipeSuggestion */
+        RecipeSuggestion: {
+            /** Step */
+            step: components["schemas"]["RenameColumn"] | components["schemas"]["ChangeType"] | components["schemas"]["CleanText"] | components["schemas"]["MapValues"] | components["schemas"]["FillMissing"] | components["schemas"]["DropMissing"] | components["schemas"]["DropDuplicates"] | components["schemas"]["FilterRows"] | components["schemas"]["DeriveColumn"];
+            /** Reason */
+            reason: string;
+        };
+        /** RenameColumn */
+        RenameColumn: {
+            /** Table */
+            table: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "rename_column";
+            /** Column */
+            column: string;
+            /** New Name */
+            new_name: string;
         };
         /** ReportFilter */
         ReportFilter: {
@@ -905,6 +1320,77 @@ export interface components {
             end_date: string;
             /** Version Id */
             version_id: string;
+        };
+        /** RowCountRule */
+        RowCountRule: {
+            /** Id */
+            id?: string;
+            /** Table */
+            table: string;
+            /**
+             * Severity
+             * @default warning
+             * @enum {string}
+             */
+            severity: "blocking" | "warning";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "row_count";
+            /** Min */
+            min?: number | null;
+            /** Max */
+            max?: number | null;
+        };
+        /** RuleResult */
+        RuleResult: {
+            /** Rule Id */
+            rule_id: string;
+            /** Kind */
+            kind: string;
+            /** Table */
+            table: string;
+            /** Column */
+            column?: string | null;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "blocking" | "warning";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "passed" | "failed" | "error";
+            /** Description */
+            description: string;
+            /** Message */
+            message: string;
+            /**
+             * Checked Rows
+             * @default 0
+             */
+            checked_rows: number;
+            /**
+             * Failing Rows
+             * @default 0
+             */
+            failing_rows: number;
+            /** Examples */
+            examples?: string[];
+        };
+        /** RuleSet */
+        RuleSet: {
+            /** Rules */
+            rules?: (components["schemas"]["NotNullRule"] | components["schemas"]["UniqueRule"] | components["schemas"]["RangeRule"] | components["schemas"]["AllowedValuesRule"] | components["schemas"]["PatternRule"] | components["schemas"]["FreshnessRule"] | components["schemas"]["RowCountRule"])[];
+        };
+        /** RuleSuggestion */
+        RuleSuggestion: {
+            /** Rule */
+            rule: components["schemas"]["NotNullRule"] | components["schemas"]["UniqueRule"] | components["schemas"]["RangeRule"] | components["schemas"]["AllowedValuesRule"] | components["schemas"]["PatternRule"] | components["schemas"]["FreshnessRule"] | components["schemas"]["RowCountRule"];
+            /** Reason */
+            reason: string;
         };
         /** RunCreate */
         RunCreate: {
@@ -1037,6 +1523,35 @@ export interface components {
              */
             business_notes: string;
         };
+        /** SavedRecipe */
+        SavedRecipe: {
+            /** Steps */
+            steps?: (components["schemas"]["RenameColumn"] | components["schemas"]["ChangeType"] | components["schemas"]["CleanText"] | components["schemas"]["MapValues"] | components["schemas"]["FillMissing"] | components["schemas"]["DropMissing"] | components["schemas"]["DropDuplicates"] | components["schemas"]["FilterRows"] | components["schemas"]["DeriveColumn"])[];
+            /**
+             * Auto Apply
+             * @default true
+             */
+            auto_apply: boolean;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** SavedRules */
+        SavedRules: {
+            /** Rules */
+            rules?: (components["schemas"]["NotNullRule"] | components["schemas"]["UniqueRule"] | components["schemas"]["RangeRule"] | components["schemas"]["AllowedValuesRule"] | components["schemas"]["PatternRule"] | components["schemas"]["FreshnessRule"] | components["schemas"]["RowCountRule"])[];
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /** Updated At */
+            updated_at?: string | null;
+        };
         /** ScheduleCreate */
         ScheduleCreate: {
             /** Dataset Id */
@@ -1135,6 +1650,37 @@ export interface components {
             /** Last Activity At */
             last_activity_at?: string | null;
         };
+        /** StepResult */
+        StepResult: {
+            /** Index */
+            index: number;
+            /** Kind */
+            kind: string;
+            /** Table */
+            table: string;
+            /** Description */
+            description: string;
+            /** Rows Before */
+            rows_before: number;
+            /** Rows After */
+            rows_after: number;
+            /** Changed Values */
+            changed_values?: number | null;
+            /** Failed Values */
+            failed_values?: number | null;
+        };
+        /** Suggestions */
+        Suggestions: {
+            /** Recipe Steps */
+            recipe_steps?: components["schemas"]["RecipeSuggestion"][];
+            /** Rules */
+            rules?: components["schemas"]["RuleSuggestion"][];
+            /**
+             * Method
+             * @default suggested by fixed checks on the data health check; no AI model is used
+             */
+            method: string;
+        };
         /** TableInfo */
         TableInfo: {
             /** Name */
@@ -1179,6 +1725,26 @@ export interface components {
             /** Sheets */
             sheets?: string[] | null;
         };
+        /** UniqueRule */
+        UniqueRule: {
+            /** Id */
+            id?: string;
+            /** Table */
+            table: string;
+            /**
+             * Severity
+             * @default warning
+             * @enum {string}
+             */
+            severity: "blocking" | "warning";
+            /** Column */
+            column: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unique";
+        };
         /** UserOut */
         UserOut: {
             /** Id */
@@ -1204,12 +1770,54 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** ValidationReport */
+        ValidationReport: {
+            /**
+             * Rules Revision
+             * @default 0
+             */
+            rules_revision: number;
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at?: string;
+            /** Results */
+            results?: components["schemas"]["RuleResult"][];
+            /**
+             * Passed
+             * @default 0
+             */
+            passed: number;
+            /**
+             * Failed Blocking
+             * @default 0
+             */
+            failed_blocking: number;
+            /**
+             * Failed Warning
+             * @default 0
+             */
+            failed_warning: number;
+            /**
+             * Method
+             * @default exact counts over every row; no values are sent to an AI model
+             */
+            method: string;
+        };
         /** ValueCount */
         ValueCount: {
             /** Value */
             value: string;
             /** Count */
             count: number;
+        };
+        /** ValueMapping */
+        ValueMapping: {
+            /** From Value */
+            from_value: string;
+            /** To Value */
+            to_value?: string | null;
         };
         /** VersionConfirm */
         VersionConfirm: {
@@ -1237,6 +1845,8 @@ export interface components {
             }[];
             schema: components["schemas"]["SchemaInfo"];
             profile: components["schemas"]["DataProfile"];
+            recipe?: components["schemas"]["AppliedRecipe"] | null;
+            validation?: components["schemas"]["ValidationReport"] | null;
             /**
              * Created At
              * Format: date-time
@@ -1748,6 +2358,170 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DatasetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggestions_api_datasets__dataset_id__suggestions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Suggestions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_recipe_api_datasets__dataset_id__recipe_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CleaningRecipe"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_saved_recipe_api_datasets__dataset_id__recipe_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_rules_api_datasets__dataset_id__rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleSet"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recheck_version_api_datasets__dataset_id__versions__version_id__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionOut"];
                 };
             };
             /** @description Validation Error */

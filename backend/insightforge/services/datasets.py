@@ -12,8 +12,10 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from insightforge.config import get_settings
-from insightforge.core.catalog import DataCatalog, sanitize_identifier
+from insightforge.core.catalog import DataCatalog, _quote, sanitize_identifier
 from insightforge.core.profiling import profile_catalog
+from insightforge.core.recipes import AppliedRecipe, RecipeError, SavedRecipe, applied, apply_recipe
+from insightforge.core.validation import SavedRules, check_rules
 from insightforge.db.models import Connection, Dataset, DatasetVersion, User
 from insightforge.ingest import (
     DataSource,
@@ -76,6 +78,66 @@ def _profile_version(catalog: DataCatalog) -> tuple[dict[str, Any], dict[str, An
     schema = catalog.introspect().model_dump(mode="json")
     profile = profile_catalog(catalog, timeout_seconds=10, max_columns=100).model_dump(mode="json")
     return schema, profile
+
+
+RAW_CATALOG = "raw.duckdb"
+
+
+def _validate(dataset: Dataset, catalog: DataCatalog) -> dict[str, Any]:
+    rules = SavedRules.model_validate(dataset.rules_json or {})
+    if not rules.rules:
+        return {}
+    report = check_rules(
+        catalog, rules.rules, revision=rules.revision, timeout=get_settings().query_timeout_seconds
+    )
+    return report.model_dump(mode="json")
+
+
+def _prepare_version(
+    dataset: Dataset,
+    version: DatasetVersion,
+    version_dir: Path,
+    *,
+    recipe: SavedRecipe | None = None,
+) -> None:
+    """Apply the recipe to catalog.duckdb (keeping the import as raw.duckdb), then profile and validate.
+
+    Call with every connection to the version catalog closed. An explicit recipe raises RecipeError on
+    failure; the saved recipe applied automatically records the error and keeps the imported data.
+    """
+    path = version_dir / "catalog.duckdb"
+    raw = version_dir / RAW_CATALOG
+    saved = recipe or SavedRecipe.model_validate(dataset.recipe_json or {})
+    version.recipe_json = {}
+    if saved.steps and (recipe is not None or saved.auto_apply):
+        if not raw.exists():
+            shutil.copy2(path, raw)
+        catalog: DataCatalog | None = DataCatalog(path)
+        try:
+            results = apply_recipe(catalog, saved.steps, timeout=get_settings().query_timeout_seconds)
+            version.recipe_json = applied(saved.revision, saved.steps, results).model_dump(mode="json")
+        except RecipeError as error:
+            if recipe is not None:
+                raise
+            catalog.close()
+            catalog = None
+            shutil.copy2(raw, path)
+            version.recipe_json = AppliedRecipe(
+                revision=saved.revision,
+                steps=saved.steps,
+                error=str(error),
+                failed_step=error.index,
+                applied_at=datetime.now(UTC),
+            ).model_dump(mode="json")
+        finally:
+            if catalog:
+                catalog.close()
+    catalog = DataCatalog(path, read_only=True)
+    try:
+        version.schema_json, version.profile_json = _profile_version(catalog)
+        version.validation_json = _validate(dataset, catalog)
+    finally:
+        catalog.close()
 
 
 def _option_source(filename: str, path: Path, option: "ImportOptions") -> DataSource:
@@ -244,7 +306,9 @@ def stage_files(
                 raise IngestError("Uploaded files would create duplicate table names")
             loaded_tables.update(result.tables)
             sources.append(_source_metadata(source, upload))
-        version.schema_json, version.profile_json = _profile_version(catalog)
+        catalog.close()
+        catalog = None
+        _prepare_version(dataset, version, version_dir)
         version.sources_json = sources
         db.commit()
         db.refresh(version)
@@ -356,7 +420,9 @@ def _stage_url(
         load_source(source, catalog)
         downloaded = next((path for path in (directory / "downloads").iterdir() if path.is_file()), None)
         version.sources_json = [_source_metadata(source, downloaded)]
-        version.schema_json, version.profile_json = _profile_version(catalog)
+        catalog.close()
+        catalog = None
+        _prepare_version(dataset, version, directory)
         db.commit()
         db.refresh(version)
         success = True
@@ -497,12 +563,27 @@ def add_source(
             result = load_source(source, catalog)
             if before.intersection(result.tables):
                 raise IngestError("Source would overwrite an existing table")
+            current_raw = current_dir / RAW_CATALOG
+            if current_raw.is_file():
+                raw_copy = version_dir / RAW_CATALOG
+                shutil.copy2(current_raw, raw_copy)
+                escaped = raw_copy.as_posix().replace("'", "''")
+                catalog.connection.execute(f"ATTACH '{escaped}' AS insightforge_raw")
+                try:
+                    for table in result.tables:
+                        catalog.connection.execute(
+                            f"CREATE TABLE insightforge_raw.{_quote(table)} AS SELECT * FROM {_quote(table)}"
+                        )
+                finally:
+                    catalog.connection.execute("DETACH insightforge_raw")
+            version.recipe_json = dict(current.recipe_json or {})
             fingerprint_path = Path(source.location) if Path(source.location).is_file() else None
             if fingerprint_path is None:
                 added_downloads = set((version_dir / "downloads").iterdir()) - downloads_before
                 fingerprint_path = next((path for path in added_downloads if path.is_file()), None)
             version.sources_json = [*current.sources_json, _source_metadata(source, fingerprint_path)]
             version.schema_json, version.profile_json = _profile_version(catalog)
+            version.validation_json = _validate(dataset, catalog)
             db.flush()
             if catalog:
                 catalog.close()
@@ -549,6 +630,98 @@ def reprofile_version(db: Session, dataset: Dataset, version: DatasetVersion) ->
     version.profile_json = profile.model_dump(mode="json")
     if dataset.current_version_id == version.id:
         dataset.profile_json = version.profile_json
+    db.commit()
+    db.refresh(version)
+    return version
+
+
+def save_recipe(db: Session, dataset: Dataset, steps: list[Any], auto_apply: bool) -> SavedRecipe:
+    previous = SavedRecipe.model_validate(dataset.recipe_json or {})
+    saved = SavedRecipe(
+        steps=steps, auto_apply=auto_apply, revision=previous.revision + 1, updated_at=datetime.now(UTC)
+    )
+    dataset.recipe_json = saved.model_dump(mode="json")
+    db.commit()
+    db.refresh(dataset)
+    return saved
+
+
+def stage_recipe_version(db: Session, dataset: Dataset) -> DatasetVersion:
+    """Create a draft from the current version's imported data with the saved recipe applied."""
+    if dataset.connection_id:
+        raise IngestError("Cleaning recipes need a dataset with versions")
+    recipe = SavedRecipe.model_validate(dataset.recipe_json or {})
+    if not recipe.steps:
+        raise IngestError("Save at least one cleaning step first")
+    current = ensure_current_version(db, dataset)
+    if current is None:
+        raise IngestError("Review and confirm the imported version first")
+    storage = _storage()
+    owner_id, dataset_id, current_id = dataset.owner_id, dataset.id, current.id
+    current_dir = storage.version_dir(owner_id, dataset_id, current_id)
+    base = current_dir / RAW_CATALOG
+    if not base.is_file():
+        if (current.recipe_json or {}).get("results"):
+            raise IngestError("The imported data of the current version is missing")
+        base = current_dir / "catalog.duckdb"
+    if not base.is_file():
+        raise IngestError("Dataset version files are missing")
+    with _LOCKS[dataset.id]:
+        version = DatasetVersion(
+            dataset_id=dataset_id,
+            owner_id=owner_id,
+            base_version_id=current_id,
+            state="draft",
+            sources_json=list(current.sources_json),
+        )
+        db.add(version)
+        db.flush()
+        version_dir = storage.version_dir(owner_id, dataset_id, version.id)
+        success = False
+        try:
+            shutil.copy2(base, version_dir / RAW_CATALOG)
+            shutil.copy2(base, version_dir / "catalog.duckdb")
+            for folder in ("uploads", "downloads"):
+                if (current_dir / folder).is_dir():
+                    shutil.copytree(current_dir / folder, version_dir / folder, dirs_exist_ok=True)
+            try:
+                _prepare_version(dataset, version, version_dir, recipe=recipe)
+            except RecipeError as error:
+                raise IngestError(str(error)) from error
+            db.commit()
+            db.refresh(version)
+            success = True
+            return version
+        finally:
+            if not success:
+                db.rollback()
+                if version_dir.exists():
+                    shutil.rmtree(version_dir)
+
+
+def save_rules(db: Session, dataset: Dataset, rules: list[Any]) -> SavedRules:
+    previous = SavedRules.model_validate(dataset.rules_json or {})
+    saved = SavedRules(rules=rules, revision=previous.revision + 1, updated_at=datetime.now(UTC))
+    dataset.rules_json = saved.model_dump(mode="json")
+    db.commit()
+    db.refresh(dataset)
+    return saved
+
+
+def validate_version(db: Session, dataset: Dataset, version: DatasetVersion) -> DatasetVersion:
+    path = _version_catalog_path(dataset, version.id)
+    if not path.is_file():
+        raise IngestError("Dataset version files are missing")
+    try:
+        catalog = DataCatalog(path, read_only=True)
+    except duckdb.Error as error:
+        if "different configuration" in str(error).lower():
+            raise DatasetBusyError("Dataset is currently busy") from error
+        raise
+    try:
+        version.validation_json = _validate(dataset, catalog)
+    finally:
+        catalog.close()
     db.commit()
     db.refresh(version)
     return version

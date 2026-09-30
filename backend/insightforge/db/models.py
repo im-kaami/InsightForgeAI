@@ -52,6 +52,12 @@ class Dataset(Base):
     notes_json: Mapped[dict[str, Any]] = mapped_column(
         JSON, default=dict, server_default=text("'{}'"), nullable=False
     )
+    recipe_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, server_default=text("'{}'"), nullable=False
+    )
+    rules_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, server_default=text("'{}'"), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -66,6 +72,12 @@ class DatasetVersion(Base):
     sources_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     schema_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     profile_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    recipe_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, server_default=text("'{}'"), nullable=False
+    )
+    validation_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, server_default=text("'{}'"), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

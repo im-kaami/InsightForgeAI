@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { DataQuality } from "@/components/data-quality";
 import { DataTable } from "@/components/data-table";
+import { RecipeSummary, ValidationSummary } from "@/components/dataset-cleaning";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -124,6 +125,8 @@ export function ImportReview({
         </p>
       )}
       {preview.data && <DataTable columns={preview.data.columns} rows={preview.data.rows} />}
+      <RecipeSummary recipe={version.recipe} />
+      <ValidationSummary report={version.validation} />
       <DataQuality profile={version.profile} />
       <label className="flex items-center gap-2 text-sm">
         <input

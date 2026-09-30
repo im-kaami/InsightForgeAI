@@ -11,6 +11,11 @@ export type DataProfile = components["schemas"]["DataProfile"];
 export type ImportOptions = components["schemas"]["ImportOptions"];
 export type SalesDefinition = components["schemas"]["SalesDefinition"];
 export type ReportDefinition = components["schemas"]["DefinitionOut"];
+export type Suggestions = components["schemas"]["Suggestions"];
+export type RecipeStep = NonNullable<components["schemas"]["CleaningRecipe"]["steps"]>[number];
+export type ValidationRule = NonNullable<components["schemas"]["RuleSet"]["rules"]>[number];
+export type AppliedRecipe = components["schemas"]["AppliedRecipe"];
+export type ValidationReport = components["schemas"]["ValidationReport"];
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -100,6 +105,15 @@ export const datasets = {
   refresh: (id: string) => apiFetch<Dataset>(`/datasets/${id}/refresh`, { method: "POST" }),
   saveNotes: (id: string, notes: components["schemas"]["DatasetNotes"]) =>
     apiFetch<Dataset>(`/datasets/${id}/notes`, { method: "PUT", body: JSON.stringify(notes) }),
+  suggestions: (id: string) => apiFetch<Suggestions>(`/datasets/${id}/suggestions`),
+  saveRecipe: (id: string, recipe: components["schemas"]["CleaningRecipe"]) =>
+    apiFetch<Dataset>(`/datasets/${id}/recipe`, { method: "PUT", body: JSON.stringify(recipe) }),
+  applyRecipe: (id: string) =>
+    apiFetch<DatasetVersion>(`/datasets/${id}/recipe/apply`, { method: "POST" }),
+  saveRules: (id: string, rules: components["schemas"]["RuleSet"]) =>
+    apiFetch<Dataset>(`/datasets/${id}/rules`, { method: "PUT", body: JSON.stringify(rules) }),
+  validateVersion: (id: string, versionId: string) =>
+    apiFetch<DatasetVersion>(`/datasets/${id}/versions/${versionId}/validate`, { method: "POST" }),
   refreshProfile: (id: string, versionId: string) =>
     apiFetch<DatasetVersion>(`/datasets/${id}/versions/${versionId}/profile`, { method: "POST" }),
   fromUrl: (url: string, name?: string, sheets?: string[]) =>

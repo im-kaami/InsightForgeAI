@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { AddDataDialog } from "@/components/add-data-dialog";
 import { DataQuality } from "@/components/data-quality";
+import { DatasetCleaning } from "@/components/dataset-cleaning";
 import { DatasetNotes } from "@/components/dataset-notes";
 import { ImportReview } from "@/components/import-review";
 import { Badge } from "@/components/ui/badge";
@@ -180,6 +181,15 @@ export function DatasetTrustPanel({
             ))}
           </CardContent>
         </Card>
+      )}
+      {dataset.kind !== "connection" && (
+        <DatasetCleaning
+          dataset={dataset}
+          currentVersion={(versions.data ?? []).find(
+            (item) => item.id === dataset.current_version_id,
+          )}
+          onDraft={setReview}
+        />
       )}
       <DatasetNotes key={`${dataset.id}-${dataset.current_version_id}`} dataset={dataset} />
       <DataQuality

@@ -20,7 +20,9 @@ from insightforge.core.planner import Plan, PlotStep, SqlStep, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
 from insightforge.core.sandbox import build_sandbox
 from insightforge.core.schema import DatasetNotes, SchemaInfo
+from insightforge.core.validation import SavedRules, check_rules
 from insightforge.core.verified_report import (
+    CalculationCheck,
     ReportPeriod,
     ReportValidationError,
     SalesDefinition,
@@ -227,7 +229,36 @@ def execute_run(
                 "sources": version.sources_json,
                 "privacy_mode": "local",
             }
+            rules = SavedRules.model_validate(dataset.rules_json or {})
+            validation = (
+                check_rules(
+                    catalog,
+                    rules.rules,
+                    revision=rules.revision,
+                    timeout=settings.query_timeout_seconds,
+                )
+                if rules.rules
+                else None
+            )
+            if validation:
+                run.provenance_json = {
+                    **run.provenance_json,
+                    "validation": validation.model_dump(mode="json"),
+                }
             db.commit()
+            if validation and validation.blocked:
+                raise ReportValidationError(
+                    [
+                        CalculationCheck(
+                            code="validation_rule",
+                            passed=False,
+                            message=f"Blocking rule not met: {item.description}. {item.message}",
+                            affected_rows=item.failing_rows,
+                        )
+                        for item in validation.results
+                        if item.severity == "blocking" and item.status != "passed"
+                    ]
+                )
             result, verification_status, warnings = _verified_result(
                 run,
                 catalog,
@@ -235,6 +266,18 @@ def execute_run(
                 run_dir,
                 settings.query_timeout_seconds,
             )
+            if validation:
+                run.provenance_json = {
+                    **run.provenance_json,
+                    "validation": validation.model_dump(mode="json"),
+                }
+                unmet = [item for item in validation.results if item.status != "passed"]
+                warnings = [
+                    *warnings,
+                    *(f"Rule not met: {item.description}. {item.message}" for item in unmet),
+                ]
+                if unmet:
+                    verification_status = "needs_review"
         else:
             previous = db.scalars(
                 select(Run)
