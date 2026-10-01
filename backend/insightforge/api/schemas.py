@@ -307,3 +307,27 @@ class ScoreOut(BaseModel):
     new_data_metrics: dict[str, float] | None = None
     holdout_metrics: dict[str, Any]
     recommendation: RecommendationOut
+
+
+class ExplainIn(BaseModel):
+    values: dict[str, Any] = Field(default_factory=dict)
+
+
+class ContributionOut(BaseModel):
+    feature: str
+    value: Any = None
+    contribution: float
+
+
+class ExplanationOut(BaseModel):
+    model_id: str
+    explained: str
+    reference: float
+    output: float
+    prediction: Any = None
+    contributions: list[ContributionOut]
+    additivity_gap: float
+    algorithm: str
+    background_rows: int
+    interpretation: str
+    cautions: list[str]

@@ -4,6 +4,8 @@ from fastapi.responses import FileResponse
 from insightforge.api.deps import CurrentUser, Db
 from insightforge.api.routers.schedules import validate_cron
 from insightforge.api.schemas import (
+    ExplainIn,
+    ExplanationOut,
     ModelScheduleIn,
     ModelScheduleOut,
     SavedModelOut,
@@ -104,6 +106,15 @@ def delete_model(model_id: str, db: Db, user: CurrentUser):
 def score_model(model_id: str, body: ScoreModelIn, db: Db, user: CurrentUser):
     try:
         return service.score_model(db, user.id, model_id, body.version_id)
+    except ModelServiceError as error:
+        raise _guard(error) from error
+
+
+@router.post("/models/{model_id}/explain", response_model=ExplanationOut)
+def explain(model_id: str, body: ExplainIn, db: Db, user: CurrentUser):
+    """Explain one prediction with Shapley values (a tested method; no AI involved)."""
+    try:
+        return service.explain_prediction(db, user.id, model_id, body.values)
     except ModelServiceError as error:
         raise _guard(error) from error
 

@@ -22,6 +22,7 @@ export type RelationshipSuggestions = components["schemas"]["RelationshipSuggest
 export type ModelScore = components["schemas"]["ScoreOut"];
 export type ModelSchedule = components["schemas"]["ModelScheduleOut"];
 export type ModelScoring = components["schemas"]["ScoringOut"];
+export type ModelExplanation = components["schemas"]["ExplanationOut"];
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -213,6 +214,8 @@ export const models = {
   list: (datasetId: string) => apiFetch<SavedModel[]>(`/datasets/${datasetId}/models`),
   score: (id: string, versionId?: string) =>
     apiFetch<ModelScore>(`/models/${id}/score`, json({ version_id: versionId ?? null })),
+  explain: (id: string, values: Record<string, unknown>) =>
+    apiFetch<ModelExplanation>(`/models/${id}/explain`, json({ values })),
   downloadScores: (id: string, name: string) =>
     downloadBlob(`/models/${id}/scores/latest.csv`, `${name.replace(/[^\w-]+/g, "_")}-scores.csv`),
   remove: (id: string) => apiFetch<void>(`/models/${id}`, { method: "DELETE" }),

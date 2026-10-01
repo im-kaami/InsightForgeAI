@@ -745,6 +745,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/models/{model_id}/explain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Explain
+         * @description Explain one prediction with Shapley values (a tested method; no AI involved).
+         */
+        post: operations["explain_api_models__model_id__explain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/models/{model_id}/scores/latest.csv": {
         parameters: {
             query?: never;
@@ -1148,6 +1168,15 @@ export interface components {
             /** Redacted Uri */
             redacted_uri: string;
         };
+        /** ContributionOut */
+        ContributionOut: {
+            /** Feature */
+            feature: string;
+            /** Value */
+            value?: unknown;
+            /** Contribution */
+            contribution: number;
+        };
         /** Credentials */
         Credentials: {
             /** Email */
@@ -1332,6 +1361,38 @@ export interface components {
             kind: "drop_missing";
             /** Columns */
             columns: string[];
+        };
+        /** ExplainIn */
+        ExplainIn: {
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            };
+        };
+        /** ExplanationOut */
+        ExplanationOut: {
+            /** Model Id */
+            model_id: string;
+            /** Explained */
+            explained: string;
+            /** Reference */
+            reference: number;
+            /** Output */
+            output: number;
+            /** Prediction */
+            prediction?: unknown;
+            /** Contributions */
+            contributions: components["schemas"]["ContributionOut"][];
+            /** Additivity Gap */
+            additivity_gap: number;
+            /** Algorithm */
+            algorithm: string;
+            /** Background Rows */
+            background_rows: number;
+            /** Interpretation */
+            interpretation: string;
+            /** Cautions */
+            cautions: string[];
         };
         /** FillMissing */
         FillMissing: {
@@ -3984,6 +4045,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScoreOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    explain_api_models__model_id__explain_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExplainIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExplanationOut"];
                 };
             };
             /** @description Validation Error */

@@ -13,6 +13,7 @@ import {
   models,
   type Dataset,
   type DatasetVersion,
+  type ModelExplanation,
   type ModelScore,
   type ModelScoring,
   type SavedModel,
@@ -33,6 +34,124 @@ const number = (value: unknown) =>
 
 const bandVariant = (band: string) =>
   band === "major shift" ? "destructive" : band === "moderate shift" ? "secondary" : "outline";
+
+const signed = (value: number) =>
+  `${value >= 0 ? "+" : "-"}${Math.abs(value).toLocaleString(undefined, { maximumSignificantDigits: 3 })}`;
+
+function ExplanationResult({ explanation }: { explanation: ModelExplanation }) {
+  const largest = Math.max(
+    ...explanation.contributions.map((item) => Math.abs(item.contribution)),
+    Number.EPSILON,
+  );
+  return (
+    <div data-testid="explanation" className="space-y-2 rounded-md border p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="outline">Tested method</Badge>
+        <span className="text-xs text-muted-foreground">
+          SHAP ({explanation.algorithm}, reference: {explanation.background_rows} training rows)
+        </span>
+      </div>
+      <p>{explanation.interpretation}</p>
+      <p className="text-xs text-muted-foreground">
+        Average {explanation.explained}: {number(explanation.reference)}. This row:{" "}
+        {number(explanation.output)}. Prediction: {String(explanation.prediction)}.
+      </p>
+      <table data-testid="contribution-table" className="w-full text-left text-xs">
+        <caption className="sr-only">
+          How much each input moved the {explanation.explained} for this row
+        </caption>
+        <thead>
+          <tr className="text-muted-foreground">
+            <th className="py-1 pr-3 font-normal">Feature</th>
+            <th className="py-1 pr-3 font-normal">Value in this row</th>
+            <th className="py-1 pr-3 font-normal">Contribution</th>
+            <th className="w-1/3 py-1 font-normal">
+              <span className="sr-only">Size</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {explanation.contributions.map((item) => (
+            <tr key={item.feature} className="border-t">
+              <td className="py-1 pr-3">{item.feature}</td>
+              <td className="py-1 pr-3">
+                {item.value === null || item.value === undefined ? "missing" : String(item.value)}
+              </td>
+              <td className="py-1 pr-3 font-mono">{signed(item.contribution)}</td>
+              <td className="py-1" aria-hidden="true">
+                <div
+                  className={`h-2 rounded ${item.contribution >= 0 ? "bg-primary" : "bg-destructive"}`}
+                  style={{ width: `${(Math.abs(item.contribution) / largest) * 100}%` }}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <ul className="list-disc pl-5 text-xs text-muted-foreground">
+        {explanation.cautions.map((caution) => (
+          <li key={caution}>{caution}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ExplainRow({ model, score }: { model: SavedModel; score: ModelScore }) {
+  const [rowNumber, setRowNumber] = useState("1");
+  const [busy, setBusy] = useState(false);
+  const [explanation, setExplanation] = useState<ModelExplanation | null>(null);
+  const inFlight = useRef(false);
+  const inputId = `explain-row-${model.id}`;
+  const count = score.preview_rows.length;
+
+  async function run() {
+    if (inFlight.current) return;
+    const index = Number.parseInt(rowNumber, 10) - 1;
+    const row = score.preview_rows[index];
+    if (!row) {
+      toast.error(`Choose a row between 1 and ${count}`);
+      return;
+    }
+    inFlight.current = true;
+    setBusy(true);
+    try {
+      setExplanation(await models.explain(model.id, row));
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Could not explain this row");
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
+  if (count === 0) return null;
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium">Why did the model predict this?</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <Label htmlFor={inputId} className="text-xs">
+            Row in the preview (1 to {count})
+          </Label>
+          <Input
+            id={inputId}
+            type="number"
+            min={1}
+            max={count}
+            value={rowNumber}
+            onChange={(event) => setRowNumber(event.target.value)}
+            className="h-8 w-24"
+          />
+        </div>
+        <Button size="sm" variant="outline" disabled={busy} onClick={run}>
+          {busy ? "Explaining..." : "Explain this row"}
+        </Button>
+      </div>
+      {explanation && <ExplanationResult explanation={explanation} />}
+    </div>
+  );
+}
 
 function ScoreResult({ model, score }: { model: SavedModel; score: ModelScore }) {
   const retrain = score.recommendation.verdict === "retrain recommended";
@@ -124,6 +243,7 @@ function ScoreResult({ model, score }: { model: SavedModel; score: ModelScore })
         rows={score.preview_rows}
         totalRows={score.rows_scored}
       />
+      <ExplainRow key={score.scoring_id ?? score.version_id} model={model} score={score} />
       <Button
         size="sm"
         variant="outline"

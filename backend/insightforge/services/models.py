@@ -17,7 +17,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from insightforge.config import get_settings
-from insightforge.core import model_store
+from insightforge.core import explain, model_store
 from insightforge.core.model_store import ModelStoreError
 from insightforge.core.predict import PredictError
 from insightforge.core.sql_guard import guard_query
@@ -315,6 +315,40 @@ def score_model(
         },
         "recommendation": advice,
     }
+
+
+def explain_prediction(
+    db: Session, owner_id: str, model_id: str, values: dict[str, Any]
+) -> dict[str, Any]:
+    """Shapley contributions for one row of input values.
+
+    The reference sample comes from the model's training version (its SQL re-run
+    through the guard), so explanations compare against the data the model learned
+    from. Raises 409 when that version is gone and 422 for unusable values.
+    """
+    model = owned_model(db, owner_id, model_id)
+    dataset = _owned_dataset(db, owner_id, model.dataset_id)
+    version = db.get(DatasetVersion, model.dataset_version_id)
+    if version is None or version.owner_id != owner_id or version.state != "ready":
+        raise ModelServiceError(
+            "The dataset version this model was trained on is no longer available", status=409
+        )
+    estimator, final = _load_final(model)
+    catalog = open_catalog(dataset, version_id=version.id)
+    try:
+        frame = _run_source(catalog, model.source_sql)
+    except duckdb.Error as error:
+        raise ModelServiceError(f"The model's training query failed: {error}", status=409) from error
+    finally:
+        catalog.close()
+    try:
+        background = explain.background_sample(frame, final.features, final.target)
+        result = explain.explain_row(
+            estimator, final.features, final.numeric, final.task, values, background
+        )
+    except explain.ExplainError as error:
+        raise ModelServiceError(str(error), status=422) from error
+    return {"model_id": model.id, **result}
 
 
 def latest_scores_path(db: Session, owner_id: str, model_id: str) -> str:

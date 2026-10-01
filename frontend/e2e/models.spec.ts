@@ -198,6 +198,39 @@ test("a prediction result can be saved, scored for drift and deleted", async ({ 
   await expect(result.getByRole("cell", { name: "101000" })).toBeVisible();
   expect(scoredVersion).toBe(versionId);
 
+  let explainedValues: Record<string, unknown> | null = null;
+  await page.route(/\/api\/models\/b+\/explain$/, async (route) => {
+    explainedValues = (route.request().postDataJSON() as { values: Record<string, unknown> })
+      .values;
+    await route.fulfill({
+      json: {
+        model_id: MODEL_ID,
+        explained: "predicted value",
+        reference: 80000,
+        output: 64000,
+        prediction: 64000,
+        contributions: [
+          { feature: "department", value: "Sales", contribution: -12000 },
+          { feature: "years", value: 2, contribution: -4000 },
+        ],
+        additivity_gap: 0,
+        algorithm: "exact Shapley values",
+        background_rows: 50,
+        interpretation:
+          "The model's predicted value is 64,000 for this row, against 80,000 on average.",
+        cautions: ["Contributions do not show that a feature causes the outcome."],
+      },
+    });
+  });
+  await result.getByLabel("Row in the preview (1 to 2)").fill("2");
+  await result.getByRole("button", { name: "Explain this row" }).click();
+  const explanation = result.getByTestId("explanation");
+  await expect(explanation).toContainText("Tested method");
+  await expect(explanation).toContainText("against 80,000 on average");
+  await expect(explanation.getByTestId("contribution-table")).toContainText("-12,000");
+  await expect(explanation).toContainText("do not show that a feature causes the outcome");
+  expect(explainedValues).toEqual({ department: "Sales", years: 2, prediction: 64000 });
+
   await item.getByRole("button", { name: "Delete model" }).click();
   await item.getByRole("button", { name: "Confirm delete" }).click();
   await expect(page.getByText("Model deleted")).toBeVisible();
