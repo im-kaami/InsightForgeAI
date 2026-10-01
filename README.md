@@ -281,6 +281,19 @@ The in-process scheduler continues to run exploratory goals. It is not durable v
 
 **Suggestions.** **Suggest from health check** proposes steps (drop exact duplicates, convert numbers or dates stored as text, merge values that differ only in case or spaces) and rules the current data already meets. Suggestions come from fixed checks on the health check; no AI model is involved, and nothing is saved until you add it and save. Recipes and rules are not available for live database connections.
 
+## Table relationships (join suggestions)
+
+When a dataset has two or more tables, the dataset page shows a **Table relationships** card. **Suggest joins** checks the data with fixed rules, not an AI model. A column pair is suggested when:
+
+- the names match (`customer_id` in both tables, or `orders.customer_id` and `customers.id`);
+- the types fit;
+- the key on the "one" side has no repeated or empty values;
+- at least 90% of the other side's values are found in it.
+
+Each suggestion shows the match rate and how many rows find no match. Add the ones you agree with, or add a relationship by hand, then **Save relationships**.
+
+Saved relationships are added to the AI's planning, review, and SQL-repair prompts as join hints, for example "orders.customer_id -> customers.customer_id (many orders rows to one customers row)". Only table and column names are shared, never values. Relationships whose columns are no longer in the data are left out of prompts. The hints help the AI choose the right join; they do not guarantee it, and the existing many-to-many join check still flags risky joins. Suggestions are not available for live database connections, but you can add relationships by hand.
+
 ## Saved models, scoring and drift
 
 **Save a model.** A "predict this column" result card has a **Save model** button with a name field. Saving re-runs the prediction's query on the exact dataset version the answer used, retrains the chosen model with the same fixed settings, and stores it with that version, the target, the features, and the held-out scores. If the retrained score differs from the one the answer reported, the model is still saved with a warning.

@@ -17,6 +17,7 @@ from insightforge.core.llm import LLMClient, describe_error
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Plan, Planner, SummaryStep
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
+from insightforge.core.relationships import Relationship
 from insightforge.core.sandbox import DockerSandbox
 from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.summarizer import Summarizer
@@ -79,6 +80,7 @@ class InsightForgeAgent:
         mode: Literal["quick", "deep"] = "quick",
         allow_clarification: bool = False,
         notes: DatasetNotes | None = None,
+        relationships: list[Relationship] | None = None,
     ) -> RunResult:
         def emit(event: dict[str, Any]) -> None:
             if on_event:
@@ -92,6 +94,7 @@ class InsightForgeAgent:
         self.planner.tracer = tracer
         self.summarizer.tracer = tracer
         self.planner.notes = notes
+        self.planner.relationships = list(relationships or [])
         self.summarizer.dataset_notes = notes
         if schema is None:
             schema = catalog.introspect(sample_rows=self.schema_sample_rows)

@@ -34,9 +34,11 @@ def test_legacy_database_with_empty_alembic_version_is_upgraded(tmp_path, monkey
     version_columns = {column["name"] for column in inspect(engine).get_columns("dataset_versions")}
     assert {"recipe_json", "validation_json"} <= version_columns
     assert "saved_models" in inspect(engine).get_table_names()
+    dataset_columns = {column["name"] for column in inspect(engine).get_columns("datasets")}
+    assert "relationships_json" in dataset_columns
     with engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == (
-            "0006_saved_models"
+            "0007_table_relationships"
         )
     engine.dispose()
     get_settings.cache_clear()
@@ -99,8 +101,12 @@ def test_upgrade_from_0002_preserves_existing_rows(tmp_path, monkeypatch):
         assert tuple(
             connection.execute(text("SELECT recipe_json, rules_json FROM datasets WHERE id='d'")).one()
         ) == ("{}", "{}")
+        assert (
+            connection.execute(text("SELECT relationships_json FROM datasets WHERE id='d'")).scalar()
+            == "{}"
+        )
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == (
-            "0006_saved_models"
+            "0007_table_relationships"
         )
     engine.dispose()
     get_settings.cache_clear()

@@ -261,6 +261,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/datasets/{dataset_id}/relationships/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Relationship Suggestions */
+        get: operations["relationship_suggestions_api_datasets__dataset_id__relationships_suggestions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/datasets/{dataset_id}/relationships": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Relationships */
+        put: operations["update_relationships_api_datasets__dataset_id__relationships_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/datasets/{dataset_id}/recipe": {
         parameters: {
             query?: never;
@@ -1102,6 +1136,7 @@ export interface components {
             notes?: components["schemas"]["DatasetNotes"];
             recipe?: components["schemas"]["SavedRecipe"];
             rules?: components["schemas"]["SavedRules"];
+            relationships?: components["schemas"]["SavedRelationships"];
             profile?: components["schemas"]["DataProfile"] | null;
             /** Review Version Id */
             review_version_id?: string | null;
@@ -1400,6 +1435,55 @@ export interface components {
             /** Reasons */
             reasons: string[];
         };
+        /**
+         * Relationship
+         * @description Rows of ``from_table`` point to one row of ``to_table`` through the key columns.
+         */
+        Relationship: {
+            /** Id */
+            id?: string;
+            /** From Table */
+            from_table: string;
+            /** From Column */
+            from_column: string;
+            /** To Table */
+            to_table: string;
+            /** To Column */
+            to_column: string;
+            /**
+             * Kind
+             * @default many_to_one
+             * @enum {string}
+             */
+            kind: "many_to_one" | "one_to_one";
+        };
+        /** RelationshipSet */
+        RelationshipSet: {
+            /** Relationships */
+            relationships?: components["schemas"]["Relationship"][];
+        };
+        /** RelationshipSuggestion */
+        RelationshipSuggestion: {
+            relationship: components["schemas"]["Relationship"];
+            /** Match Share */
+            match_share: number;
+            /** Matched Rows */
+            matched_rows: number;
+            /** Checked Rows */
+            checked_rows: number;
+            /** Reason */
+            reason: string;
+        };
+        /** RelationshipSuggestions */
+        RelationshipSuggestions: {
+            /** Suggestions */
+            suggestions?: components["schemas"]["RelationshipSuggestion"][];
+            /**
+             * Method
+             * @default suggested by fixed checks on key names, uniqueness and matching values; no AI model is used
+             */
+            method: string;
+        };
         /** RenameColumn */
         RenameColumn: {
             /** Table */
@@ -1689,6 +1773,18 @@ export interface components {
              * @default true
              */
             auto_apply: boolean;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** SavedRelationships */
+        SavedRelationships: {
+            /** Relationships */
+            relationships?: components["schemas"]["Relationship"][];
             /**
              * Revision
              * @default 0
@@ -2576,6 +2672,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Suggestions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    relationship_suggestions_api_datasets__dataset_id__relationships_suggestions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelationshipSuggestions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_relationships_api_datasets__dataset_id__relationships_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RelationshipSet"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetOut"];
                 };
             };
             /** @description Validation Error */

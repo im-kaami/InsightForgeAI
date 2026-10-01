@@ -23,6 +23,13 @@ from insightforge.api.schemas import (
 from insightforge.config import get_settings
 from insightforge.core.profiling import DataProfile
 from insightforge.core.recipes import AppliedRecipe, CleaningRecipe, SavedRecipe, suggest_steps
+from insightforge.core.relationships import (
+    RelationshipSet,
+    RelationshipSuggestions,
+    SavedRelationships,
+    suggest_relationships,
+    unknown_columns,
+)
 from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.sql_guard import guard_sql
 from insightforge.core.validation import RuleSet, SavedRules, ValidationReport, suggest_rules
@@ -109,6 +116,7 @@ def output(dataset: Dataset, review_version_id: str | None = None) -> DatasetOut
         notes=DatasetNotes.model_validate(dataset.notes_json or {}),
         recipe=SavedRecipe.model_validate(dataset.recipe_json or {}),
         rules=SavedRules.model_validate(dataset.rules_json or {}),
+        relationships=SavedRelationships.model_validate(dataset.relationships_json or {}),
         profile=DataProfile.model_validate(dataset.profile_json) if dataset.profile_json else None,
         review_version_id=review_version_id,
         created_at=dataset.created_at,
@@ -346,6 +354,47 @@ def suggestions(dataset_id: str, db: Db, user: CurrentUser):
         return Suggestions()
     profile = DataProfile.model_validate(dataset.profile_json)
     return Suggestions(recipe_steps=suggest_steps(profile), rules=suggest_rules(profile))
+
+
+@router.get("/{dataset_id}/relationships/suggestions", response_model=RelationshipSuggestions)
+def relationship_suggestions(dataset_id: str, db: Db, user: CurrentUser):
+    dataset = owned(db, user, dataset_id)
+    _versioned(dataset)
+    ensure_current_version(db, dataset)
+    schema = SchemaInfo.model_validate(dataset.schema_json or {"tables": []})
+    if len(schema.tables) < 2:
+        return RelationshipSuggestions()
+    existing = SavedRelationships.model_validate(dataset.relationships_json or {}).relationships
+    try:
+        catalog = open_catalog(dataset)
+    except IngestError as error:
+        raise HTTPException(422, str(error)) from error
+    try:
+        found = suggest_relationships(
+            catalog, schema, existing, timeout=get_settings().query_timeout_seconds
+        )
+    finally:
+        catalog.close()
+    return RelationshipSuggestions(suggestions=found)
+
+
+@router.put("/{dataset_id}/relationships", response_model=DatasetOut)
+def update_relationships(dataset_id: str, body: RelationshipSet, db: Db, user: CurrentUser):
+    dataset = owned(db, user, dataset_id)
+    schema = SchemaInfo.model_validate(dataset.schema_json or {"tables": []})
+    missing = unknown_columns(body.relationships, schema)
+    if missing:
+        raise HTTPException(422, "These columns are not in the current data: " + ", ".join(missing))
+    previous = SavedRelationships.model_validate(dataset.relationships_json or {})
+    saved = SavedRelationships(
+        relationships=body.relationships,
+        revision=previous.revision + 1,
+        updated_at=datetime.now(UTC),
+    )
+    dataset.relationships_json = saved.model_dump(mode="json")
+    db.commit()
+    db.refresh(dataset)
+    return output(dataset, review_version_id=latest_draft_id(db, dataset))
 
 
 @router.put("/{dataset_id}/recipe", response_model=DatasetOut)

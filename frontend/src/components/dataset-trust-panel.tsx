@@ -7,6 +7,7 @@ import { AddDataDialog } from "@/components/add-data-dialog";
 import { DataQuality } from "@/components/data-quality";
 import { DatasetCleaning } from "@/components/dataset-cleaning";
 import { DatasetNotes } from "@/components/dataset-notes";
+import { DatasetRelationships } from "@/components/dataset-relationships";
 import { ImportReview } from "@/components/import-review";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -192,6 +193,10 @@ export function DatasetTrustPanel({
         />
       )}
       <DatasetNotes key={`${dataset.id}-${dataset.current_version_id}`} dataset={dataset} />
+      <DatasetRelationships
+        key={`rel-${dataset.id}-${dataset.current_version_id}`}
+        dataset={dataset}
+      />
       <DataQuality
         profile={dataset.profile}
         datasetId={dataset.id}

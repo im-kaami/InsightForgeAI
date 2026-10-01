@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from insightforge.core.profiling import DataProfile
 from insightforge.core.recipes import AppliedRecipe, RecipeSuggestion, SavedRecipe
+from insightforge.core.relationships import SavedRelationships
 from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.validation import RuleSuggestion, SavedRules, ValidationReport
 from insightforge.core.verified_report import ReportPeriod, SalesDefinition
@@ -110,6 +111,7 @@ class DatasetOut(APIModel):
     notes: DatasetNotes = Field(default_factory=DatasetNotes)
     recipe: SavedRecipe = Field(default_factory=SavedRecipe)
     rules: SavedRules = Field(default_factory=SavedRules)
+    relationships: SavedRelationships = Field(default_factory=SavedRelationships)
     profile: DataProfile | None = None
     review_version_id: str | None = None
     created_at: datetime

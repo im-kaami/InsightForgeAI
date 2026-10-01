@@ -17,6 +17,8 @@ export type ValidationRule = NonNullable<components["schemas"]["RuleSet"]["rules
 export type AppliedRecipe = components["schemas"]["AppliedRecipe"];
 export type ValidationReport = components["schemas"]["ValidationReport"];
 export type SavedModel = components["schemas"]["SavedModelOut"];
+export type Relationship = components["schemas"]["Relationship"];
+export type RelationshipSuggestions = components["schemas"]["RelationshipSuggestions"];
 export type ModelScore = components["schemas"]["ScoreOut"];
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
@@ -112,6 +114,13 @@ export const datasets = {
     apiFetch<Dataset>(`/datasets/${id}/recipe`, { method: "PUT", body: JSON.stringify(recipe) }),
   applyRecipe: (id: string) =>
     apiFetch<DatasetVersion>(`/datasets/${id}/recipe/apply`, { method: "POST" }),
+  relationshipSuggestions: (id: string) =>
+    apiFetch<RelationshipSuggestions>(`/datasets/${id}/relationships/suggestions`),
+  saveRelationships: (id: string, relationships: Relationship[]) =>
+    apiFetch<Dataset>(`/datasets/${id}/relationships`, {
+      method: "PUT",
+      body: JSON.stringify({ relationships }),
+    }),
   saveRules: (id: string, rules: components["schemas"]["RuleSet"]) =>
     apiFetch<Dataset>(`/datasets/${id}/rules`, { method: "PUT", body: JSON.stringify(rules) }),
   validateVersion: (id: string, versionId: string) =>

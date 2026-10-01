@@ -18,6 +18,7 @@ from insightforge.core.llm import LLMClient, build_llm, build_local_llm, llm_mod
 from insightforge.core.memory import ConversationMemory
 from insightforge.core.planner import Plan, PlotStep, SqlStep, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
+from insightforge.core.relationships import SavedRelationships
 from insightforge.core.sandbox import build_sandbox
 from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.validation import SavedRules, check_rules
@@ -341,6 +342,9 @@ def execute_run(
                 mode=mode,
                 allow_clarification=bool(request.get("allow_clarification")),
                 notes=DatasetNotes.model_validate(dataset.notes_json or {}),
+                relationships=SavedRelationships.model_validate(
+                    dataset.relationships_json or {}
+                ).relationships,
             )
             check = result.number_check
             needs_review = (
