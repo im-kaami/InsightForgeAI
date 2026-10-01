@@ -1,18 +1,20 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   models,
   type Dataset,
   type DatasetVersion,
   type ModelScore,
+  type ModelScoring,
   type SavedModel,
 } from "@/lib/api";
 
@@ -163,6 +165,7 @@ function SavedModelItem({
     setBusy(true);
     try {
       setScore(await models.score(model.id, versionId));
+      await client.invalidateQueries({ queryKey: ["model-scorings", model.id] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not score the data");
     } finally {
@@ -242,7 +245,200 @@ function SavedModelItem({
         )}
       </div>
       {score && <ScoreResult model={model} score={score} />}
+      <ModelMonitoring model={model} />
     </li>
+  );
+}
+
+const PRESETS = [
+  ["Daily 06:00", "0 6 * * *"],
+  ["Weekly Mon 06:00", "0 6 * * 1"],
+  ["Monthly 1st 06:00", "0 6 1 * *"],
+] as const;
+
+const when = (value: string | null | undefined) =>
+  value ? new Date(value).toLocaleString() : "Not scheduled";
+
+function describeScoring(item: ModelScoring) {
+  if (item.status === "failed") return `Check failed: ${item.error ?? "unknown error"}`;
+  const retrain = item.verdict === "retrain recommended";
+  const psi = item.max_psi == null ? "" : `, largest drift PSI ${item.max_psi.toFixed(3)}`;
+  return `${retrain ? "Retraining recommended" : "No retraining signal"} (${(
+    item.rows_scored ?? 0
+  ).toLocaleString()} rows${psi})`;
+}
+
+function ModelMonitoring({ model }: { model: SavedModel }) {
+  const client = useQueryClient();
+  const schedule = model.schedule;
+  const [cron, setCron] = useState(schedule?.cron ?? "0 6 * * 1");
+  const [timezone, setTimezone] = useState(
+    () => schedule?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+  );
+  const [enabled, setEnabled] = useState(schedule?.enabled ?? true);
+  const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
+  const history = useQuery({
+    queryKey: ["model-scorings", model.id],
+    queryFn: () => models.scorings(model.id),
+  });
+  const cronId = `model-cron-${model.id}`;
+  const zoneId = `model-zone-${model.id}`;
+
+  async function act(action: () => Promise<unknown>, done?: string) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    try {
+      await action();
+      await client.invalidateQueries({ queryKey: ["models", model.dataset_id] });
+      await client.invalidateQueries({ queryKey: ["model-scorings", model.id] });
+      await client.invalidateQueries({ queryKey: ["model-alerts"] });
+      if (done) toast.success(done);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Something went wrong");
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
+  const items = history.data ?? [];
+  const alerts = items.filter((item) => item.alert && !item.acknowledged_at);
+  return (
+    <div data-testid="model-monitoring" className="space-y-2">
+      {alerts.map((item) => (
+        <div
+          key={item.id}
+          role="alert"
+          data-testid="model-alert"
+          className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 p-2"
+        >
+          <span className="flex-1">
+            {new Date(item.created_at ?? "").toLocaleString()}: {describeScoring(item)}
+            {item.reasons?.length ? ` because ${item.reasons.join("; ")}` : ""}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => act(() => models.acknowledge(model.id, item.id), "Alert dismissed")}
+          >
+            Dismiss
+          </Button>
+        </div>
+      ))}
+      <details className="rounded-md border p-3">
+        <summary className="cursor-pointer font-medium">
+          Monitoring{" "}
+          {schedule?.enabled ? (
+            <Badge variant="outline">Next check {when(schedule.next_run_at)}</Badge>
+          ) : (
+            <Badge variant="secondary">No schedule</Badge>
+          )}{" "}
+          {model.open_alerts > 0 && (
+            <Badge variant="destructive">
+              {model.open_alerts} alert{model.open_alerts === 1 ? "" : "s"}
+            </Badge>
+          )}
+        </summary>
+        <div className="mt-3 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            A scheduled check scores the dataset&apos;s current version with this model and compares
+            it with the training data. It raises an alert when retraining is recommended or the
+            check fails (for example a missing column or a blocking rule). Each check replaces the
+            latest scores CSV. Checks run only while the InsightForge backend is running.
+          </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="space-y-1">
+              <Label htmlFor={cronId} className="text-xs">
+                Schedule (cron)
+              </Label>
+              <Input
+                id={cronId}
+                className="h-8 w-40 font-mono"
+                value={cron}
+                onChange={(event) => setCron(event.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={zoneId} className="text-xs">
+                Time zone
+              </Label>
+              <Input
+                id={zoneId}
+                className="h-8 w-44"
+                value={timezone}
+                onChange={(event) => setTimezone(event.target.value)}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={enabled}
+                onChange={(event) => setEnabled(event.target.checked)}
+              />
+              Enabled
+            </label>
+            <Button
+              size="sm"
+              disabled={busy || !cron.trim()}
+              onClick={() =>
+                act(
+                  () => models.saveSchedule(model.id, { cron: cron.trim(), timezone, enabled }),
+                  "Schedule saved",
+                )
+              }
+            >
+              Save schedule
+            </Button>
+            {schedule && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => act(() => models.runScheduleNow(model.id), "Check finished")}
+                >
+                  {busy ? "Checking..." : "Check now"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => act(() => models.removeSchedule(model.id), "Schedule removed")}
+                >
+                  Remove schedule
+                </Button>
+              </>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {PRESETS.map(([label, value]) => (
+              <Button key={value} size="sm" variant="ghost" onClick={() => setCron(value)}>
+                {label}
+              </Button>
+            ))}
+          </div>
+          <div>
+            <p className="text-xs font-medium">Recent checks</p>
+            {items.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No checks yet.</p>
+            ) : (
+              <ul className="mt-1 space-y-0.5 text-xs" data-testid="scoring-history">
+                {items.slice(0, 10).map((item) => (
+                  <li key={item.id}>
+                    {new Date(item.created_at ?? "").toLocaleString()} ·{" "}
+                    {item.trigger === "scheduled" ? "scheduled" : "by hand"} ·{" "}
+                    {describeScoring(item)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </details>
+    </div>
   );
 }
 

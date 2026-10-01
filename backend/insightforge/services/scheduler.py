@@ -6,7 +6,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
 
-from insightforge.db.models import Dataset, Run, Schedule
+from insightforge.db.models import Dataset, ModelSchedule, Run, Schedule
 from insightforge.db.session import SessionLocal, configure
 from insightforge.services.datasets import ensure_current_version
 from insightforge.services.runs import execute_run
@@ -17,6 +17,17 @@ def schedule_timezone(value: str) -> ZoneInfo:
         return ZoneInfo(value)
     except ZoneInfoNotFoundError as error:
         raise ValueError(f"Unknown timezone: {value}") from error
+
+
+def model_job_id(schedule_id: str) -> str:
+    """APScheduler job id for a model-scoring schedule (kept apart from analysis schedules)."""
+    return f"model-{schedule_id}"
+
+
+def next_run(cron: str, timezone: str) -> datetime | None:
+    trigger = CronTrigger.from_crontab(cron, timezone=schedule_timezone(timezone))
+    fire = trigger.get_next_fire_time(None, datetime.now(UTC))
+    return fire.astimezone(UTC) if fire else None
 
 
 class SchedulerService:
@@ -35,6 +46,48 @@ class SchedulerService:
     def sync_jobs(self, db: Session) -> None:
         for schedule in db.query(Schedule).filter(Schedule.enabled.is_(True)).all():
             self.add(schedule)
+        for model_schedule in db.query(ModelSchedule).filter(ModelSchedule.enabled.is_(True)).all():
+            self.add_model(model_schedule)
+        db.commit()
+
+    def add_model(self, schedule: ModelSchedule) -> None:
+        trigger = CronTrigger.from_crontab(
+            schedule.cron, timezone=schedule_timezone(schedule.timezone)
+        )
+        self.scheduler.add_job(
+            self.run_model_schedule,
+            trigger,
+            args=[schedule.id],
+            id=model_job_id(schedule.id),
+            replace_existing=True,
+        )
+        schedule.next_run_at = next_run(schedule.cron, schedule.timezone)
+
+    def reschedule_model(self, schedule: ModelSchedule) -> None:
+        self.remove(model_job_id(schedule.id))
+        if schedule.enabled:
+            self.add_model(schedule)
+
+    def run_model_schedule(self, schedule_id: str) -> str | None:
+        """Job body: score the model on the current version and store the result."""
+        from insightforge.services.models import run_scheduled_scoring
+
+        configure()
+        db = SessionLocal()
+        try:
+            schedule = db.get(ModelSchedule, schedule_id)
+            if not schedule or not schedule.enabled:
+                return None
+            model_id = schedule.model_id
+            scoring = run_scheduled_scoring(db, model_id)
+            schedule = db.get(ModelSchedule, schedule_id)
+            if schedule is not None:
+                schedule.last_run_at = datetime.now(UTC)
+                schedule.next_run_at = next_run(schedule.cron, schedule.timezone)
+                db.commit()
+            return scoring.id
+        finally:
+            db.close()
 
     def add(self, schedule: Schedule) -> None:
         trigger = CronTrigger.from_crontab(

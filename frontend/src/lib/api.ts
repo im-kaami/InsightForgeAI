@@ -20,6 +20,8 @@ export type SavedModel = components["schemas"]["SavedModelOut"];
 export type Relationship = components["schemas"]["Relationship"];
 export type RelationshipSuggestions = components["schemas"]["RelationshipSuggestions"];
 export type ModelScore = components["schemas"]["ScoreOut"];
+export type ModelSchedule = components["schemas"]["ModelScheduleOut"];
+export type ModelScoring = components["schemas"]["ScoringOut"];
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -214,6 +216,18 @@ export const models = {
   downloadScores: (id: string, name: string) =>
     downloadBlob(`/models/${id}/scores/latest.csv`, `${name.replace(/[^\w-]+/g, "_")}-scores.csv`),
   remove: (id: string) => apiFetch<void>(`/models/${id}`, { method: "DELETE" }),
+  saveSchedule: (id: string, body: { cron: string; timezone: string; enabled: boolean }) =>
+    apiFetch<ModelSchedule>(`/models/${id}/schedule`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  removeSchedule: (id: string) => apiFetch<void>(`/models/${id}/schedule`, { method: "DELETE" }),
+  runScheduleNow: (id: string) =>
+    apiFetch<ModelScoring>(`/models/${id}/schedule/run-now`, { method: "POST" }),
+  scorings: (id: string) => apiFetch<ModelScoring[]>(`/models/${id}/scorings`),
+  acknowledge: (id: string, scoringId: string) =>
+    apiFetch<ModelScoring>(`/models/${id}/scorings/${scoringId}/acknowledge`, { method: "POST" }),
+  alerts: () => apiFetch<ModelScoring[]>("/model-alerts"),
 };
 
 export const schedules = {

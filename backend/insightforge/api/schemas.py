@@ -222,6 +222,22 @@ class ScoreModelIn(BaseModel):
     version_id: str | None = None
 
 
+class ModelScheduleIn(BaseModel):
+    cron: str = Field(min_length=1, max_length=100)
+    timezone: str = Field(default="UTC", max_length=64)
+    enabled: bool = True
+
+
+class ModelScheduleOut(APIModel):
+    id: str
+    model_id: str
+    cron: str
+    timezone: str
+    enabled: bool
+    last_run_at: datetime | None = None
+    next_run_at: datetime | None = None
+
+
 class SavedModelOut(BaseModel):
     id: str
     dataset_id: str
@@ -236,6 +252,26 @@ class SavedModelOut(BaseModel):
     metrics: dict[str, Any]
     created_at: str | None = None
     warning: str | None = None
+    schedule: ModelScheduleOut | None = None
+    open_alerts: int = 0
+
+
+class ScoringOut(BaseModel):
+    id: str
+    model_id: str
+    model_name: str | None = None
+    dataset_id: str | None = None
+    trigger: Literal["manual", "scheduled"]
+    version_id: str | None = None
+    status: Literal["completed", "failed"]
+    rows_scored: int | None = None
+    max_psi: float | None = None
+    verdict: str | None = None
+    reasons: list[str] = Field(default_factory=list)
+    error: str | None = None
+    alert: bool = False
+    acknowledged_at: datetime | None = None
+    created_at: datetime | None = None
 
 
 class DriftFeatureOut(BaseModel):
@@ -261,6 +297,7 @@ class RecommendationOut(BaseModel):
 
 
 class ScoreOut(BaseModel):
+    scoring_id: str | None = None
     model_id: str
     version_id: str
     rows_scored: int

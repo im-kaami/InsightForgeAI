@@ -203,3 +203,87 @@ test("a prediction result can be saved, scored for drift and deleted", async ({ 
   await expect(page.getByText("Model deleted")).toBeVisible();
   await expect(card).toContainText("No saved models yet");
 });
+
+test("scheduled checks show alerts that can be dismissed and schedules can be saved", async ({
+  page,
+}) => {
+  await openSession(page);
+  await page.getByRole("link", { name: "Change data sharing" }).click();
+  await expect(page).toHaveURL(/\/datasets\/[a-f0-9]+$/, { timeout: 15_000 });
+  const datasetId = page.url().split("/").pop()!;
+  const now = new Date().toISOString();
+  let acknowledged = false;
+  const alert = {
+    id: "f".repeat(32),
+    model_id: MODEL_ID,
+    model_name: "salary model",
+    dataset_id: datasetId,
+    trigger: "scheduled",
+    version_id: "e".repeat(32),
+    status: "completed",
+    rows_scored: 60,
+    max_psi: 0.41,
+    verdict: "retrain recommended",
+    reasons: ["feature 'years' shows a major distribution shift (PSI 0.41)"],
+    error: null,
+    alert: true,
+    acknowledged_at: null as string | null,
+    created_at: now,
+  };
+  const schedule = {
+    id: "a".repeat(32),
+    model_id: MODEL_ID,
+    cron: "0 6 * * 1",
+    timezone: "UTC",
+    enabled: true,
+    last_run_at: now,
+    next_run_at: now,
+  };
+  await page.route(/\/api\/datasets\/[a-f0-9]+\/models$/, (route) =>
+    route.fulfill({
+      json: [
+        {
+          ...savedModel(datasetId, "e".repeat(32)),
+          schedule,
+          open_alerts: acknowledged ? 0 : 1,
+        },
+      ],
+    }),
+  );
+  await page.route(/\/api\/model-alerts$/, (route) =>
+    route.fulfill({ json: acknowledged ? [] : [alert] }),
+  );
+  await page.route(/\/api\/models\/b+\/scorings$/, (route) =>
+    route.fulfill({ json: [{ ...alert, acknowledged_at: acknowledged ? now : null }] }),
+  );
+  await page.route(/\/api\/models\/b+\/scorings\/f+\/acknowledge$/, async (route) => {
+    acknowledged = true;
+    await route.fulfill({ json: { ...alert, acknowledged_at: now } });
+  });
+  let savedSchedule: Record<string, unknown> | null = null;
+  await page.route(/\/api\/models\/b+\/schedule$/, async (route) => {
+    savedSchedule = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: { ...schedule, ...savedSchedule } });
+  });
+  await page.reload();
+
+  await expect(page.getByTestId("model-alerts-nav")).toContainText(
+    "salary model: retraining recommended",
+  );
+  const monitoring = page.getByTestId("model-monitoring");
+  await expect(monitoring).toContainText("1 alert");
+  const banner = monitoring.getByTestId("model-alert");
+  await expect(banner).toContainText("Retraining recommended (60 rows, largest drift PSI 0.410)");
+  await expect(banner).toContainText("major distribution shift");
+  await banner.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText("Alert dismissed")).toBeVisible();
+  await expect(monitoring.getByTestId("model-alert")).toHaveCount(0);
+  await expect(page.getByTestId("model-alerts-nav")).toHaveCount(0);
+  await monitoring.getByText("Monitoring").click();
+  await expect(monitoring.getByTestId("scoring-history")).toContainText("scheduled");
+
+  await monitoring.getByRole("button", { name: "Daily 06:00" }).click();
+  await monitoring.getByRole("button", { name: "Save schedule" }).click();
+  await expect(page.getByText("Schedule saved")).toBeVisible();
+  expect(savedSchedule).toMatchObject({ cron: "0 6 * * *", enabled: true });
+});

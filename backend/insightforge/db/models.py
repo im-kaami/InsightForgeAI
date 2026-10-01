@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -177,4 +177,39 @@ class SavedModel(Base):
     profile_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     model_type: Mapped[str] = mapped_column(String(100))
     file_path: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ModelSchedule(Base):
+    """At most one scoring schedule per saved model (Phase 3e)."""
+
+    __tablename__ = "model_schedules"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    model_id: Mapped[str] = mapped_column(ForeignKey("saved_models.id"), unique=True)
+    cron: Mapped[str] = mapped_column(String(100))
+    timezone: Mapped[str] = mapped_column(String(64), default="UTC")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ModelScoring(Base):
+    """One scoring of a saved model, manual or scheduled, with its drift verdict."""
+
+    __tablename__ = "model_scorings"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    model_id: Mapped[str] = mapped_column(ForeignKey("saved_models.id"), index=True)
+    trigger: Mapped[str] = mapped_column(String(20))
+    version_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    status: Mapped[str] = mapped_column(String(20))
+    rows_scored: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_psi: Mapped[float | None] = mapped_column(Float, nullable=True)
+    verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    reasons_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alert: Mapped[bool] = mapped_column(Boolean, default=False)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

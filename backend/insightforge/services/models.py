@@ -8,11 +8,12 @@ stored on the database row (never from user input). Nothing here contacts an LLM
 from __future__ import annotations
 
 import csv
+from datetime import UTC, datetime
 from typing import Any
 
 import duckdb
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from insightforge.config import get_settings
@@ -20,12 +21,22 @@ from insightforge.core import model_store
 from insightforge.core.model_store import ModelStoreError
 from insightforge.core.predict import PredictError
 from insightforge.core.sql_guard import guard_query
-from insightforge.db.models import Artifact, Dataset, DatasetVersion, Run, SavedModel
+from insightforge.db.models import (
+    Artifact,
+    Dataset,
+    DatasetVersion,
+    ModelSchedule,
+    ModelScoring,
+    Run,
+    SavedModel,
+)
 from insightforge.services.datasets import open_catalog
 from insightforge.services.storage import Storage
 
 # Metrics that must match the run's reported holdout (within this tolerance).
 METRIC_TOLERANCE = 1e-6
+# Scoring history kept per model; older entries are removed when a new one is stored.
+MAX_SCORINGS_KEPT = 100
 
 
 class ModelServiceError(ValueError):
@@ -219,7 +230,13 @@ def _needed_columns(model: SavedModel) -> list[str]:
     needed.append(model.target)
     return needed
 
-def score_model(db: Session, owner_id: str, model_id: str, version_id: str | None) -> dict[str, Any]:
+def score_model(
+    db: Session,
+    owner_id: str,
+    model_id: str,
+    version_id: str | None,
+    trigger: str = "manual",
+) -> dict[str, Any]:
     """Score a chosen ready version of the model's dataset and report drift.
 
     Blocked (422) when required features are missing; 409 when the version has
@@ -272,8 +289,20 @@ def score_model(db: Session, owner_id: str, model_id: str, version_id: str | Non
     csv_path = directory / "scores-latest.csv"
     scored.to_csv(csv_path, index=False, quoting=csv.QUOTE_MINIMAL)
 
+    scoring = _record_scoring(
+        db,
+        model,
+        trigger,
+        version_id=version.id,
+        rows_scored=int(len(scored)),
+        max_psi=float(drift_report.get("max_psi", 0.0)),
+        verdict=advice["verdict"],
+        reasons=list(advice.get("reasons") or []),
+    )
+
     preview = scored.head(200)
     return {
+        "scoring_id": scoring.id,
         "model_id": model.id,
         "version_id": version.id,
         "rows_scored": int(len(scored)),
@@ -307,17 +336,183 @@ def list_models(db: Session, owner_id: str, dataset_id: str) -> list[SavedModel]
     )
 
 
+def _remove_model_rows(db: Session, model: SavedModel) -> None:
+    """Delete a model's schedule (and its job), scoring history, folder and row."""
+    from insightforge.services.scheduler import model_job_id, scheduler
+
+    schedule = db.scalar(select(ModelSchedule).where(ModelSchedule.model_id == model.id))
+    if schedule is not None:
+        scheduler.remove(model_job_id(schedule.id))
+        db.delete(schedule)
+    db.execute(delete(ModelScoring).where(ModelScoring.model_id == model.id))
+    _storage().delete_model(model.owner_id, model.id)
+    db.delete(model)
+
+
 def delete_model(db: Session, owner_id: str, model_id: str) -> None:
     model = owned_model(db, owner_id, model_id)
-    _storage().delete_model(owner_id, model.id)
-    db.delete(model)
+    _remove_model_rows(db, model)
     db.commit()
 
 
 def delete_models_for_dataset(db: Session, owner_id: str, dataset_id: str) -> None:
-    """Remove a dataset's models and their folders (used by dataset deletion)."""
-    for model in db.scalars(
-        select(SavedModel).where(SavedModel.owner_id == owner_id, SavedModel.dataset_id == dataset_id)
+    """Remove a dataset's models, schedules, history and folders (used by dataset deletion)."""
+    for model in list(
+        db.scalars(
+            select(SavedModel).where(
+                SavedModel.owner_id == owner_id, SavedModel.dataset_id == dataset_id
+            )
+        )
     ):
-        _storage().delete_model(owner_id, model.id)
-        db.delete(model)
+        _remove_model_rows(db, model)
+
+
+# --- Scoring history, schedules and alerts (Phase 3e) ---------------------------------
+
+def _record_scoring(
+    db: Session,
+    model: SavedModel,
+    trigger: str,
+    *,
+    version_id: str | None = None,
+    rows_scored: int | None = None,
+    max_psi: float | None = None,
+    verdict: str | None = None,
+    reasons: list[str] | None = None,
+    error: str | None = None,
+) -> ModelScoring:
+    """Store one scoring. Only scheduled scorings raise alerts (retraining or failure)."""
+    status = "failed" if error else "completed"
+    alert = trigger == "scheduled" and (status == "failed" or verdict == model_store.RETRAIN)
+    scoring = ModelScoring(
+        owner_id=model.owner_id,
+        model_id=model.id,
+        trigger=trigger,
+        version_id=version_id,
+        status=status,
+        rows_scored=rows_scored,
+        max_psi=max_psi,
+        verdict=verdict,
+        reasons_json=reasons or [],
+        error=(error or None) and error[:2000],
+        alert=alert,
+    )
+    db.add(scoring)
+    db.flush()
+    stale = list(
+        db.scalars(
+            select(ModelScoring.id)
+            .where(ModelScoring.model_id == model.id)
+            .order_by(ModelScoring.created_at.desc(), ModelScoring.id.desc())
+            .offset(MAX_SCORINGS_KEPT)
+        )
+    )
+    if stale:
+        db.execute(delete(ModelScoring).where(ModelScoring.id.in_(stale)))
+    db.commit()
+    db.refresh(scoring)
+    return scoring
+
+
+def run_scheduled_scoring(db: Session, model_id: str) -> ModelScoring:
+    """Score the model on its dataset's current version and record the outcome.
+
+    Never raises for expected problems: a missing column, a blocking rule or any other
+    failure is stored as a failed scoring with an alert.
+    """
+    model = db.get(SavedModel, model_id)
+    if model is None:
+        raise ModelServiceError("Model not found", status=404)
+    try:
+        result = score_model(db, model.owner_id, model.id, None, trigger="scheduled")
+    except Exception as error:  # noqa: BLE001 - every failure is recorded, not raised
+        db.rollback()
+        message = str(error) if isinstance(error, ModelServiceError) else f"Scoring failed: {error}"
+        dataset = db.get(Dataset, model.dataset_id)
+        return _record_scoring(
+            db,
+            model,
+            "scheduled",
+            version_id=dataset.current_version_id if dataset else None,
+            error=message,
+        )
+    return db.get(ModelScoring, result["scoring_id"])
+
+
+def get_schedule(db: Session, model: SavedModel) -> ModelSchedule | None:
+    return db.scalar(select(ModelSchedule).where(ModelSchedule.model_id == model.id))
+
+
+def save_schedule(
+    db: Session,
+    owner_id: str,
+    model_id: str,
+    cron: str,
+    timezone: str,
+    enabled: bool,
+    next_run_at: Any,
+) -> ModelSchedule:
+    model = owned_model(db, owner_id, model_id)
+    schedule = get_schedule(db, model)
+    if schedule is None:
+        schedule = ModelSchedule(owner_id=owner_id, model_id=model.id)
+        db.add(schedule)
+    schedule.cron = cron
+    schedule.timezone = timezone
+    schedule.enabled = enabled
+    schedule.next_run_at = next_run_at if enabled else None
+    db.commit()
+    db.refresh(schedule)
+    return schedule
+
+
+def delete_schedule(db: Session, owner_id: str, model_id: str) -> str:
+    model = owned_model(db, owner_id, model_id)
+    schedule = get_schedule(db, model)
+    if schedule is None:
+        raise ModelServiceError("This model has no schedule", status=404)
+    schedule_id = schedule.id
+    db.delete(schedule)
+    db.commit()
+    return schedule_id
+
+
+def list_scorings(db: Session, owner_id: str, model_id: str, limit: int = 20) -> list[ModelScoring]:
+    model = owned_model(db, owner_id, model_id)
+    return list(
+        db.scalars(
+            select(ModelScoring)
+            .where(ModelScoring.model_id == model.id)
+            .order_by(ModelScoring.created_at.desc(), ModelScoring.id.desc())
+            .limit(limit)
+        )
+    )
+
+
+def open_alerts(db: Session, owner_id: str, model_id: str | None = None) -> list[ModelScoring]:
+    query = select(ModelScoring).where(
+        ModelScoring.owner_id == owner_id,
+        ModelScoring.alert.is_(True),
+        ModelScoring.acknowledged_at.is_(None),
+    )
+    if model_id is not None:
+        query = query.where(ModelScoring.model_id == model_id)
+    return list(db.scalars(query.order_by(ModelScoring.created_at.desc())))
+
+
+def acknowledge(db: Session, owner_id: str, model_id: str, scoring_id: str) -> ModelScoring:
+    model = owned_model(db, owner_id, model_id)
+    scoring = db.scalar(
+        select(ModelScoring).where(
+            ModelScoring.id == scoring_id,
+            ModelScoring.model_id == model.id,
+            ModelScoring.owner_id == owner_id,
+        )
+    )
+    if scoring is None:
+        raise ModelServiceError("Scoring not found", status=404)
+    if scoring.acknowledged_at is None:
+        scoring.acknowledged_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(scoring)
+    return scoring

@@ -762,6 +762,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/models/{model_id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Schedule */
+        put: operations["put_schedule_api_models__model_id__schedule_put"];
+        post?: never;
+        /** Remove Schedule */
+        delete: operations["remove_schedule_api_models__model_id__schedule_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models/{model_id}/schedule/run-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Schedule Now
+         * @description Run the scheduled check immediately: current version, stored with alerts.
+         */
+        post: operations["run_schedule_now_api_models__model_id__schedule_run_now_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models/{model_id}/scorings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scorings */
+        get: operations["scorings_api_models__model_id__scorings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models/{model_id}/scorings/{scoring_id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge */
+        post: operations["acknowledge_api_models__model_id__scorings__scoring_id__acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/model-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Model Alerts */
+        get: operations["model_alerts_api_model_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1340,6 +1429,38 @@ export interface components {
              */
             ignore_case: boolean;
         };
+        /** ModelScheduleIn */
+        ModelScheduleIn: {
+            /** Cron */
+            cron: string;
+            /**
+             * Timezone
+             * @default UTC
+             */
+            timezone: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+        };
+        /** ModelScheduleOut */
+        ModelScheduleOut: {
+            /** Id */
+            id: string;
+            /** Model Id */
+            model_id: string;
+            /** Cron */
+            cron: string;
+            /** Timezone */
+            timezone: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Last Run At */
+            last_run_at?: string | null;
+            /** Next Run At */
+            next_run_at?: string | null;
+        };
         /** NotNullRule */
         NotNullRule: {
             /** Id */
@@ -1763,6 +1884,12 @@ export interface components {
             created_at?: string | null;
             /** Warning */
             warning?: string | null;
+            schedule?: components["schemas"]["ModelScheduleOut"] | null;
+            /**
+             * Open Alerts
+             * @default 0
+             */
+            open_alerts: number;
         };
         /** SavedRecipe */
         SavedRecipe: {
@@ -1880,6 +2007,8 @@ export interface components {
         };
         /** ScoreOut */
         ScoreOut: {
+            /** Scoring Id */
+            scoring_id?: string | null;
             /** Model Id */
             model_id: string;
             /** Version Id */
@@ -1902,6 +2031,48 @@ export interface components {
                 [key: string]: unknown;
             };
             recommendation: components["schemas"]["RecommendationOut"];
+        };
+        /** ScoringOut */
+        ScoringOut: {
+            /** Id */
+            id: string;
+            /** Model Id */
+            model_id: string;
+            /** Model Name */
+            model_name?: string | null;
+            /** Dataset Id */
+            dataset_id?: string | null;
+            /**
+             * Trigger
+             * @enum {string}
+             */
+            trigger: "manual" | "scheduled";
+            /** Version Id */
+            version_id?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "failed";
+            /** Rows Scored */
+            rows_scored?: number | null;
+            /** Max Psi */
+            max_psi?: number | null;
+            /** Verdict */
+            verdict?: string | null;
+            /** Reasons */
+            reasons?: string[];
+            /** Error */
+            error?: string | null;
+            /**
+             * Alert
+             * @default false
+             */
+            alert: boolean;
+            /** Acknowledged At */
+            acknowledged_at?: string | null;
+            /** Created At */
+            created_at?: string | null;
         };
         /** SessionCreate */
         SessionCreate: {
@@ -3853,6 +4024,184 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_schedule_api_models__model_id__schedule_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelScheduleIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelScheduleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_schedule_api_models__model_id__schedule_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_schedule_now_api_models__model_id__schedule_run_now_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoringOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scorings_api_models__model_id__scorings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoringOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_api_models__model_id__scorings__scoring_id__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+                scoring_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoringOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    model_alerts_api_model_alerts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoringOut"][];
                 };
             };
         };

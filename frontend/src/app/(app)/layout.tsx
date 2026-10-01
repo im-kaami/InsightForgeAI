@@ -1,14 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { CalendarClock, Database, History, LogOut } from "lucide-react";
+import { BellRing, CalendarClock, Database, History, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { RequireAuth } from "@/components/require-auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { health } from "@/lib/api";
+import { health, models } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const healthQuery = useQuery({ queryKey: ["health"], queryFn: health });
+  const alertsQuery = useQuery({
+    queryKey: ["model-alerts"],
+    queryFn: models.alerts,
+    enabled: Boolean(user),
+    refetchInterval: 60_000,
+  });
   return (
     <RequireAuth>
       <div className="min-h-screen md:grid md:grid-cols-[240px_1fr]">
@@ -47,6 +53,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </Link>
             ))}
           </nav>
+          {alertsQuery.data && alertsQuery.data.length > 0 && (
+            <div
+              role="status"
+              data-testid="model-alerts-nav"
+              className="mt-4 space-y-1 rounded-md border border-destructive/40 p-3 text-xs"
+            >
+              <p className="flex items-center gap-2 font-medium">
+                <BellRing className="size-4" />
+                Model alerts
+              </p>
+              {Array.from(
+                new Map(alertsQuery.data.map((item) => [item.model_id, item])).values(),
+              ).map((item) => (
+                <Link
+                  key={item.model_id}
+                  href={`/datasets/${item.dataset_id}`}
+                  className="block truncate hover:underline"
+                >
+                  {item.model_name ?? "A saved model"}:{" "}
+                  {item.status === "failed" ? "check failed" : "retraining recommended"}
+                </Link>
+              ))}
+            </div>
+          )}
           <div className="mt-auto space-y-3 pt-8">
             {healthQuery.data?.llm === "fake" ? (
               <Badge variant="outline">Configured model: offline</Badge>
