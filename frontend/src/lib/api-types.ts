@@ -295,6 +295,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/datasets/{dataset_id}/metrics/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Metric Suggestions */
+        get: operations["metric_suggestions_api_datasets__dataset_id__metrics_suggestions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/datasets/{dataset_id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Metrics */
+        put: operations["update_metrics_api_datasets__dataset_id__metrics_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/datasets/{dataset_id}/metrics/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Metric
+         * @description Calculate a metric (saved or still being edited) on the current version, in code.
+         */
+        post: operations["preview_metric_api_datasets__dataset_id__metrics_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/datasets/{dataset_id}/recipe": {
         parameters: {
             query?: never;
@@ -1255,6 +1309,7 @@ export interface components {
             recipe?: components["schemas"]["SavedRecipe"];
             rules?: components["schemas"]["SavedRules"];
             relationships?: components["schemas"]["SavedRelationships"];
+            metrics?: components["schemas"]["SavedMetrics"];
             profile?: components["schemas"]["DataProfile"] | null;
             /** Review Version Id */
             review_version_id?: string | null;
@@ -1489,6 +1544,125 @@ export interface components {
              * @default false
              */
             ignore_case: boolean;
+        };
+        /** Metric */
+        Metric: {
+            /** Id */
+            id?: string;
+            /** Name */
+            name: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Unit
+             * @default
+             */
+            unit: string;
+            /** Synonyms */
+            synonyms?: string[];
+            /** Table */
+            table: string;
+            /**
+             * Aggregation
+             * @enum {string}
+             */
+            aggregation: "sum" | "count" | "count_distinct" | "avg" | "min" | "max";
+            /** Column */
+            column?: string | null;
+            /** Filters */
+            filters?: components["schemas"]["MetricFilter"][];
+            /** Date Column */
+            date_column?: string | null;
+            /** Dimensions */
+            dimensions?: string[];
+            /**
+             * Approved
+             * @default false
+             */
+            approved: boolean;
+        };
+        /**
+         * MetricFilter
+         * @description A literal condition. ``not_equals`` keeps rows where the column is missing.
+         */
+        MetricFilter: {
+            /** Column */
+            column: string;
+            /**
+             * Op
+             * @default equals
+             * @enum {string}
+             */
+            op: "equals" | "not_equals" | "in";
+            /** Value */
+            value: string | number | boolean | (string | number | boolean)[];
+        };
+        /** MetricPreviewIn */
+        MetricPreviewIn: {
+            metric: components["schemas"]["Metric"];
+            query?: components["schemas"]["MetricQuery"] | null;
+        };
+        /** MetricPreviewOut */
+        MetricPreviewOut: {
+            /** Metric */
+            metric: string;
+            /** Label */
+            label: string;
+            /** Sql */
+            sql: string;
+            /** Description */
+            description: string;
+            /** Columns */
+            columns: string[];
+            /** Rows */
+            rows: {
+                [key: string]: unknown;
+            }[];
+            /** Total Rows */
+            total_rows: number;
+        };
+        /**
+         * MetricQuery
+         * @description What the AI (or the user, in a preview) asks of one metric.
+         */
+        MetricQuery: {
+            /** Metric */
+            metric: string;
+            /** Group By */
+            group_by?: string[];
+            /** Filters */
+            filters?: components["schemas"]["MetricFilter"][];
+            /** Grain */
+            grain?: ("day" | "week" | "month" | "year") | null;
+            /** Date From */
+            date_from?: string | null;
+            /** Date To */
+            date_to?: string | null;
+            /** Limit */
+            limit?: number | null;
+        };
+        /** MetricSet */
+        MetricSet: {
+            /** Metrics */
+            metrics?: components["schemas"]["Metric"][];
+        };
+        /** MetricSuggestions */
+        MetricSuggestions: {
+            /** Suggestions */
+            suggestions?: components["schemas"]["Metric"][];
+            /**
+             * Method
+             * @default drafted from column names and types only; no AI model is used and nothing is approved
+             */
+            method: string;
         };
         /** ModelScheduleIn */
         ModelScheduleIn: {
@@ -1914,6 +2088,18 @@ export interface components {
         SaveModelIn: {
             /** Name */
             name?: string | null;
+        };
+        /** SavedMetrics */
+        SavedMetrics: {
+            /** Metrics */
+            metrics?: components["schemas"]["Metric"][];
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /** Updated At */
+            updated_at?: string | null;
         };
         /** SavedModelOut */
         SavedModelOut: {
@@ -2970,6 +3156,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DatasetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    metric_suggestions_api_datasets__dataset_id__metrics_suggestions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricSuggestions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_metrics_api_datasets__dataset_id__metrics_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetricSet"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_metric_api_datasets__dataset_id__metrics_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetricPreviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricPreviewOut"];
                 };
             };
             /** @description Validation Error */

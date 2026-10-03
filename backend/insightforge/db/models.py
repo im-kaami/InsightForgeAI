@@ -61,6 +61,9 @@ class Dataset(Base):
     relationships_json: Mapped[dict[str, Any]] = mapped_column(
         JSON, default=dict, server_default=text("'{}'"), nullable=False
     )
+    metrics_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, server_default=text("'{}'"), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

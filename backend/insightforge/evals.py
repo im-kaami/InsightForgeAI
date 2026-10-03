@@ -18,6 +18,8 @@ from insightforge.core.artifacts import (
     TableArtifact,
 )
 from insightforge.core.catalog import DataCatalog, _quote
+from insightforge.core.metrics import Metric
+from insightforge.core.relationships import Relationship
 from insightforge.core.schema import DatasetNotes
 from insightforge.core.stats import TestMethod, run_test
 
@@ -52,6 +54,8 @@ class EvalSuite(BaseModel):
     version: int
     datasets: dict[str, dict[str, str]]
     notes: dict[str, DatasetNotes] = Field(default_factory=dict)
+    relationships: dict[str, list[Relationship]] = Field(default_factory=dict)
+    metrics: dict[str, list[Metric]] = Field(default_factory=dict)
     cases: list[EvalCase]
     base_dir: Path = Field(default=Path("."), exclude=True)
 
@@ -289,6 +293,8 @@ def run_case(
                 mode=mode,
                 allow_clarification=True,
                 notes=suite.notes.get(case.dataset),
+                relationships=suite.relationships.get(case.dataset),
+                metrics=suite.metrics.get(case.dataset),
             )
         except Exception as error:
             return CaseResult(

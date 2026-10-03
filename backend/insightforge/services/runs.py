@@ -16,6 +16,7 @@ from insightforge.core.checks import SERIOUS_FINDINGS
 from insightforge.core.executor import truncation_note
 from insightforge.core.llm import LLMClient, build_llm, build_local_llm, llm_mode, resolved_model
 from insightforge.core.memory import ConversationMemory
+from insightforge.core.metrics import SavedMetrics
 from insightforge.core.planner import Plan, PlotStep, SqlStep, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
 from insightforge.core.relationships import SavedRelationships
@@ -333,6 +334,7 @@ def execute_run(
             )
             request = run.request_json or {}
             mode = "deep" if request.get("mode") == "deep" else "quick"
+            saved_metrics = SavedMetrics.model_validate(dataset.metrics_json or {})
             result = agent.run(
                 run.goal,
                 catalog,
@@ -345,6 +347,8 @@ def execute_run(
                 relationships=SavedRelationships.model_validate(
                     dataset.relationships_json or {}
                 ).relationships,
+                metrics=saved_metrics.metrics,
+                metrics_revision=saved_metrics.revision,
             )
             check = result.number_check
             needs_review = (

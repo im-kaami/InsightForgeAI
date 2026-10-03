@@ -14,6 +14,9 @@ from insightforge.api.schemas import (
     ConnectionDatasetCreate,
     DatasetOut,
     ImportOptions,
+    MetricPreviewIn,
+    MetricPreviewOut,
+    MetricSuggestions,
     PrivacyUpdate,
     Suggestions,
     URLDatasetCreate,
@@ -21,6 +24,15 @@ from insightforge.api.schemas import (
     VersionOut,
 )
 from insightforge.config import get_settings
+from insightforge.core.metrics import (
+    MetricError,
+    MetricQuery,
+    MetricSet,
+    SavedMetrics,
+    compile_query,
+    definition_problems,
+    suggest_metrics,
+)
 from insightforge.core.profiling import DataProfile
 from insightforge.core.recipes import AppliedRecipe, CleaningRecipe, SavedRecipe, suggest_steps
 from insightforge.core.relationships import (
@@ -117,6 +129,7 @@ def output(dataset: Dataset, review_version_id: str | None = None) -> DatasetOut
         recipe=SavedRecipe.model_validate(dataset.recipe_json or {}),
         rules=SavedRules.model_validate(dataset.rules_json or {}),
         relationships=SavedRelationships.model_validate(dataset.relationships_json or {}),
+        metrics=SavedMetrics.model_validate(dataset.metrics_json or {}),
         profile=DataProfile.model_validate(dataset.profile_json) if dataset.profile_json else None,
         review_version_id=review_version_id,
         created_at=dataset.created_at,
@@ -395,6 +408,75 @@ def update_relationships(dataset_id: str, body: RelationshipSet, db: Db, user: C
     db.commit()
     db.refresh(dataset)
     return output(dataset, review_version_id=latest_draft_id(db, dataset))
+
+
+def _metric_context(dataset: Dataset) -> tuple[SchemaInfo, list]:
+    schema = SchemaInfo.model_validate(dataset.schema_json or {"tables": []})
+    relationships = SavedRelationships.model_validate(dataset.relationships_json or {}).relationships
+    return schema, relationships
+
+
+@router.get("/{dataset_id}/metrics/suggestions", response_model=MetricSuggestions)
+def metric_suggestions(dataset_id: str, db: Db, user: CurrentUser):
+    dataset = owned(db, user, dataset_id)
+    schema, _ = _metric_context(dataset)
+    existing = SavedMetrics.model_validate(dataset.metrics_json or {}).metrics
+    return MetricSuggestions(suggestions=suggest_metrics(schema, existing))
+
+
+@router.put("/{dataset_id}/metrics", response_model=DatasetOut)
+def update_metrics(dataset_id: str, body: MetricSet, db: Db, user: CurrentUser):
+    dataset = owned(db, user, dataset_id)
+    schema, relationships = _metric_context(dataset)
+    problems = definition_problems(body.metrics, schema, relationships)
+    if problems:
+        raise HTTPException(422, "; ".join(problems))
+    previous = SavedMetrics.model_validate(dataset.metrics_json or {})
+    saved = SavedMetrics(
+        metrics=body.metrics, revision=previous.revision + 1, updated_at=datetime.now(UTC)
+    )
+    dataset.metrics_json = saved.model_dump(mode="json")
+    db.commit()
+    db.refresh(dataset)
+    return output(dataset, review_version_id=latest_draft_id(db, dataset))
+
+
+@router.post("/{dataset_id}/metrics/preview", response_model=MetricPreviewOut)
+def preview_metric(dataset_id: str, body: MetricPreviewIn, db: Db, user: CurrentUser):
+    """Calculate a metric (saved or still being edited) on the current version, in code."""
+    dataset = owned(db, user, dataset_id)
+    schema, relationships = _metric_context(dataset)
+    query = body.query or MetricQuery(metric=body.metric.name)
+    request = query.model_copy(update={"metric": body.metric.name})
+    try:
+        compiled = compile_query(body.metric, request, schema, relationships)
+    except MetricError as error:
+        raise HTTPException(422, str(error)) from error
+    if dataset.connection_id:
+        raise HTTPException(422, "Previews are available for uploaded and URL data, not live connections")
+    ensure_current_version(db, dataset)
+    try:
+        catalog = open_catalog(dataset)
+    except IngestError as error:
+        raise HTTPException(422, str(error)) from error
+    try:
+        guarded = guard_sql(compiled.sql)
+        frame = catalog.query(guarded, timeout_seconds=get_settings().query_timeout_seconds)
+    except Exception as error:  # noqa: BLE001 - reported to the user as a failed preview
+        raise HTTPException(422, f"The metric could not be calculated: {error}") from error
+    finally:
+        catalog.close()
+    preview = frame.head(200)
+    rows = json.loads(preview.to_json(orient="records", date_format="iso"))
+    return MetricPreviewOut(
+        metric=compiled.metric,
+        label=compiled.label,
+        sql=guarded,
+        description=compiled.description,
+        columns=[str(column) for column in frame.columns],
+        rows=rows,
+        total_rows=len(frame),
+    )
 
 
 @router.put("/{dataset_id}/recipe", response_model=DatasetOut)

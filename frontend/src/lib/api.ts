@@ -23,6 +23,11 @@ export type ModelScore = components["schemas"]["ScoreOut"];
 export type ModelSchedule = components["schemas"]["ModelScheduleOut"];
 export type ModelScoring = components["schemas"]["ScoringOut"];
 export type ModelExplanation = components["schemas"]["ExplanationOut"];
+export type Metric = components["schemas"]["Metric"];
+export type MetricFilter = components["schemas"]["MetricFilter"];
+export type MetricQuery = components["schemas"]["MetricQuery"];
+export type MetricSuggestions = components["schemas"]["MetricSuggestions"];
+export type MetricPreview = components["schemas"]["MetricPreviewOut"];
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -117,6 +122,18 @@ export const datasets = {
     apiFetch<Dataset>(`/datasets/${id}/recipe`, { method: "PUT", body: JSON.stringify(recipe) }),
   applyRecipe: (id: string) =>
     apiFetch<DatasetVersion>(`/datasets/${id}/recipe/apply`, { method: "POST" }),
+  metricSuggestions: (id: string) =>
+    apiFetch<MetricSuggestions>(`/datasets/${id}/metrics/suggestions`),
+  saveMetrics: (id: string, metrics: Metric[]) =>
+    apiFetch<Dataset>(`/datasets/${id}/metrics`, {
+      method: "PUT",
+      body: JSON.stringify({ metrics }),
+    }),
+  previewMetric: (id: string, metric: Metric, query?: MetricQuery) =>
+    apiFetch<MetricPreview>(
+      `/datasets/${id}/metrics/preview`,
+      json({ metric, query: query ?? null }),
+    ),
   relationshipSuggestions: (id: string) =>
     apiFetch<RelationshipSuggestions>(`/datasets/${id}/relationships/suggestions`),
   saveRelationships: (id: string, relationships: Relationship[]) =>

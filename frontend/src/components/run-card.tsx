@@ -205,6 +205,18 @@ export function RunCard({
                   className="space-y-2"
                 >
                   <h3 className="font-medium">{String(item.name)}</h3>
+                  {item.metric ? (
+                    <div data-testid="metric-result" className="space-y-1 text-sm">
+                      <Badge variant="default">
+                        Approved metric:{" "}
+                        {String((item.metric as Record<string, unknown>).label ?? "")}
+                      </Badge>
+                      <p className="text-xs text-muted-foreground">
+                        {String((item.metric as Record<string, unknown>).description ?? "")} Tested
+                        code wrote this SQL from the definition the data owner approved.
+                      </p>
+                    </div>
+                  ) : null}
                   <DataTable
                     columns={(item.columns as string[]) ?? []}
                     rows={(item.rows as Record<string, unknown>[]) ?? []}

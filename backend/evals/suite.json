@@ -1,6 +1,6 @@
 {
   "name": "insightforge-core",
-  "version": 9,
+  "version": 10,
   "datasets": {
     "hr": {
       "employees": "../tests/fixtures/hr.csv"
@@ -14,7 +14,51 @@
     },
     "churn": {
       "subscribers": "data/subscribers.csv"
+    },
+    "shop_metrics": {
+      "orders": "data/orders.csv",
+      "customers": "data/customers.csv"
     }
+  },
+  "relationships": {
+    "shop_metrics": [
+      {
+        "from_table": "orders",
+        "from_column": "customer_id",
+        "to_table": "customers",
+        "to_column": "customer_id",
+        "kind": "many_to_one"
+      }
+    ]
+  },
+  "metrics": {
+    "shop_metrics": [
+      {
+        "name": "revenue",
+        "label": "Revenue",
+        "description": "Value of completed orders",
+        "unit": "GBP",
+        "synonyms": ["sales", "turnover"],
+        "table": "orders",
+        "aggregation": "sum",
+        "column": "amount",
+        "filters": [{"column": "status", "op": "equals", "value": "completed"}],
+        "date_column": "order_date",
+        "dimensions": ["region", "category", "customers.segment", "customers.country"],
+        "approved": true
+      },
+      {
+        "name": "orders_placed",
+        "label": "Orders placed",
+        "description": "Every order, whatever its status",
+        "synonyms": ["number of orders", "order count"],
+        "table": "orders",
+        "aggregation": "count",
+        "date_column": "order_date",
+        "dimensions": ["region", "category", "status", "customers.segment"],
+        "approved": true
+      }
+    ]
   },
   "notes": {
     "shop": {
@@ -554,6 +598,63 @@
       "question": "Which region is the biggest?",
       "expect": {
         "type": "clarify"
+      }
+    },
+    {
+      "id": "metric-total-revenue",
+      "dataset": "shop_metrics",
+      "question": "What is our total revenue?",
+      "expect": {
+        "type": "value",
+        "sql": "SELECT SUM(amount) FROM orders WHERE status = 'completed'"
+      }
+    },
+    {
+      "id": "metric-revenue-by-region",
+      "dataset": "shop_metrics",
+      "question": "What is revenue by region?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT region, SUM(amount) FROM orders WHERE status = 'completed' GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "metric-revenue-by-segment",
+      "dataset": "shop_metrics",
+      "question": "What is revenue for each customer segment?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT c.segment, SUM(o.amount) FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.status = 'completed' GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "metric-monthly-revenue-h1",
+      "dataset": "shop_metrics",
+      "question": "What was monthly revenue in the first half of 2025?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT strftime(date_trunc('month', order_date), '%Y-%m'), SUM(amount) FROM orders WHERE status = 'completed' AND order_date >= DATE '2025-01-01' AND order_date < DATE '2025-07-01' GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "metric-top-category-turnover",
+      "dataset": "shop_metrics",
+      "question": "Which category had the highest turnover?",
+      "expect": {
+        "type": "top",
+        "sql": "SELECT category FROM orders WHERE status = 'completed' GROUP BY 1 ORDER BY SUM(amount) DESC LIMIT 1"
+      }
+    },
+    {
+      "id": "metric-orders-west",
+      "dataset": "shop_metrics",
+      "question": "What is the number of orders in the West region?",
+      "expect": {
+        "type": "value",
+        "sql": "SELECT COUNT(*) FROM orders WHERE region = 'West'"
       }
     }
   ]

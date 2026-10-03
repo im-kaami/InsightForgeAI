@@ -15,6 +15,7 @@ from insightforge.core.evidence import (
 from insightforge.core.executor import ExecutionState, Executor
 from insightforge.core.llm import LLMClient, describe_error
 from insightforge.core.memory import ConversationMemory
+from insightforge.core.metrics import Metric
 from insightforge.core.planner import Plan, Planner, SummaryStep
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
 from insightforge.core.relationships import Relationship
@@ -81,6 +82,8 @@ class InsightForgeAgent:
         allow_clarification: bool = False,
         notes: DatasetNotes | None = None,
         relationships: list[Relationship] | None = None,
+        metrics: list[Metric] | None = None,
+        metrics_revision: int | None = None,
     ) -> RunResult:
         def emit(event: dict[str, Any]) -> None:
             if on_event:
@@ -95,6 +98,8 @@ class InsightForgeAgent:
         self.summarizer.tracer = tracer
         self.planner.notes = notes
         self.planner.relationships = list(relationships or [])
+        self.planner.metrics = [item for item in metrics or [] if item.approved]
+        self.planner.metrics_revision = metrics_revision
         self.summarizer.dataset_notes = notes
         if schema is None:
             schema = catalog.introspect(sample_rows=self.schema_sample_rows)
@@ -148,8 +153,12 @@ class InsightForgeAgent:
         text_artifacts = [artifact for artifact in artifacts if isinstance(artifact, TextArtifact)]
         tables = [artifact for artifact in artifacts if isinstance(artifact, TableArtifact)]
         assumptions = [
-            describe_query(table.name, table.sql, schema, executor.result_limit) for table in tables
-        ]
+            f"{table.name}: approved metric "
+            + (f"(revision {table.metric['revision']}) " if table.metric.get("revision") else "")
+            + str(table.metric.get("description") or table.metric.get("name"))
+            for table in tables
+            if table.metric
+        ] + [describe_query(table.name, table.sql, schema, executor.result_limit) for table in tables]
         for table in tables:
             if table.truncated:
                 full = f"{table.full_row_count:,}" if table.full_row_count else "an unknown number of"

@@ -19,6 +19,8 @@ class TableArtifact(BaseModel):
     truncated: bool = False
     full_row_count: int | None = None
     csv_path: str | None = None
+    # Present when code wrote the SQL from an approved metric (trust: "approved metric").
+    metric: dict[str, Any] | None = None
 
 
 class PlotArtifact(BaseModel):

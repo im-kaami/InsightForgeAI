@@ -10,6 +10,19 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_valid
 
 from insightforge.core.llm import LLMClient, LLMResponse, describe_error, llm_mode
 from insightforge.core.memory import ConversationMemory
+from insightforge.core.metrics import (
+    Metric,
+    MetricError,
+    MetricFilter,
+    MetricQuery,
+    compile_query,
+    find_metric,
+    mentioned_metrics,
+    mentions_time,
+    metrics_block,
+    offline_query,
+    result_info,
+)
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
 from insightforge.core.relationships import Relationship, relationships_block
 from insightforge.core.schema import DatasetNotes, SchemaInfo, TableInfo, is_identifier, notes_block
@@ -23,6 +36,8 @@ class SqlStep(BaseModel):
     action: Literal["sql"] = "sql"
     query: str
     description: str = ""
+    # Set only by code when the SQL was written from an approved metric; never taken from a model.
+    metric: dict[str, Any] | None = None
 
 
 PlotKind = Literal["line", "bar", "scatter", "pie", "histogram", "box", "heatmap", "area"]
@@ -425,6 +440,56 @@ Examples, for a schema with sales(rep_id, region, amount, deals, status) and rep
 The schema is:
 """
 
+METRIC_CHOICE_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "metric": {"type": "boolean"},
+        "name": {"type": "string"},
+        "group_by": {"type": "array", "items": {"type": "string"}, "maxItems": 3},
+        "filters": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string"},
+                    "op": {"enum": ["equals", "not_equals", "in"]},
+                    "value": {"type": "string"},
+                    "values": {"type": "array", "items": {"type": "string"}, "maxItems": 20},
+                },
+                "required": ["column", "op"],
+            },
+        },
+        "grain": {"enum": ["day", "week", "month", "year"]},
+        "date_from": {"type": "string"},
+        "date_to": {"type": "string"},
+        "limit": {"type": "integer"},
+    },
+    "required": ["metric"],
+}
+METRIC_CHOICE_PROMPT = """You decide whether a data question asks for the value of one of the approved
+metrics listed below, possibly grouped, filtered or per period. Tested code writes the SQL; you only
+choose. Respond only with JSON {"metric": false} or {"metric": true, "name": str, "group_by": [str],
+"filters": [{"column": str, "op": "equals"|"not_equals"|"in", "value": str, "values": [str]}],
+"grain": "day"|"week"|"month"|"year", "date_from": "YYYY-MM-DD", "date_to": "YYYY-MM-DD", "limit": int}.
+Rules: answer false when the question asks about something the metric does not measure, or asks for a
+significance test, a forecast, a prediction or why something changed. Use group_by and filter columns
+only from that metric's "Group or filter by" list. date_to is the day after the period (all of 2025:
+date_from 2025-01-01, date_to 2026-01-01). Use limit only for "top N". Omit fields you do not need.
+
+Examples, for an approved metric revenue (sum amount of sales where status equals paid; group or filter
+by: region, product; totals per day, week, month or year use sale_date):
+- "What is total revenue?" -> {"metric": true, "name": "revenue"}
+- "What is revenue by region?" -> {"metric": true, "name": "revenue", "group_by": ["region"]}
+- "Monthly revenue in 2025 for the West" -> {"metric": true, "name": "revenue", "grain": "month",
+  "date_from": "2025-01-01", "date_to": "2026-01-01",
+  "filters": [{"column": "region", "op": "equals", "value": "West"}]}
+- "Which 3 products bring the most revenue?" -> {"metric": true, "name": "revenue",
+  "group_by": ["product"], "limit": 3}
+- "What is the average discount?" -> {"metric": false}
+"""
+
+
 REVIEW_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -538,6 +603,8 @@ def validate_plan(raw: Any, schema: SchemaInfo, problems: list[str] | None = Non
                 continue
             has_summary = True
         if isinstance(step, SqlStep):
+            if step.metric is not None:
+                step = step.model_copy(update={"metric": None})  # a model cannot claim a metric
             sql_names.add(step.name)
         names.add(step.name)
         steps.append(step)
@@ -653,6 +720,8 @@ class Planner:
         self.tracer = Tracer()
         self.notes: DatasetNotes | None = None
         self.relationships: list[Relationship] = []
+        self.metrics: list[Metric] = []
+        self.metrics_revision: int | None = None
         self.current_goal: str | None = None
         self.sandbox_enabled = False
 
@@ -737,7 +806,13 @@ Return a single JSON object with a top-level "steps" array, for example:
             self.last_clarification = self._check_ambiguity(goal, schema_text)
             if self.last_clarification is not None:
                 return Plan(steps=[])
-        if not getattr(self.llm, "offline", False):
+        mentioned = mentioned_metrics(goal, self.metrics)
+        if getattr(self.llm, "offline", False):
+            if len(mentioned) == 1:
+                chosen = self._metric_plan(offline_query(goal, mentioned[0]), schema)
+                if chosen:
+                    return chosen
+        else:
             routes = (
                 *((("python", PYTHON_CUES),) if self.sandbox_enabled else ()),
                 ("predict", PREDICT_CUES),
@@ -749,6 +824,8 @@ Return a single JSON object with a top-level "steps" array, for example:
             for kind, cues in routes:
                 if cues.search(goal) and (chosen := self._choose_method(kind, goal, schema_text, memory)):
                     return chosen
+            if mentioned and (chosen := self._choose_metric(goal, mentioned, schema, schema_text, memory)):
+                return chosen
         messages = [{"role": "system", "content": system}, {"role": "user", "content": goal}]
         try:
             raw, _ = self._chat_json("plan", messages, PLAN_JSON_SCHEMA)
@@ -872,6 +949,80 @@ Return a single JSON object with a top-level "steps" array, for example:
         except Exception as exc:
             logging.getLogger("insightforge").warning("%s choice skipped: %s", kind, describe_error(exc))
         return None
+
+    def _metric_plan(self, query: MetricQuery, schema: SchemaInfo) -> Plan | None:
+        """Compile a metric request into a plan; unusable requests become a plan issue."""
+        metric = find_metric([item for item in self.metrics if item.approved], query.metric)
+        if metric is None:
+            self.last_plan_issues.append(f"The AI asked for an unknown metric {query.metric!r}")
+            return None
+        try:
+            compiled = compile_query(
+                metric,
+                query.model_copy(update={"metric": metric.name}),
+                schema,
+                self.relationships,
+                revision=self.metrics_revision,
+            )
+        except MetricError as error:
+            self.last_plan_issues.append(f"The approved metric {metric.name} could not be used: {error}")
+            return None
+        step = SqlStep(
+            name=_safe_step_name("metric", metric.name),
+            query=compiled.sql,
+            description=compiled.description,
+            metric=result_info(compiled),
+        )
+        return Plan(steps=[step, SummaryStep(name="summary", focus=f"the {metric.display} result")])
+
+    def _choose_metric(
+        self,
+        goal: str,
+        mentioned: list[Metric],
+        schema: SchemaInfo,
+        schema_text: str,
+        memory: ConversationMemory | None,
+    ) -> Plan | None:
+        system = (
+            METRIC_CHOICE_PROMPT
+            + metrics_block(mentioned, show_values=self.policy.values_visible_to_model)
+            + "\n\nThe schema is:\n"
+            + schema_text
+        )
+        if memory and memory.turns:
+            system += f"\n\nConversation so far:\n{self.policy.memory_text(memory)}"
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": goal}]
+        try:
+            raw, _ = self._chat_json("metric_choice", messages, METRIC_CHOICE_JSON_SCHEMA)
+            if not (isinstance(raw, dict) and raw.get("metric") is True):
+                return None
+            filters = []
+            for item in raw.get("filters") or []:
+                if not isinstance(item, dict) or not item.get("column"):
+                    continue
+                op = item.get("op") if item.get("op") in {"equals", "not_equals", "in"} else "equals"
+                if op == "in":
+                    values = [str(v) for v in item.get("values") or []] or [str(item.get("value", ""))]
+                    filters.append(MetricFilter(column=str(item["column"]), op="in", value=values[:20]))
+                elif item.get("value") is not None:
+                    filters.append(MetricFilter(column=str(item["column"]), op=op, value=str(item["value"])))
+            limit = raw.get("limit")
+            if not mentions_time(goal):
+                # A small model sometimes adds a period the question never asked for.
+                raw = {**raw, "grain": None, "date_from": None, "date_to": None}
+            query = MetricQuery(
+                metric=str(raw.get("name") or (mentioned[0].name if len(mentioned) == 1 else "")),
+                group_by=[str(column) for column in raw.get("group_by") or []][:3],
+                filters=filters[:5],
+                grain=raw.get("grain") if raw.get("grain") in {"day", "week", "month", "year"} else None,
+                date_from=raw.get("date_from") or None,
+                date_to=raw.get("date_to") or None,
+                limit=int(limit) if isinstance(limit, int | float) and 1 <= limit <= 1000 else None,
+            )
+        except Exception as exc:
+            logging.getLogger("insightforge").warning("metric choice skipped: %s", describe_error(exc))
+            return None
+        return self._metric_plan(query, schema)
 
     def _check_ambiguity(self, goal: str, schema_text: str) -> Clarification | None:
         messages = [

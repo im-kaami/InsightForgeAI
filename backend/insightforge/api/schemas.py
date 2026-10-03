@@ -3,6 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from insightforge.core.metrics import Metric, MetricQuery, SavedMetrics
 from insightforge.core.profiling import DataProfile
 from insightforge.core.recipes import AppliedRecipe, RecipeSuggestion, SavedRecipe
 from insightforge.core.relationships import SavedRelationships
@@ -112,6 +113,7 @@ class DatasetOut(APIModel):
     recipe: SavedRecipe = Field(default_factory=SavedRecipe)
     rules: SavedRules = Field(default_factory=SavedRules)
     relationships: SavedRelationships = Field(default_factory=SavedRelationships)
+    metrics: SavedMetrics = Field(default_factory=SavedMetrics)
     profile: DataProfile | None = None
     review_version_id: str | None = None
     created_at: datetime
@@ -331,3 +333,23 @@ class ExplanationOut(BaseModel):
     background_rows: int
     interpretation: str
     cautions: list[str]
+
+
+class MetricSuggestions(BaseModel):
+    suggestions: list[Metric] = Field(default_factory=list)
+    method: str = "drafted from column names and types only; no AI model is used and nothing is approved"
+
+
+class MetricPreviewIn(BaseModel):
+    metric: Metric
+    query: MetricQuery | None = None
+
+
+class MetricPreviewOut(BaseModel):
+    metric: str
+    label: str
+    sql: str
+    description: str
+    columns: list[str]
+    rows: list[dict[str, Any]]
+    total_rows: int
