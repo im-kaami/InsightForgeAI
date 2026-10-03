@@ -159,7 +159,11 @@ export function RunCard({
         <CardHeader className="flex-row items-center justify-between">
           <div>
             <CardTitle className="text-base">
-              {run.definition_id ? "Approved sales report" : "Exploratory analysis"}
+              {run.definition_id
+                ? "Approved sales report"
+                : provenance.kind === "metric_report_v1"
+                  ? "Checked metric report"
+                  : "Exploratory analysis"}
             </CardTitle>
             <div className="mt-1 flex gap-2">
               {run.used_fallback_plan && <Badge variant="secondary">profiling plan</Badge>}
@@ -390,7 +394,9 @@ export function RunCard({
               AI model:{" "}
               {String(
                 provenance.model ??
-                  (run.definition_id ? "None (fixed calculations)" : "Not recorded"),
+                  (run.definition_id || provenance.kind === "metric_report_v1"
+                    ? "None (fixed calculations)"
+                    : "Not recorded"),
               )}
             </span>
             <span>

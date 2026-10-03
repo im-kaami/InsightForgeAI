@@ -750,6 +750,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/datasets/{dataset_id}/reports/metric": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Metric Report
+         * @description Start a checked report for one approved metric. Code calculates everything; no AI is used.
+         */
+        post: operations["create_metric_report_api_datasets__dataset_id__reports_metric_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/datasets/{dataset_id}/reports/{definition_id}/runs": {
         parameters: {
             query?: never;
@@ -1707,6 +1727,28 @@ export interface components {
             date_to?: string | null;
             /** Limit */
             limit?: number | null;
+        };
+        /**
+         * MetricReportCreate
+         * @description A checked report for one approved metric; the current version is used when none is given.
+         */
+        MetricReportCreate: {
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Metric */
+            metric: string;
+            /** Group By */
+            group_by?: string | null;
+            /** Version Id */
+            version_id?: string | null;
         };
         /** MetricSet */
         MetricSet: {
@@ -4307,6 +4349,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DefinitionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_metric_report_api_datasets__dataset_id__reports_metric_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetricReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
                 };
             };
             /** @description Validation Error */

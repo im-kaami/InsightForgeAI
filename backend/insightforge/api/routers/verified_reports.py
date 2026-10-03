@@ -6,10 +6,23 @@ from sqlalchemy import func, select
 from insightforge.api.deps import BusDep, CurrentUser, Db, LLMDep
 from insightforge.api.routers.datasets import owned, owned_version
 from insightforge.api.routers.sessions import run_output
-from insightforge.api.schemas import DefinitionCreate, DefinitionOut, ReportRunCreate, RunOut
+from insightforge.api.schemas import (
+    DefinitionCreate,
+    DefinitionOut,
+    MetricReportCreate,
+    ReportRunCreate,
+    RunOut,
+)
 from insightforge.config import get_settings
+from insightforge.core.metrics import MetricError, MetricQuery, SavedMetrics, compile_query, find_metric
+from insightforge.core.relationships import SavedRelationships
 from insightforge.core.schema import SchemaInfo
-from insightforge.core.verified_report import ReportValidationError, SalesDefinition, validate_definition
+from insightforge.core.verified_report import (
+    ReportPeriod,
+    ReportValidationError,
+    SalesDefinition,
+    validate_definition,
+)
 from insightforge.db.models import ChatSession, ReportDefinition, Run
 from insightforge.db.session import SessionLocal
 from insightforge.services.datasets import ensure_current_version
@@ -110,6 +123,81 @@ def create_definition(
     db.commit()
     db.refresh(value)
     return definition_output(value)
+
+
+@router.post("/metric", response_model=RunOut, status_code=status.HTTP_202_ACCEPTED)
+async def create_metric_report(
+    dataset_id: str,
+    body: MetricReportCreate,
+    request: Request,
+    db: Db,
+    user: CurrentUser,
+    bus: BusDep,
+    llm: LLMDep,
+):
+    """Start a checked report for one approved metric. Code calculates everything; no AI is used."""
+    dataset = owned(db, user, dataset_id)
+    version = (
+        owned_version(db, user, dataset, body.version_id)
+        if body.version_id
+        else ensure_current_version(db, dataset)
+    )
+    if version is None or version.state != "ready":
+        raise HTTPException(409, "Confirm the dataset version before running a report")
+    saved = SavedMetrics.model_validate(dataset.metrics_json or {})
+    metric = find_metric([item for item in saved.metrics if item.approved], body.metric)
+    if metric is None:
+        raise HTTPException(404, "No approved metric with that name")
+    relationships = SavedRelationships.model_validate(dataset.relationships_json or {}).relationships
+    period = ReportPeriod(start_date=body.start_date, end_date=body.end_date)
+    try:
+        if not metric.date_column:
+            raise MetricError(f"{metric.name} has no date column, so it cannot be reported per period")
+        query = MetricQuery(metric=metric.name, group_by=[body.group_by] if body.group_by else [])
+        compile_query(metric, query, SchemaInfo.model_validate(version.schema_json), relationships)
+    except MetricError as error:
+        raise HTTPException(422, str(error)) from error
+    active = db.scalar(
+        select(func.count())
+        .select_from(Run)
+        .where(Run.owner_id == user.id, Run.status.in_(("pending", "running")))
+    )
+    if active >= get_settings().max_concurrent_runs_per_user:
+        raise HTTPException(429, "Too many analyses running; wait for one to finish")
+    title = f"Checked report: {metric.display}"
+    session = db.scalar(
+        select(ChatSession).where(
+            ChatSession.owner_id == user.id,
+            ChatSession.dataset_id == dataset.id,
+            ChatSession.title == title,
+        )
+    )
+    if session is None:
+        session = ChatSession(owner_id=user.id, dataset_id=dataset.id, title=title)
+        db.add(session)
+        db.flush()
+    grouping = f" by {body.group_by}" if body.group_by else ""
+    run = Run(
+        session_id=session.id,
+        owner_id=user.id,
+        goal=f"{metric.display}{grouping}: {period.start_date} to {period.end_date}",
+        status="pending",
+        dataset_version_id=version.id,
+        request_json={
+            "kind": "metric_report_v1",
+            "metric": metric.model_dump(mode="json"),
+            "metrics_revision": saved.revision,
+            "relationships": [item.model_dump(mode="json") for item in relationships],
+            "group_by": body.group_by,
+            "period": period.model_dump(mode="json"),
+            "privacy_mode": "local",
+        },
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    start_run(SessionLocal, bus, run.id, request.app.state.tasks, llm)
+    return run_output(db, run)
 
 
 @router.post(

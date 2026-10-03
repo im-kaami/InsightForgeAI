@@ -302,6 +302,14 @@ Saved relationships are added to the AI's planning, review, and SQL-repair promp
 
 Limits: questions that do not name a metric are planned as before; questions that ask for a test, a forecast, a prediction or "why" go to those methods first. In schema-only mode the AI sees metric names, descriptions and allowed columns, but not the values in fixed conditions. A period or date range is used only when the question mentions time (a year, a month, "monthly", "last", and so on).
 
+**Checked report for a metric.** Every saved, approved metric with a date column has a **Checked report** button on the Metrics card. Choose the first and last day of a period (up to 366 days) and, optionally, one of the metric's groupings to split by. The report opens in its own session and compares the period with the preceding period of the same length: a table with the total and each group (current, previous, change and change in percent), a chart, and a summary that cites its evidence. No AI model is used: tested code writes the SQL, calculates every number and writes the summary. Before calculating, it checks the data:
+
+- dates that cannot be read stop the report, as does a period with no rows, and so do keys in a joined table that are not unique (they would count rows twice);
+- rows without a date, rows with no value to calculate, and rows with no matching row in a joined table are listed as review notes and mark the report **Needs review**;
+- blocking validation rules stop the report, as they do for the sales report.
+
+When the previous period has no rows, or its value is zero or negative, the change is shown as unavailable, not as zero. The report freezes the dataset version, the metric definition and its revision.
+
 ## Approved questions and "Approved data only"
 
 **Save a question with its SQL.** The dataset page's **Approved questions** card stores questions together with the SQL that answers them. Add one by hand (one read-only query; it is run once on the current data before it can be saved), or click **Save as approved question** under any result table in a session to save that answer's SQL with the question you asked.

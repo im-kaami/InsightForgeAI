@@ -16,11 +16,13 @@ from insightforge.core.checks import SERIOUS_FINDINGS
 from insightforge.core.executor import truncation_note
 from insightforge.core.llm import LLMClient, build_llm, build_local_llm, llm_mode, resolved_model
 from insightforge.core.memory import ConversationMemory
-from insightforge.core.metrics import SavedMetrics
+from insightforge.core.metric_report import ARTIFACT as METRIC_ARTIFACT
+from insightforge.core.metric_report import calculate_metric_report
+from insightforge.core.metrics import Metric, MetricError, SavedMetrics
 from insightforge.core.planner import Plan, PlotStep, SqlStep, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
 from insightforge.core.queries import SavedQueries
-from insightforge.core.relationships import SavedRelationships
+from insightforge.core.relationships import Relationship, SavedRelationships
 from insightforge.core.sandbox import build_sandbox
 from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.validation import SavedRules, check_rules
@@ -37,6 +39,8 @@ from insightforge.services.crypto import decrypt
 from insightforge.services.datasets import ensure_current_version, open_catalog
 from insightforge.services.events import RunEventBus
 from insightforge.services.storage import Storage
+
+REPORT_KINDS = ("sales_margin_v1", "metric_report_v1")
 
 
 def _utc_iso(value: datetime) -> str:
@@ -164,6 +168,107 @@ def _verified_result(
     return result, checked.verification, checked.warnings
 
 
+def _metric_report_result(
+    run: Run,
+    catalog: Any,
+    version: DatasetVersion,
+    run_dir: Any,
+    timeout_seconds: int,
+) -> tuple[RunResult, str, list[str]]:
+    started = time.perf_counter()
+    request = run.request_json
+    metric = Metric.model_validate(request["metric"])
+    relationships = [Relationship.model_validate(item) for item in request.get("relationships") or []]
+    try:
+        checked = calculate_metric_report(
+            catalog,
+            metric,
+            ReportPeriod.model_validate(request["period"]),
+            SchemaInfo.model_validate(version.schema_json),
+            relationships,
+            group_by=request.get("group_by"),
+            revision=request.get("metrics_revision"),
+            timeout_seconds=timeout_seconds,
+        )
+    except MetricError as error:
+        raise ReportValidationError(
+            [CalculationCheck(code="metric_definition", passed=False, message=str(error))]
+        ) from error
+    csv_path = run_dir / f"{METRIC_ARTIFACT}.csv"
+    pd.DataFrame(checked.rows, columns=checked.columns).to_csv(csv_path, index=False)
+    info = {
+        "name": metric.name,
+        "label": metric.display,
+        "unit": metric.unit,
+        "description": checked.definition,
+        "revision": request.get("metrics_revision"),
+    }
+    table = TableArtifact(
+        name=METRIC_ARTIFACT,
+        sql=checked.sql,
+        columns=checked.columns,
+        rows=checked.rows,
+        total_rows=len(checked.rows),
+        csv_path=str(csv_path),
+        metric=info,
+    )
+    group = checked.columns[0]
+    chart_rows = checked.rows[1:] if len(checked.rows) > 1 else checked.rows
+    plot_step = PlotStep(
+        name="metric_report_chart",
+        kind="bar",
+        data_source=METRIC_ARTIFACT,
+        x=group,
+        y="current",
+        title=f"{metric.display}: current period" + (f" by {group}" if len(checked.rows) > 1 else ""),
+    )
+    frame = pd.DataFrame(
+        [
+            {group: str(row[group]), "current": row["current"]}
+            for row in chart_rows
+            if row["current"] is not None
+        ]
+    )
+    artifacts: list[Any] = [table]
+    if not frame.empty:
+        figure = make_figure(plot_step, frame)
+        png = figure_to_png(figure, run_dir / "metric_report_chart.png")
+        artifacts.append(
+            PlotArtifact(
+                name=plot_step.name,
+                kind=plot_step.kind,
+                title=plot_step.title,
+                figure=figure,
+                png_path=str(png) if png else None,
+            )
+        )
+    artifacts.append(TextArtifact(name="summary", text=checked.summary))
+    run.provenance_json = {
+        **run.provenance_json,
+        "engine_version": checked.engine_version,
+        "checks": [check.model_dump(mode="json") for check in checked.checks],
+        "evidence": [item.model_dump(mode="json") for item in checked.evidence],
+        "comparison": checked.comparison,
+        "metric_definitions": {metric.name: checked.definition},
+        "assumptions": [f"{METRIC_ARTIFACT}: approved metric {checked.definition}"],
+    }
+    result = RunResult(
+        goal=run.goal,
+        plan=Plan(
+            steps=[
+                SqlStep(name=METRIC_ARTIFACT, query=checked.sql, metric=info),
+                plot_step,
+                SummaryStep(name="summary"),
+            ]
+        ),
+        artifacts=artifacts,
+        summary=checked.summary,
+        timings={"total": time.perf_counter() - started},
+        token_usage={},
+    )
+    return result, checked.verification, checked.warnings
+
+
 def execute_run(
     run_id: str,
     db_factory: Callable[[], Session] | None = None,
@@ -217,15 +322,27 @@ def execute_run(
         )
         settings = get_settings()
         run_dir = Storage(settings.storage_dir).run_dir(run.owner_id, run.id)
-        if run.request_json.get("kind") == "sales_margin_v1":
+        kind = run.request_json.get("kind")
+        if kind in REPORT_KINDS:
             if version is None or version.state != "ready":
                 raise ValueError("Verified reports require a ready immutable dataset version")
+            specific = (
+                {
+                    "definition_id": run.definition_id,
+                    "definition_version": run.request_json.get("definition_version"),
+                    "definition": run.request_json.get("definition"),
+                }
+                if kind == "sales_margin_v1"
+                else {
+                    "metric": run.request_json.get("metric"),
+                    "metrics_revision": run.request_json.get("metrics_revision"),
+                    "group_by": run.request_json.get("group_by"),
+                }
+            )
             run.provenance_json = {
-                "kind": "sales_margin_v1",
+                "kind": kind,
                 "source_version_id": version.id,
-                "definition_id": run.definition_id,
-                "definition_version": run.request_json.get("definition_version"),
-                "definition": run.request_json.get("definition"),
+                **specific,
                 "period": run.request_json.get("period"),
                 "imported_at": _utc_iso(version.created_at),
                 "source_freshness": "unknown",
@@ -262,7 +379,8 @@ def execute_run(
                         if item.severity == "blocking" and item.status != "passed"
                     ]
                 )
-            result, verification_status, warnings = _verified_result(
+            builder = _verified_result if kind == "sales_margin_v1" else _metric_report_result
+            result, verification_status, warnings = builder(
                 run,
                 catalog,
                 version,
@@ -451,9 +569,7 @@ def execute_run(
         if run:
             run.status = "failed"
             run.verification_status = (
-                "blocked"
-                if (run.request_json or {}).get("kind") == "sales_margin_v1"
-                else "needs_review"
+                "blocked" if (run.request_json or {}).get("kind") in REPORT_KINDS else "needs_review"
             )
             run.error = str(error)
             run.warnings_json = [str(error)]

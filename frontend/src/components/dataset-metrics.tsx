@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { MetricReportForm } from "@/components/metric-report-form";
 import {
   datasets,
   type Dataset,
@@ -329,6 +330,9 @@ export function DatasetMetrics({ dataset }: { dataset: Dataset }) {
                   {item.date_column ? `; periods by ${item.date_column}` : ""}
                   {item.synonyms?.length ? `; also called ${item.synonyms.join(", ")}` : ""}
                 </p>
+                {item.approved && item.date_column && !dirty ? (
+                  <MetricReportForm datasetId={dataset.id} metric={item} />
+                ) : null}
                 {preview?.name === item.name && (
                   <div data-testid="metric-preview" className="space-y-1">
                     <p className="text-xs">{preview.result.description}</p>

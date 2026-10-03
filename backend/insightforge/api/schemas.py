@@ -101,6 +101,14 @@ class ReportRunCreate(ReportPeriod):
     version_id: str
 
 
+class MetricReportCreate(ReportPeriod):
+    """A checked report for one approved metric; the current version is used when none is given."""
+
+    metric: str = Field(min_length=1, max_length=60)
+    group_by: str | None = Field(default=None, max_length=200)
+    version_id: str | None = None
+
+
 class DatasetOut(APIModel):
     id: str
     name: str
