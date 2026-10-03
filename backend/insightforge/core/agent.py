@@ -24,6 +24,7 @@ from insightforge.core.sandbox import DockerSandbox
 from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.summarizer import Summarizer
 from insightforge.core.trace import Tracer
+from insightforge.core.value_index import build_index, match_values
 
 
 def without_samples(schema: SchemaInfo) -> SchemaInfo:
@@ -94,6 +95,7 @@ class InsightForgeAgent:
         queries: list[ApprovedQuery] | None = None,
         queries_revision: int | None = None,
         approved_only: bool = False,
+        value_index: bool = True,
     ) -> RunResult:
         def emit(event: dict[str, Any]) -> None:
             if on_event:
@@ -120,6 +122,20 @@ class InsightForgeAgent:
             schema = catalog.introspect(sample_rows=self.schema_sample_rows)
         elif self.schema_sample_rows == 0:
             schema = without_samples(schema)
+        self.planner.value_matches = []
+        if value_index:
+            index_started = time.perf_counter()
+            index = build_index(catalog, schema, timeout_seconds=self.query_timeout or 5)
+            matches = match_values(goal, index)
+            tracer.record(
+                "value_index",
+                "code",
+                index_started,
+                ok=True,
+                matched=[item.describe() for item in matches],
+                shared_with_model=self.policy.values_visible_to_model,
+            )
+            self.planner.value_matches = matches
         emit({"type": "planning"})
         plan = self.planner.plan(goal, schema, memory, allow_clarification)
         clarification = self.planner.last_clarification
@@ -189,6 +205,11 @@ class InsightForgeAgent:
         ] + [
             _approved_query_note(table.name, table.approved_query) for table in tables if table.approved_query
         ] + [describe_query(table.name, table.sql, schema, executor.result_limit) for table in tables]
+        if tables and self.planner.value_matches:
+            assumptions.append(
+                "Words matched to stored values by code: "
+                + "; ".join(item.describe() for item in self.planner.value_matches)
+            )
         for table in tables:
             if table.truncated:
                 full = f"{table.full_row_count:,}" if table.full_row_count else "an unknown number of"

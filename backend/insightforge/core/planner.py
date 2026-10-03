@@ -37,6 +37,7 @@ from insightforge.core.schema import DatasetNotes, SchemaInfo, TableInfo, is_ide
 from insightforge.core.stats import TestMethod
 from insightforge.core.summarizer import pipe_table
 from insightforge.core.trace import Tracer, model_label, prompt_chars
+from insightforge.core.value_index import ValueMatch, values_block
 
 
 class SqlStep(BaseModel):
@@ -751,6 +752,7 @@ class Planner:
         self.queries_revision: int | None = None
         self.approved_only = False
         self.last_refusal: str | None = None
+        self.value_matches: list[ValueMatch] = []
         self.current_goal: str | None = None
         self.sandbox_enabled = False
 
@@ -791,6 +793,7 @@ class Planner:
             self.policy.schema_text(schema)
             + notes_block(self.notes, goal)
             + relationships_block(self.relationships, schema)
+            + (values_block(self.value_matches) if self.policy.values_visible_to_model else "")
         )
         sql_example = (
             '{"name":"avg_by_group","action":"sql","query":"SELECT group_col, '
@@ -842,7 +845,7 @@ Return a single JSON object with a top-level "steps" array, for example:
         mentioned = mentioned_metrics(goal, self.metrics)
         if getattr(self.llm, "offline", False):
             if len(mentioned) == 1:
-                chosen = self._metric_plan(offline_query(goal, mentioned[0]), schema)
+                chosen = self._metric_plan(offline_query(goal, mentioned[0], self.value_matches), schema)
                 if chosen:
                     return chosen
         else:

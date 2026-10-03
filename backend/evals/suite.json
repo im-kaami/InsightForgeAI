@@ -1,6 +1,6 @@
 {
   "name": "insightforge-core",
-  "version": 11,
+  "version": 12,
   "datasets": {
     "hr": {
       "employees": "../tests/fixtures/hr.csv"
@@ -52,7 +52,9 @@
       }
     ]
   },
-  "approved_only": ["shop_strict"],
+  "approved_only": [
+    "shop_strict"
+  ],
   "relationships": {
     "shop_metrics": [
       {
@@ -71,24 +73,46 @@
         "label": "Revenue",
         "description": "Value of completed orders",
         "unit": "GBP",
-        "synonyms": ["sales", "turnover"],
+        "synonyms": [
+          "sales",
+          "turnover"
+        ],
         "table": "orders",
         "aggregation": "sum",
         "column": "amount",
-        "filters": [{"column": "status", "op": "equals", "value": "completed"}],
+        "filters": [
+          {
+            "column": "status",
+            "op": "equals",
+            "value": "completed"
+          }
+        ],
         "date_column": "order_date",
-        "dimensions": ["region", "category", "customers.segment", "customers.country"],
+        "dimensions": [
+          "region",
+          "category",
+          "customers.segment",
+          "customers.country"
+        ],
         "approved": true
       },
       {
         "name": "orders_placed",
         "label": "Orders placed",
         "description": "Every order, whatever its status",
-        "synonyms": ["number of orders", "order count"],
+        "synonyms": [
+          "number of orders",
+          "order count"
+        ],
         "table": "orders",
         "aggregation": "count",
         "date_column": "order_date",
-        "dimensions": ["region", "category", "status", "customers.segment"],
+        "dimensions": [
+          "region",
+          "category",
+          "status",
+          "customers.segment"
+        ],
         "approved": true
       }
     ]
@@ -736,6 +760,33 @@
       "question": "What is the average order amount by category?",
       "expect": {
         "type": "refuse"
+      }
+    },
+    {
+      "id": "values-west-orders",
+      "dataset": "shop",
+      "question": "How many orders came from the west?",
+      "expect": {
+        "type": "value",
+        "sql": "SELECT COUNT(*) FROM orders WHERE region = 'West'"
+      }
+    },
+    {
+      "id": "values-refunded-electronics",
+      "dataset": "shop",
+      "question": "What is the total amount of refunded electronics orders?",
+      "expect": {
+        "type": "value",
+        "sql": "SELECT SUM(amount) FROM orders WHERE status = 'refunded' AND category = 'Electronics'"
+      }
+    },
+    {
+      "id": "values-business-customers",
+      "dataset": "shop",
+      "question": "How many business customers do we have?",
+      "expect": {
+        "type": "value",
+        "sql": "SELECT COUNT(*) FROM customers WHERE segment = 'Business'"
       }
     }
   ]

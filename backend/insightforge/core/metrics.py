@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from insightforge.core.catalog import _qualified, _quote
 from insightforge.core.relationships import Relationship
 from insightforge.core.schema import SchemaInfo, is_identifier
+from insightforge.core.value_index import ValueMatch
 
 MAX_METRICS = 30
 MAX_DIMENSIONS = 20
@@ -486,8 +487,12 @@ def mentions_time(goal: str) -> bool:
     return bool(_TIME_WORDS.search(goal.casefold()))
 
 
-def offline_query(goal: str, metric: Metric) -> MetricQuery:
-    """A request built from the question's words alone, for when no AI model may be used."""
+def offline_query(goal: str, metric: Metric, values: list[ValueMatch] | None = None) -> MetricQuery:
+    """A request built from the question's words alone, for when no AI model may be used.
+
+    ``values`` (from the value index) become filters on the metric's allowed groupings, for example
+    "revenue in the West" -> region equals West. Columns the metric already fixes are left alone.
+    """
     text = goal.casefold()
     grain: Grain | None = None
     if metric.date_column:
@@ -498,7 +503,22 @@ def offline_query(goal: str, metric: Metric) -> MetricQuery:
         words = re.escape(column.casefold().replace("_", " "))
         if re.search(rf"\b(by|per|for each|in each|across|each)\s+(customer\s+)?{words}s?\b", text):
             group_by.append(dimension)
-    return MetricQuery(metric=metric.name, group_by=group_by[:MAX_GROUP_BY], grain=grain)
+    fixed = {item.column.casefold() for item in metric.filters}
+    chosen: dict[str, list[str]] = {}
+    for match in values or []:
+        for dimension in metric.dimensions:
+            table, column = _split(dimension, metric.table)
+            same = table.casefold() == match.table.casefold() and column.casefold() == match.column.casefold()
+            base_fixed = table.casefold() == metric.table.casefold() and column.casefold() in fixed
+            if same and not base_fixed and dimension not in group_by:
+                chosen.setdefault(dimension, []).append(match.value)
+    filters = [
+        MetricFilter(column=dimension, op="equals", value=found[0])
+        if len(found) == 1
+        else MetricFilter(column=dimension, op="in", value=found[:20])
+        for dimension, found in list(chosen.items())[:MAX_FILTERS]
+    ]
+    return MetricQuery(metric=metric.name, group_by=group_by[:MAX_GROUP_BY], grain=grain, filters=filters)
 
 
 def metrics_block(metrics: list[Metric] | None, show_values: bool) -> str:

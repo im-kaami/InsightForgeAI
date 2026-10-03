@@ -32,7 +32,7 @@ from insightforge.core.planner import (
 from insightforge.core.plotter import figure_to_png, make_figure, series_figure
 from insightforge.core.sandbox import DockerSandbox
 from insightforge.core.schema import SchemaInfo
-from insightforge.core.sql_guard import GuardedQuery, guard_query
+from insightforge.core.sql_guard import GuardedQuery, add_missing_group_by, guard_query
 from insightforge.core.stats import StatArtifact, StatError, adjust_for_multiple_tests, run_test
 from insightforge.core.summarizer import Summarizer
 from insightforge.core.trace import Tracer
@@ -419,8 +419,15 @@ class Executor:
                             # Approved SQL is written by code or approved by a person; an AI rewrite
                             # would lose that trust.
                             raise ValueError("approved SQL is not rewritten by the AI")
-                        repaired = self.planner.repair_sql(step, str(first_error), state.schema)
-                        guarded, frame = self._run_sql(repaired.query)
+                        grouped = (
+                            add_missing_group_by(step.query) if "GROUP BY" in str(first_error) else None
+                        )
+                        if grouped is not None:
+                            # A forgotten GROUP BY is fixed by code before asking the AI.
+                            guarded, frame = self._run_sql(grouped)
+                        else:
+                            repaired = self.planner.repair_sql(step, str(first_error), state.schema)
+                            guarded, frame = self._run_sql(repaired.query)
                         repaired_sql = True
                     except Exception as second_error:
                         message = f"{first_error}; repair failed: {second_error}"

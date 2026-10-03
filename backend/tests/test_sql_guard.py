@@ -1,6 +1,27 @@
 import pytest
 
-from insightforge.core.sql_guard import SQLGuardError, guard_query, guard_sql
+from insightforge.core.sql_guard import SQLGuardError, add_missing_group_by, guard_query, guard_sql
+
+
+def test_a_forgotten_group_by_is_added_by_code():
+    fixed = add_missing_group_by(
+        "SELECT region, COUNT(*) AS n FROM orders WHERE status = 'cancelled' ORDER BY n DESC"
+    )
+    assert fixed == (
+        "SELECT region, COUNT(*) AS n FROM orders WHERE status = 'cancelled' GROUP BY region ORDER BY n DESC"
+    )
+    assert add_missing_group_by("SELECT UPPER(region) AS r, SUM(amount) FROM orders").endswith(
+        "GROUP BY UPPER(region)"
+    )
+    for unchanged in (
+        "SELECT COUNT(*) FROM orders",
+        "SELECT region FROM orders",
+        "SELECT region, COUNT(*) FROM orders GROUP BY region",
+        "SELECT *, COUNT(*) FROM orders",
+        "DELETE FROM orders",
+        "SELECT a, COUNT(*) FROM t UNION SELECT b, COUNT(*) FROM u",
+    ):
+        assert add_missing_group_by(unchanged) is None
 
 
 @pytest.mark.parametrize(

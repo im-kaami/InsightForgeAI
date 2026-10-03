@@ -310,6 +310,17 @@ Limits: questions that do not name a metric are planned as before; questions tha
 
 When the previous period has no rows, or its value is zero or negative, the change is shown as unavailable, not as zero. The report freezes the dataset version, the metric definition and its revision.
 
+## Value index
+
+People rarely type values exactly as they are stored: "the west" for `West`, "electronic goods" for `Electronics`, "business customers" for `Business`. Before planning, code reads the distinct values of short, category-like text columns (at most 500 values each; identifiers, sensitive columns and long free text are skipped) and matches the question's words to them, allowing different case, plurals and small typos ("close spelling"). No AI is involved.
+
+- With **Full** sharing, or **Local** with a local model, the matches go into the planning prompt, so the AI filters on the exact column and spelling.
+- In **Schema only** mode no values are sent; the matches are used by code only.
+- Without an AI model, a question that names an approved metric and a value ("What is revenue in the west?") is filtered on that value, if the metric may be grouped by its column.
+- Every answer lists the matches in its Assumptions ("west" -> orders.region = 'West'), so you can see how a word was read.
+
+The index is built for each question from the confirmed data version, so it is never stale. Live database connections are not scanned.
+
 ## Approved questions and "Approved data only"
 
 **Save a question with its SQL.** The dataset page's **Approved questions** card stores questions together with the SQL that answers them. Add one by hand (one read-only query; it is run once on the current data before it can be saved), or click **Save as approved question** under any result table in a session to save that answer's SQL with the question you asked.

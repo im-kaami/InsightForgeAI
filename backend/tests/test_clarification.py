@@ -70,4 +70,4 @@ def test_agent_stops_before_running_anything_when_it_asks(catalog):
     assert result.clarification.question == "Best by revenue or by orders?"
     assert result.summary == "Best by revenue or by orders?"
     assert result.artifacts == []
-    assert [event.step for event in result.trace] == ["ambiguity"]
+    assert [event.step for event in result.trace] == ["value_index", "ambiguity"]

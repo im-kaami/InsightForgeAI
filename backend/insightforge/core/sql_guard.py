@@ -93,5 +93,31 @@ def guard_query(sql: str, default_limit: int = 10000) -> GuardedQuery:
     )
 
 
+def add_missing_group_by(sql: str) -> str | None:
+    """Group an aggregate query by its plain columns when the GROUP BY was forgotten.
+
+    ``SELECT region, COUNT(*) FROM orders`` becomes ``... GROUP BY region``. Returns None when the
+    query is not a single SELECT that mixes aggregates with plain columns and has no GROUP BY.
+    """
+    try:
+        expression = _validated(sql)
+    except SQLGuardError:
+        return None
+    if not isinstance(expression, exp.Select) or expression.args.get("group"):
+        return None
+    plain, aggregated = [], False
+    for projection in expression.expressions:
+        inner = projection.this if isinstance(projection, exp.Alias) else projection
+        if inner.find(exp.AggFunc) is not None:
+            aggregated = True
+        elif isinstance(inner, exp.Star) or inner.find(exp.Window) is not None:
+            return None
+        elif not isinstance(inner, exp.Literal):
+            plain.append(inner.copy())
+    if not aggregated or not plain:
+        return None
+    return expression.group_by(*plain, copy=True).sql(dialect="duckdb")
+
+
 def guard_sql(sql: str, default_limit: int = 10000) -> str:
     return guard_query(sql, default_limit).sql

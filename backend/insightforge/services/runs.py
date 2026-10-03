@@ -472,6 +472,7 @@ def execute_run(
                 queries=saved_queries.queries,
                 queries_revision=saved_queries.revision,
                 approved_only=saved_queries.approved_only,
+                value_index=connection is None,  # live databases are not scanned for values
             )
             check = result.number_check
             needs_review = (

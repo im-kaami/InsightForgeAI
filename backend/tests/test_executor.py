@@ -117,6 +117,7 @@ def test_agent_traces_model_calls_queries_charts_and_checks(catalog):
 
     result = InsightForgeAgent(FakeLLMClient(reply), privacy_mode="full").run("Headcount", catalog)
     assert [(event.kind, event.step, event.ok) for event in result.trace] == [
+        ("code", "value_index", True),
         ("model", "plan", True),
         ("model", "sql_repair:bad", True),
         ("sql", "bad", True),
@@ -125,8 +126,8 @@ def test_agent_traces_model_calls_queries_charts_and_checks(catalog):
         ("model", "summary", True),
         ("check", "summary_numbers", False),
     ]
-    assert result.trace[0].details["shared"] == "nothing (offline)"
-    assert result.trace[2].details == {
+    assert result.trace[1].details["shared"] == "nothing (offline)"
+    assert result.trace[3].details == {
         "rows": 1,
         "truncated": False,
         "full_row_count": None,
@@ -215,3 +216,27 @@ def test_guard_failure_repair_failure_does_not_stop_run(catalog, schema):
     artifacts, _, _, _ = Executor(catalog, Planner(llm), Summarizer(llm)).execute("Run", plan, schema)
     assert any(isinstance(artifact, ErrorArtifact) and artifact.name == "unsafe" for artifact in artifacts)
     assert any(isinstance(artifact, TableArtifact) and artifact.name == "safe" for artifact in artifacts)
+
+
+def test_a_forgotten_group_by_is_fixed_by_code_without_the_ai(catalog):
+    plan = {
+        "steps": [
+            {"name": "by_dept", "action": "sql", "query": "SELECT department, COUNT(*) AS n FROM employees"},
+            {"name": "summary", "action": "summary"},
+        ]
+    }
+
+    def reply(messages):
+        content = messages[0]["content"]
+        if "data-analysis planner" in content:
+            return json.dumps(plan)
+        assert "Correct the DuckDB SQL" not in content, "the AI repair must not be asked"
+        return "Done."
+
+    result = InsightForgeAgent(FakeLLMClient(reply), privacy_mode="full").run(
+        "Headcount by department", catalog
+    )
+    table = next(item for item in result.artifacts if isinstance(item, TableArtifact))
+    assert "GROUP BY department" in table.sql and len(table.rows) == 5
+    step = next(event for event in result.trace if event.step == "by_dept")
+    assert step.details["repaired"] is True

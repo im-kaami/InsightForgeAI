@@ -112,13 +112,14 @@ async def test_summary_numbers_are_linked_to_evidence(client, auth_headers, hr_d
     ]
     assert provenance["assumptions"][0].startswith("headcount: reads hr; uses every row")
     assert [(event["kind"], event["step"]) for event in provenance["trace"]] == [
+        ("code", "value_index"),
         ("model", "plan"),
         ("sql", "headcount"),
         ("chart", "headcount_chart"),
         ("model", "summary"),
         ("check", "summary_numbers"),
     ]
-    assert provenance["trace"][1]["details"]["rows"] == 5
+    assert provenance["trace"][2]["details"]["rows"] == 5
 
 
 async def test_unmatched_summary_numbers_need_review(client, auth_headers, hr_dataset):
