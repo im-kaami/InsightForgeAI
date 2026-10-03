@@ -415,9 +415,10 @@ class Executor:
                     guarded, frame = self._run_sql(step.query)
                 except Exception as first_error:
                     try:
-                        if step.metric is not None:
-                            # Approved-metric SQL is written by code; an AI rewrite would lose that trust.
-                            raise ValueError("approved metric SQL is not rewritten by the AI")
+                        if step.metric is not None or step.approved_query is not None:
+                            # Approved SQL is written by code or approved by a person; an AI rewrite
+                            # would lose that trust.
+                            raise ValueError("approved SQL is not rewritten by the AI")
                         repaired = self.planner.repair_sql(step, str(first_error), state.schema)
                         guarded, frame = self._run_sql(repaired.query)
                         repaired_sql = True
@@ -471,6 +472,7 @@ class Executor:
                         full_row_count=full_row_count,
                         csv_path=csv_path,
                         metric=step.metric,
+                        approved_query=step.approved_query,
                     )
                 )
             elif isinstance(step, PlotStep):

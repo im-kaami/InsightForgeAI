@@ -18,7 +18,7 @@ import { Markdown } from "@/components/markdown";
 import { Plot } from "@/components/plot";
 import { StatResultCard, type StatResult } from "@/components/stat-result";
 import { StepTimeline } from "@/components/step-timeline";
-import { api, ApiError, runs, type Run } from "@/lib/api";
+import { api, ApiError, datasets, runs, type Run } from "@/lib/api";
 import type { RunEvent } from "@/lib/sse";
 
 const verificationLabels: Record<string, string> = {
@@ -80,11 +80,13 @@ function ClarificationPrompt({
 
 export function RunCard({
   run,
+  datasetId,
   events = [],
   answering = false,
   onAnswer,
 }: {
   run: Run;
+  datasetId?: string;
   events?: RunEvent[];
   answering?: boolean;
   onAnswer?: (question: string, answer: string) => void;
@@ -120,6 +122,18 @@ export function RunCard({
       await api.downloadBlob(`/runs/${run.id}/artifacts/${position}/csv`, `${name}.csv`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "CSV download failed");
+    }
+  }
+
+  const [savedQueries, setSavedQueries] = useState<number[]>([]);
+  async function saveAsQuestion(position: number) {
+    if (!datasetId) return;
+    try {
+      await datasets.saveQueryFromRun(datasetId, run.id, position);
+      setSavedQueries((items) => [...items, position]);
+      toast.success("Saved as an approved question");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save the question");
     }
   }
 
@@ -190,6 +204,12 @@ export function RunCard({
               <p className="mt-2">{run.error}</p>
             </div>
           )}
+          {provenance.refusal ? (
+            <div data-testid="refusal" className="rounded border border-amber-500/30 p-3 text-sm">
+              <Badge variant="secondary">Approved data only</Badge>
+              <p className="mt-2">{String(provenance.refusal)}</p>
+            </div>
+          ) : null}
           {notices.map((warning) => (
             <div key={warning} className="rounded border border-amber-500/30 p-3 text-sm">
               {warning}
@@ -217,6 +237,18 @@ export function RunCard({
                       </p>
                     </div>
                   ) : null}
+                  {item.approved_query ? (
+                    <div data-testid="approved-query-result" className="space-y-1 text-sm">
+                      <Badge variant="default">Approved query</Badge>
+                      <p className="text-xs text-muted-foreground">
+                        Saved SQL for &quot;
+                        {String((item.approved_query as Record<string, unknown>).question ?? "")}
+                        &quot;, run exactly as the data owner approved it (matched by{" "}
+                        {String((item.approved_query as Record<string, unknown>).matched_by ?? "")}
+                        ).
+                      </p>
+                    </div>
+                  ) : null}
                   <DataTable
                     columns={(item.columns as string[]) ?? []}
                     rows={(item.rows as Record<string, unknown>[]) ?? []}
@@ -233,6 +265,19 @@ export function RunCard({
                     >
                       <Download className="size-4" />
                       Download CSV
+                    </Button>
+                  ) : null}
+                  {datasetId &&
+                  !item.metric &&
+                  !item.approved_query &&
+                  run.status === "completed" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={savedQueries.includes(index)}
+                      onClick={() => saveAsQuestion(index)}
+                    >
+                      {savedQueries.includes(index) ? "Saved" : "Save as approved question"}
                     </Button>
                   ) : null}
                 </section>

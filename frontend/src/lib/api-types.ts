@@ -349,6 +349,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/datasets/{dataset_id}/queries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Queries */
+        put: operations["update_queries_api_datasets__dataset_id__queries_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/datasets/{dataset_id}/queries/from-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save Query From Run
+         * @description Approve a result table's SQL from one of this dataset's runs as an answer to its question.
+         */
+        post: operations["save_query_from_run_api_datasets__dataset_id__queries_from_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/datasets/{dataset_id}/recipe": {
         parameters: {
             query?: never;
@@ -1011,6 +1048,27 @@ export interface components {
              */
             cardinality: "one_to_one";
         };
+        /** ApprovedQuery */
+        ApprovedQuery: {
+            /** Id */
+            id?: string;
+            /** Question */
+            question: string;
+            /** Sql */
+            sql: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Approved
+             * @default false
+             */
+            approved: boolean;
+            /** Source Run Id */
+            source_run_id?: string | null;
+        };
         /** Body_replace_version_api_datasets__dataset_id__versions_post */
         Body_replace_version_api_datasets__dataset_id__versions_post: {
             /** Files */
@@ -1310,6 +1368,7 @@ export interface components {
             rules?: components["schemas"]["SavedRules"];
             relationships?: components["schemas"]["SavedRelationships"];
             metrics?: components["schemas"]["SavedMetrics"];
+            queries?: components["schemas"]["SavedQueries"];
             profile?: components["schemas"]["DataProfile"] | null;
             /** Review Version Id */
             review_version_id?: string | null;
@@ -1751,6 +1810,16 @@ export interface components {
              */
             acknowledged: true;
         };
+        /** QuerySet */
+        QuerySet: {
+            /** Queries */
+            queries?: components["schemas"]["ApprovedQuery"][];
+            /**
+             * Approved Only
+             * @default false
+             */
+            approved_only: boolean;
+        };
         /** RangeRule */
         RangeRule: {
             /** Id */
@@ -2089,6 +2158,23 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /**
+         * SaveQueryIn
+         * @description Save a result table's SQL from a run as an approved question.
+         */
+        SaveQueryIn: {
+            /** Run Id */
+            run_id: string;
+            /** Position */
+            position: number;
+            /** Question */
+            question?: string | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+        };
         /** SavedMetrics */
         SavedMetrics: {
             /** Metrics */
@@ -2137,6 +2223,23 @@ export interface components {
              * @default 0
              */
             open_alerts: number;
+        };
+        /** SavedQueries */
+        SavedQueries: {
+            /** Queries */
+            queries?: components["schemas"]["ApprovedQuery"][];
+            /**
+             * Approved Only
+             * @default false
+             */
+            approved_only: boolean;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision: number;
+            /** Updated At */
+            updated_at?: string | null;
         };
         /** SavedRecipe */
         SavedRecipe: {
@@ -3257,6 +3360,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MetricPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_queries_api_datasets__dataset_id__queries_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuerySet"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_query_from_run_api_datasets__dataset_id__queries_from_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveQueryIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetOut"];
                 };
             };
             /** @description Validation Error */

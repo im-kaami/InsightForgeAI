@@ -24,6 +24,14 @@ from insightforge.core.metrics import (
     result_info,
 )
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
+from insightforge.core.queries import (
+    ApprovedQuery,
+    find_query,
+    match_query,
+    queries_block,
+    refusal_text,
+)
+from insightforge.core.queries import result_info as query_info
 from insightforge.core.relationships import Relationship, relationships_block
 from insightforge.core.schema import DatasetNotes, SchemaInfo, TableInfo, is_identifier, notes_block
 from insightforge.core.stats import TestMethod
@@ -38,6 +46,8 @@ class SqlStep(BaseModel):
     description: str = ""
     # Set only by code when the SQL was written from an approved metric; never taken from a model.
     metric: dict[str, Any] | None = None
+    # Set only by code when the SQL is an approved query from the library; never taken from a model.
+    approved_query: dict[str, Any] | None = None
 
 
 PlotKind = Literal["line", "bar", "scatter", "pie", "histogram", "box", "heatmap", "area"]
@@ -490,6 +500,20 @@ by: region, product; totals per day, week, month or year use sale_date):
 """
 
 
+QUERY_CHOICE_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"query": {"type": ["string", "null"]}},
+    "required": ["query"],
+}
+QUERY_CHOICE_PROMPT = """You decide whether a data question asks exactly the same thing as one of the
+approved questions listed below. Their saved SQL is run unchanged, so pick one only when it answers this
+question completely: the same measure, the same grouping, the same filters, the same period and the same
+numbers (for example "top 5" is not "top 10"). Rewording is fine. Respond only with JSON
+{"query": "<id>"} or {"query": null}.
+
+"""
+
+
 REVIEW_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -603,8 +627,9 @@ def validate_plan(raw: Any, schema: SchemaInfo, problems: list[str] | None = Non
                 continue
             has_summary = True
         if isinstance(step, SqlStep):
-            if step.metric is not None:
-                step = step.model_copy(update={"metric": None})  # a model cannot claim a metric
+            if step.metric is not None or step.approved_query is not None:
+                # A model cannot claim a metric or an approved query.
+                step = step.model_copy(update={"metric": None, "approved_query": None})
             sql_names.add(step.name)
         names.add(step.name)
         steps.append(step)
@@ -722,6 +747,10 @@ class Planner:
         self.relationships: list[Relationship] = []
         self.metrics: list[Metric] = []
         self.metrics_revision: int | None = None
+        self.queries: list[ApprovedQuery] = []
+        self.queries_revision: int | None = None
+        self.approved_only = False
+        self.last_refusal: str | None = None
         self.current_goal: str | None = None
         self.sandbox_enabled = False
 
@@ -755,6 +784,7 @@ class Planner:
         self.last_fallback_reason = None
         self.last_plan_issues = []
         self.last_clarification = None
+        self.last_refusal = None
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0}
         self.current_goal = goal
         schema_text = (
@@ -802,6 +832,9 @@ Return a single JSON object with a top-level "steps" array, for example:
                 f"{self.policy.memory_text(memory)}\nTreat the current goal as a follow-up "
                 "to this conversation."
             )
+        approved = [item for item in self.queries if item.approved]
+        if found := match_query(goal, approved):
+            return self._query_plan(found, "code")
         if allow_clarification:
             self.last_clarification = self._check_ambiguity(goal, schema_text)
             if self.last_clarification is not None:
@@ -813,7 +846,8 @@ Return a single JSON object with a top-level "steps" array, for example:
                 if chosen:
                     return chosen
         else:
-            routes = (
+            # Tested methods still run AI-written SQL, so "approved data only" skips them.
+            routes = () if self.approved_only else (
                 *((("python", PYTHON_CUES),) if self.sandbox_enabled else ()),
                 ("predict", PREDICT_CUES),
                 ("change", CHANGE_CUES),
@@ -826,6 +860,13 @@ Return a single JSON object with a top-level "steps" array, for example:
                     return chosen
             if mentioned and (chosen := self._choose_metric(goal, mentioned, schema, schema_text, memory)):
                 return chosen
+            if approved and (chosen := self._choose_query(goal, approved)):
+                return chosen
+        if self.approved_only:
+            self.last_refusal = refusal_text(
+                [item.question for item in approved], [item.display for item in self.metrics]
+            )
+            return Plan(steps=[])
         messages = [{"role": "system", "content": system}, {"role": "user", "content": goal}]
         try:
             raw, _ = self._chat_json("plan", messages, PLAN_JSON_SCHEMA)
@@ -1023,6 +1064,32 @@ Return a single JSON object with a top-level "steps" array, for example:
             logging.getLogger("insightforge").warning("metric choice skipped: %s", describe_error(exc))
             return None
         return self._metric_plan(query, schema)
+
+    def _query_plan(self, query: ApprovedQuery, matched_by: str) -> Plan:
+        step = SqlStep(
+            name=_safe_step_name("approved", query.question[:40]),
+            query=query.sql,
+            description=query.description or query.question,
+            approved_query=query_info(query, self.queries_revision, matched_by),
+        )
+        return Plan(steps=[step, SummaryStep(name="summary", focus=query.question)])
+
+    def _choose_query(self, goal: str, approved: list[ApprovedQuery]) -> Plan | None:
+        system = QUERY_CHOICE_PROMPT + queries_block(approved)
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": goal}]
+        try:
+            raw, _ = self._chat_json("query_choice", messages, QUERY_CHOICE_JSON_SCHEMA)
+        except Exception as exc:
+            logging.getLogger("insightforge").warning("query choice skipped: %s", describe_error(exc))
+            return None
+        chosen = raw.get("query") if isinstance(raw, dict) else None
+        if not chosen:
+            return None
+        found = find_query(approved, str(chosen))
+        if found is None:
+            self.last_plan_issues.append(f"The AI picked an unknown approved question {chosen!r}")
+            return None
+        return self._query_plan(found, "AI")
 
     def _check_ambiguity(self, goal: str, schema_text: str) -> Clarification | None:
         messages = [

@@ -300,7 +300,15 @@ Saved relationships are added to the AI's planning, review, and SQL-repair promp
 
 **Ask with a metric.** When a question names an approved metric, its label or one of its other names ("What are sales by region?"), the AI only chooses the groupings, filters, time period (day, week, month or year) and date range; tested code writes the SQL. The result table carries an **Approved metric** badge with the definition, and the Assumptions list starts with the metric and its revision. The AI can never label its own SQL as an approved metric, and metric SQL is never rewritten by the AI. Groupings from another table need an approved table relationship from the metric's table to that table (many rows to one), so a join can never count a row twice. Without an AI model (local mode with no local model), questions that name exactly one metric are still answered: the groupings and period are read from words such as "by region" and "monthly".
 
-Limits: questions that do not name a metric are planned as before; questions that ask for a test, a forecast, a prediction or "why" go to those methods first. In schema-only mode the AI sees metric names, descriptions and allowed columns, but not the values in fixed conditions.
+Limits: questions that do not name a metric are planned as before; questions that ask for a test, a forecast, a prediction or "why" go to those methods first. In schema-only mode the AI sees metric names, descriptions and allowed columns, but not the values in fixed conditions. A period or date range is used only when the question mentions time (a year, a month, "monthly", "last", and so on).
+
+## Approved questions and "Approved data only"
+
+**Save a question with its SQL.** The dataset page's **Approved questions** card stores questions together with the SQL that answers them. Add one by hand (one read-only query; it is run once on the current data before it can be saved), or click **Save as approved question** under any result table in a session to save that answer's SQL with the question you asked.
+
+**Ask it again.** When a new question asks the same thing, the saved SQL runs exactly as approved and the result carries an **Approved query** badge with the saved question and how it was matched. Code matches first by comparing words, so rewording works but different numbers ("top 5" against "top 10") never match. If code finds nothing, the AI may pick a saved question by its id; it sees only the questions, never the SQL, and it can never change the SQL. Approved SQL is never rewritten by the AI after an error.
+
+**Approved data only.** Tick **Approved data only** on the same card to answer only from approved metrics and approved questions. Any other question is refused with a list of what can be asked, and the AI never writes SQL of its own. Statistical tests, forecasts, predictions and Deep mode are switched off in this mode because they run AI-written SQL.
 
 ## Saved models, scoring and drift
 
@@ -415,5 +423,4 @@ InsightForgeAI/
 - Celery workers for durable distributed runs
 - Native MSSQL, BigQuery, and Snowflake connectors
 - Private Google Sheets through service-account authentication
-- A governed semantic layer for reusable metrics
 - Per-provider token and cost tracking

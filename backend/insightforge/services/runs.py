@@ -19,6 +19,7 @@ from insightforge.core.memory import ConversationMemory
 from insightforge.core.metrics import SavedMetrics
 from insightforge.core.planner import Plan, PlotStep, SqlStep, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
+from insightforge.core.queries import SavedQueries
 from insightforge.core.relationships import SavedRelationships
 from insightforge.core.sandbox import build_sandbox
 from insightforge.core.schema import DatasetNotes, SchemaInfo
@@ -290,7 +291,7 @@ def execute_run(
             memory = ConversationMemory()
             for item in reversed(previous):
                 earlier = item.provenance_json or {}
-                if earlier.get("clarification"):
+                if earlier.get("clarification") or earlier.get("refusal"):
                     continue
                 memory.add(
                     item.goal,
@@ -335,6 +336,7 @@ def execute_run(
             request = run.request_json or {}
             mode = "deep" if request.get("mode") == "deep" else "quick"
             saved_metrics = SavedMetrics.model_validate(dataset.metrics_json or {})
+            saved_queries = SavedQueries.model_validate(dataset.queries_json or {})
             result = agent.run(
                 run.goal,
                 catalog,
@@ -349,6 +351,9 @@ def execute_run(
                 ).relationships,
                 metrics=saved_metrics.metrics,
                 metrics_revision=saved_metrics.revision,
+                queries=saved_queries.queries,
+                queries_revision=saved_queries.revision,
+                approved_only=saved_queries.approved_only,
             )
             check = result.number_check
             needs_review = (
@@ -392,6 +397,8 @@ def execute_run(
                 "clarification": (
                     result.clarification.model_dump(mode="json") if result.clarification else None
                 ),
+                "refusal": result.refusal,
+                "approved_only": saved_queries.approved_only,
                 "checks": (
                     [
                         {

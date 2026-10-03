@@ -21,6 +21,8 @@ class TableArtifact(BaseModel):
     csv_path: str | None = None
     # Present when code wrote the SQL from an approved metric (trust: "approved metric").
     metric: dict[str, Any] | None = None
+    # Present when the SQL is an approved query from the dataset's library (trust: "approved query").
+    approved_query: dict[str, Any] | None = None
 
 
 class PlotArtifact(BaseModel):
@@ -90,4 +92,5 @@ class RunResult(BaseModel):
     findings: list[ResultFinding] = Field(default_factory=list)
     deep_notes: list[str] = Field(default_factory=list)
     clarification: Clarification | None = None
+    refusal: str | None = None
     key_numbers: list[str] = Field(default_factory=list)

@@ -18,6 +18,7 @@ from insightforge.api.schemas import (
     MetricPreviewOut,
     MetricSuggestions,
     PrivacyUpdate,
+    SaveQueryIn,
     Suggestions,
     URLDatasetCreate,
     VersionConfirm,
@@ -34,6 +35,7 @@ from insightforge.core.metrics import (
     suggest_metrics,
 )
 from insightforge.core.profiling import DataProfile
+from insightforge.core.queries import ApprovedQuery, QuerySet, SavedQueries, query_problems
 from insightforge.core.recipes import AppliedRecipe, CleaningRecipe, SavedRecipe, suggest_steps
 from insightforge.core.relationships import (
     RelationshipSet,
@@ -46,6 +48,7 @@ from insightforge.core.schema import DatasetNotes, SchemaInfo
 from insightforge.core.sql_guard import guard_sql
 from insightforge.core.validation import RuleSet, SavedRules, ValidationReport, suggest_rules
 from insightforge.db.models import (
+    Artifact,
     ChatSession,
     Connection,
     Dataset,
@@ -130,6 +133,7 @@ def output(dataset: Dataset, review_version_id: str | None = None) -> DatasetOut
         rules=SavedRules.model_validate(dataset.rules_json or {}),
         relationships=SavedRelationships.model_validate(dataset.relationships_json or {}),
         metrics=SavedMetrics.model_validate(dataset.metrics_json or {}),
+        queries=SavedQueries.model_validate(dataset.queries_json or {}),
         profile=DataProfile.model_validate(dataset.profile_json) if dataset.profile_json else None,
         review_version_id=review_version_id,
         created_at=dataset.created_at,
@@ -477,6 +481,80 @@ def preview_metric(dataset_id: str, body: MetricPreviewIn, db: Db, user: Current
         rows=rows,
         total_rows=len(frame),
     )
+
+
+def _check_queries_run(db: Db, dataset: Dataset, queries: list[ApprovedQuery]) -> None:
+    """Run new or changed SQL once on the current version so broken queries are never approved."""
+    if not queries or dataset.connection_id:
+        return
+    ensure_current_version(db, dataset)
+    try:
+        catalog = open_catalog(dataset)
+    except IngestError as error:
+        raise HTTPException(422, str(error)) from error
+    try:
+        for item in queries:
+            try:
+                catalog.query(guard_sql(item.sql, 1), timeout_seconds=get_settings().query_timeout_seconds)
+            except Exception as error:  # noqa: BLE001 - reported to the user as a failed check
+                raise HTTPException(422, f"Query {item.question!r} could not run: {error}") from error
+    finally:
+        catalog.close()
+
+
+def _save_queries(db: Db, dataset: Dataset, body: QuerySet) -> DatasetOut:
+    problems = query_problems(body.queries)
+    if problems:
+        raise HTTPException(422, "; ".join(problems))
+    previous = SavedQueries.model_validate(dataset.queries_json or {})
+    known = {item.sql for item in previous.queries}
+    _check_queries_run(db, dataset, [item for item in body.queries if item.sql not in known])
+    saved = SavedQueries(
+        queries=body.queries,
+        approved_only=body.approved_only,
+        revision=previous.revision + 1,
+        updated_at=datetime.now(UTC),
+    )
+    dataset.queries_json = saved.model_dump(mode="json")
+    db.commit()
+    db.refresh(dataset)
+    return output(dataset, review_version_id=latest_draft_id(db, dataset))
+
+
+@router.put("/{dataset_id}/queries", response_model=DatasetOut)
+def update_queries(dataset_id: str, body: QuerySet, db: Db, user: CurrentUser):
+    return _save_queries(db, owned(db, user, dataset_id), body)
+
+
+@router.post("/{dataset_id}/queries/from-run", response_model=DatasetOut)
+def save_query_from_run(dataset_id: str, body: SaveQueryIn, db: Db, user: CurrentUser):
+    """Approve a result table's SQL from one of this dataset's runs as an answer to its question."""
+    dataset = owned(db, user, dataset_id)
+    run = db.scalar(
+        select(Run)
+        .join(ChatSession, ChatSession.id == Run.session_id)
+        .where(Run.id == body.run_id, Run.owner_id == user.id, ChatSession.dataset_id == dataset.id)
+    )
+    if run is None:
+        raise HTTPException(404, "Run not found")
+    artifact = db.scalar(
+        select(Artifact).where(Artifact.run_id == run.id, Artifact.position == body.position)
+    )
+    sql = (artifact.payload_json or {}).get("sql") if artifact and artifact.type == "table" else None
+    if not sql:
+        raise HTTPException(404, "That result has no SQL table")
+    question = (body.question or run.goal.split("\n\nClarification:")[0]).strip()[:300]
+    previous = SavedQueries.model_validate(dataset.queries_json or {})
+    if any(item.question.casefold() == question.casefold() for item in previous.queries):
+        raise HTTPException(409, "An approved question with this wording already exists")
+    try:
+        query = ApprovedQuery(
+            question=question, sql=sql, description=body.description, approved=True, source_run_id=run.id
+        )
+        body_set = QuerySet(queries=[*previous.queries, query], approved_only=previous.approved_only)
+    except ValidationError as error:
+        raise HTTPException(422, str(error)) from error
+    return _save_queries(db, dataset, body_set)
 
 
 @router.put("/{dataset_id}/recipe", response_model=DatasetOut)

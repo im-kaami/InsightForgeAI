@@ -119,6 +119,7 @@ export default function SessionPage() {
             <RunCard
               key={run.id}
               run={run}
+              datasetId={query.data?.dataset_id}
               events={live[run.id]}
               answering={sending}
               onAnswer={(question, answer) =>

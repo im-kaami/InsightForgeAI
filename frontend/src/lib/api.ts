@@ -28,6 +28,7 @@ export type MetricFilter = components["schemas"]["MetricFilter"];
 export type MetricQuery = components["schemas"]["MetricQuery"];
 export type MetricSuggestions = components["schemas"]["MetricSuggestions"];
 export type MetricPreview = components["schemas"]["MetricPreviewOut"];
+export type ApprovedQuery = components["schemas"]["ApprovedQuery"];
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -134,6 +135,13 @@ export const datasets = {
       `/datasets/${id}/metrics/preview`,
       json({ metric, query: query ?? null }),
     ),
+  saveQueries: (id: string, queries: ApprovedQuery[], approvedOnly: boolean) =>
+    apiFetch<Dataset>(`/datasets/${id}/queries`, {
+      method: "PUT",
+      body: JSON.stringify({ queries, approved_only: approvedOnly }),
+    }),
+  saveQueryFromRun: (id: string, runId: string, position: number) =>
+    apiFetch<Dataset>(`/datasets/${id}/queries/from-run`, json({ run_id: runId, position })),
   relationshipSuggestions: (id: string) =>
     apiFetch<RelationshipSuggestions>(`/datasets/${id}/relationships/suggestions`),
   saveRelationships: (id: string, relationships: Relationship[]) =>

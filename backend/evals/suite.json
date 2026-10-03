@@ -1,6 +1,6 @@
 {
   "name": "insightforge-core",
-  "version": 10,
+  "version": 11,
   "datasets": {
     "hr": {
       "employees": "../tests/fixtures/hr.csv"
@@ -18,8 +18,41 @@
     "shop_metrics": {
       "orders": "data/orders.csv",
       "customers": "data/customers.csv"
+    },
+    "shop_library": {
+      "orders": "data/orders.csv",
+      "customers": "data/customers.csv"
+    },
+    "shop_strict": {
+      "orders": "data/orders.csv",
+      "customers": "data/customers.csv"
     }
   },
+  "queries": {
+    "shop_library": [
+      {
+        "id": "refund_rate_region",
+        "question": "What is the refund rate by region?",
+        "sql": "SELECT region, AVG(CASE WHEN status = 'refunded' THEN 1.0 ELSE 0.0 END) AS refund_rate FROM orders GROUP BY region ORDER BY region",
+        "approved": true
+      },
+      {
+        "id": "cancelled_by_category",
+        "question": "How many orders were cancelled in each category?",
+        "sql": "SELECT category, COUNT(*) AS cancelled_orders FROM orders WHERE status = 'cancelled' GROUP BY category ORDER BY category",
+        "approved": true
+      }
+    ],
+    "shop_strict": [
+      {
+        "id": "refund_rate_region",
+        "question": "What is the refund rate by region?",
+        "sql": "SELECT region, AVG(CASE WHEN status = 'refunded' THEN 1.0 ELSE 0.0 END) AS refund_rate FROM orders GROUP BY region ORDER BY region",
+        "approved": true
+      }
+    ]
+  },
+  "approved_only": ["shop_strict"],
   "relationships": {
     "shop_metrics": [
       {
@@ -655,6 +688,54 @@
       "expect": {
         "type": "value",
         "sql": "SELECT COUNT(*) FROM orders WHERE region = 'West'"
+      }
+    },
+    {
+      "id": "library-refund-rate",
+      "dataset": "shop_library",
+      "question": "What is the refund rate in each region?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT region, AVG(CASE WHEN status = 'refunded' THEN 1.0 ELSE 0.0 END) FROM orders GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "library-refund-share-reworded",
+      "dataset": "shop_library",
+      "question": "In every region, what fraction of orders ended up refunded?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT region, AVG(CASE WHEN status = 'refunded' THEN 1.0 ELSE 0.0 END) FROM orders GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "library-cancelled-per-category",
+      "dataset": "shop_library",
+      "question": "Number of cancelled orders per category",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT category, COUNT(*) FROM orders WHERE status = 'cancelled' GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "strict-answers-approved",
+      "dataset": "shop_strict",
+      "question": "What is the refund rate by region?",
+      "expect": {
+        "type": "rows",
+        "sql": "SELECT region, AVG(CASE WHEN status = 'refunded' THEN 1.0 ELSE 0.0 END) FROM orders GROUP BY 1",
+        "keys": 1
+      }
+    },
+    {
+      "id": "strict-refuses-unapproved",
+      "dataset": "shop_strict",
+      "question": "What is the average order amount by category?",
+      "expect": {
+        "type": "refuse"
       }
     }
   ]

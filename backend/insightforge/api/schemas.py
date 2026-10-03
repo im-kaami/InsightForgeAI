@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from insightforge.core.metrics import Metric, MetricQuery, SavedMetrics
 from insightforge.core.profiling import DataProfile
+from insightforge.core.queries import SavedQueries
 from insightforge.core.recipes import AppliedRecipe, RecipeSuggestion, SavedRecipe
 from insightforge.core.relationships import SavedRelationships
 from insightforge.core.schema import DatasetNotes, SchemaInfo
@@ -114,6 +115,7 @@ class DatasetOut(APIModel):
     rules: SavedRules = Field(default_factory=SavedRules)
     relationships: SavedRelationships = Field(default_factory=SavedRelationships)
     metrics: SavedMetrics = Field(default_factory=SavedMetrics)
+    queries: SavedQueries = Field(default_factory=SavedQueries)
     profile: DataProfile | None = None
     review_version_id: str | None = None
     created_at: datetime
@@ -333,6 +335,15 @@ class ExplanationOut(BaseModel):
     background_rows: int
     interpretation: str
     cautions: list[str]
+
+
+class SaveQueryIn(BaseModel):
+    """Save a result table's SQL from a run as an approved question."""
+
+    run_id: str = Field(min_length=1, max_length=40)
+    position: int = Field(ge=0)
+    question: str | None = Field(default=None, max_length=300)
+    description: str = Field(default="", max_length=500)
 
 
 class MetricSuggestions(BaseModel):

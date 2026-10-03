@@ -18,6 +18,7 @@ from insightforge.core.memory import ConversationMemory
 from insightforge.core.metrics import Metric
 from insightforge.core.planner import Plan, Planner, SummaryStep
 from insightforge.core.privacy import PrivacyMode, PromptPolicy
+from insightforge.core.queries import ApprovedQuery
 from insightforge.core.relationships import Relationship
 from insightforge.core.sandbox import DockerSandbox
 from insightforge.core.schema import DatasetNotes, SchemaInfo
@@ -38,6 +39,12 @@ def without_samples(schema: SchemaInfo) -> SchemaInfo:
             for table in schema.tables
         ]
     )
+
+
+def _approved_query_note(name: str, info: dict[str, Any]) -> str:
+    revision = f"(revision {info['revision']}) " if info.get("revision") else ""
+    question, matched_by = info.get("question"), info.get("matched_by")
+    return f'{name}: approved query {revision}for "{question}", matched by {matched_by}'
 
 
 class InsightForgeAgent:
@@ -84,6 +91,9 @@ class InsightForgeAgent:
         relationships: list[Relationship] | None = None,
         metrics: list[Metric] | None = None,
         metrics_revision: int | None = None,
+        queries: list[ApprovedQuery] | None = None,
+        queries_revision: int | None = None,
+        approved_only: bool = False,
     ) -> RunResult:
         def emit(event: dict[str, Any]) -> None:
             if on_event:
@@ -100,6 +110,11 @@ class InsightForgeAgent:
         self.planner.relationships = list(relationships or [])
         self.planner.metrics = [item for item in metrics or [] if item.approved]
         self.planner.metrics_revision = metrics_revision
+        self.planner.queries = [item for item in queries or [] if item.approved]
+        self.planner.queries_revision = queries_revision
+        self.planner.approved_only = approved_only
+        if approved_only:
+            mode = "quick"  # Deep-mode reviews add AI-written steps
         self.summarizer.dataset_notes = notes
         if schema is None:
             schema = catalog.introspect(sample_rows=self.schema_sample_rows)
@@ -121,6 +136,19 @@ class InsightForgeAgent:
                 trace=tracer.events,
                 mode=mode,
                 clarification=clarification,
+            )
+        if (refusal := self.planner.last_refusal) is not None:
+            emit({"type": "done", "summary": refusal})
+            return RunResult(
+                goal=goal,
+                plan=plan,
+                artifacts=[],
+                summary=refusal,
+                timings={"total": time.perf_counter() - started},
+                token_usage=dict(self.planner.last_usage),
+                trace=tracer.events,
+                mode=mode,
+                refusal=refusal,
             )
         emit(
             {
@@ -158,6 +186,8 @@ class InsightForgeAgent:
             + str(table.metric.get("description") or table.metric.get("name"))
             for table in tables
             if table.metric
+        ] + [
+            _approved_query_note(table.name, table.approved_query) for table in tables if table.approved_query
         ] + [describe_query(table.name, table.sql, schema, executor.result_limit) for table in tables]
         for table in tables:
             if table.truncated:

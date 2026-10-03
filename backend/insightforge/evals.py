@@ -19,6 +19,7 @@ from insightforge.core.artifacts import (
 )
 from insightforge.core.catalog import DataCatalog, _quote
 from insightforge.core.metrics import Metric
+from insightforge.core.queries import ApprovedQuery
 from insightforge.core.relationships import Relationship
 from insightforge.core.schema import DatasetNotes
 from insightforge.core.stats import TestMethod, run_test
@@ -27,7 +28,7 @@ DEFAULT_SUITE = Path(__file__).resolve().parents[1] / "evals" / "suite.json"
 
 
 class Expectation(BaseModel):
-    type: Literal["value", "rows", "top", "clarify", "stat"]
+    type: Literal["value", "rows", "top", "clarify", "stat", "refuse"]
     sql: str = "SELECT 1"
     keys: int = 1
     either_percent: bool = False
@@ -56,6 +57,8 @@ class EvalSuite(BaseModel):
     notes: dict[str, DatasetNotes] = Field(default_factory=dict)
     relationships: dict[str, list[Relationship]] = Field(default_factory=dict)
     metrics: dict[str, list[Metric]] = Field(default_factory=dict)
+    queries: dict[str, list[ApprovedQuery]] = Field(default_factory=dict)
+    approved_only: list[str] = Field(default_factory=list)
     cases: list[EvalCase]
     base_dir: Path = Field(default=Path("."), exclude=True)
 
@@ -232,6 +235,12 @@ def score(case: EvalCase, expected: pd.DataFrame, result: RunResult) -> tuple[bo
         return False, "answered without asking a clarifying question"
     if result.clarification:
         return False, f"asked a needless clarifying question: {result.clarification.question}"
+    if case.expect.type == "refuse":
+        if result.refusal:
+            return True, "refused: nothing approved answers this question"
+        return False, "answered although nothing approved matches the question"
+    if result.refusal:
+        return False, "refused a question an approved metric or query answers"
     if case.expect.type == "stat":
         return _score_stat(case.expect, expected, result)
     tables = [
@@ -295,6 +304,8 @@ def run_case(
                 notes=suite.notes.get(case.dataset),
                 relationships=suite.relationships.get(case.dataset),
                 metrics=suite.metrics.get(case.dataset),
+                queries=suite.queries.get(case.dataset),
+                approved_only=case.dataset in suite.approved_only,
             )
         except Exception as error:
             return CaseResult(

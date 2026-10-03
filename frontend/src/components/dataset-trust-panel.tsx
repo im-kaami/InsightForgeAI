@@ -8,6 +8,7 @@ import { DataQuality } from "@/components/data-quality";
 import { DatasetCleaning } from "@/components/dataset-cleaning";
 import { DatasetNotes } from "@/components/dataset-notes";
 import { DatasetMetrics } from "@/components/dataset-metrics";
+import { DatasetQueries } from "@/components/dataset-queries";
 import { DatasetRelationships } from "@/components/dataset-relationships";
 import { ImportReview } from "@/components/import-review";
 import { Badge } from "@/components/ui/badge";
@@ -200,6 +201,10 @@ export function DatasetTrustPanel({
       />
       <DatasetMetrics
         key={`metrics-${dataset.id}-${dataset.current_version_id}-${dataset.relationships?.revision ?? 0}`}
+        dataset={dataset}
+      />
+      <DatasetQueries
+        key={`queries-${dataset.id}-${dataset.queries?.revision ?? 0}`}
         dataset={dataset}
       />
       <DataQuality
