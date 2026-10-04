@@ -49,6 +49,16 @@ class Settings(BaseSettings):
     sandbox_timeout_seconds: int = Field(default=30, ge=5, le=300)
     sandbox_memory: str = "512m"
     sandbox_cpus: str = "1"
+    # Single sign-on with OpenID Connect (Phase 5f); off unless issuer, client and redirect are set.
+    oidc_issuer: str | None = None
+    oidc_client_id: str | None = None
+    oidc_client_secret: str | None = None
+    oidc_redirect_uri: str | None = None
+    oidc_provider_name: str = "single sign-on"
+    oidc_scopes: str = "openid email profile"
+    oidc_allowed_domains: list[str] = Field(default_factory=list)
+    # Where to send the browser after sign-in (the frontend's login page).
+    oidc_frontend_url: str = "http://localhost:3000"
 
     @field_validator("llm_api_key", mode="before")
     @classmethod
@@ -88,6 +98,12 @@ def validate_settings(settings: Settings) -> list[str]:
         problems.append("APP_SECRET must be at least 32 characters and not use change-me")
     if settings.environment == "production" and settings.allow_private_urls:
         problems.append("ALLOW_PRIVATE_URLS must be false in production")
+    if (
+        settings.oidc_issuer
+        and settings.environment == "production"
+        and not settings.oidc_issuer.startswith("https://")
+    ):
+        problems.append("OIDC_ISSUER must use https in production")
     if settings.local_llm_model and not is_loopback_url(settings.local_llm_base_url):
         problems.append(
             "LOCAL_LLM_BASE_URL must point to this computer (localhost); the local model is disabled"

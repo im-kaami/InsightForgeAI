@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { API_BASE } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
 const credentialsSchema = z.object({
@@ -17,9 +18,30 @@ const credentialsSchema = z.object({
 });
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, loginWithToken } = useAuth();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [sso, setSso] = useState<{ enabled: boolean; name: string } | null>(null);
+
+  useEffect(() => {
+    // After single sign-on the server returns here with the session token after "#", which never
+    // reaches a server log. Remove it from the address bar straight away.
+    const values = new URLSearchParams(window.location.hash.slice(1));
+    const token = values.get("oidc_token");
+    const problem = values.get("oidc_error");
+    if (token || problem) window.history.replaceState(null, "", window.location.pathname);
+    if (token)
+      loginWithToken(token)
+        .then(() => router.push("/datasets"))
+        .catch(() => toast.error("Single sign-on did not complete; please try again"));
+    else if (problem) toast.error(problem);
+    fetch(`${API_BASE}/auth/oidc/config`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then(setSso)
+      .catch(() => setSso(null));
+    // Runs once, when the page opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -61,6 +83,15 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Signing in..." : "Sign in"}
             </Button>
+            {sso?.enabled ? (
+              <a
+                href={`${API_BASE}/auth/oidc/start`}
+                className="flex h-9 w-full items-center justify-center rounded-md border text-sm font-medium hover:bg-muted"
+                data-testid="sso-button"
+              >
+                Sign in with {sso.name}
+              </a>
+            ) : null}
             <p className="text-center text-sm text-muted-foreground">
               New here?{" "}
               <Link className="text-foreground underline" href="/register">

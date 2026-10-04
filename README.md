@@ -357,6 +357,21 @@ Limits: drift compares the new data with the training data; it does not prove th
 
 **Refresh** (one tile) and **Refresh all** re-run the metric and question tiles on the current data version with tested code; no AI is used. If a refresh fails (for example, the metric or question was removed), the tile shows why and keeps its last good result. **Up** and **Down** reorder tiles. Deleting a dataset deletes its tiles from every dashboard, pinned copies included, because they contain its data.
 
+## Single sign-on (OpenID Connect)
+
+People can sign in with your company's identity provider, such as Google Workspace, Microsoft Entra ID, Okta or Auth0, instead of a password. Register InsightForge with the provider as a web application, with the redirect URI `http://localhost:3000/api/auth/oidc/callback` (your frontend address plus `/api/auth/oidc/callback`), and set these in `backend/.env` (see `.env.example`):
+
+```
+OIDC_ISSUER=https://accounts.google.com
+OIDC_CLIENT_ID=...
+OIDC_CLIENT_SECRET=...
+OIDC_REDIRECT_URI=http://localhost:3000/api/auth/oidc/callback
+OIDC_PROVIDER_NAME=Google
+OIDC_ALLOWED_DOMAINS=["company.com"]
+```
+
+After a restart, the sign-in page shows **Sign in with Google** (or the name you set). InsightForge uses the authorization-code flow with PKCE, a one-time nonce and a state value tied to the browser by a short-lived cookie, and checks the ID token's signature against the provider's published keys, as well as its issuer, audience and expiry. The provider must confirm the email address; with `OIDC_ALLOWED_DOMAINS` set, only those domains can sign in. On first sign-in an account is created for that email; if a password account with the same email exists, it is used. The session token is handed back after `#` in the address, so it never reaches a server log. Password sign-in keeps working.
+
 ## Workspaces (teams and roles)
 
 **Workspaces** in the sidebar lets you work with your team. Create a workspace, then **Invite someone** by email with a role; InsightForge shows an invitation link (valid for 7 days, once, for that address only) that you send yourself, since it does not send email. The invited person signs in with that address, opens the link and clicks **Accept invitation**.

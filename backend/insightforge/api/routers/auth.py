@@ -1,6 +1,9 @@
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, HTTPException
+import httpx
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 
 from insightforge.api.deps import CurrentUser, Db, SignedInUser
@@ -12,7 +15,9 @@ from insightforge.api.schemas import (
     Token,
     UserOut,
 )
+from insightforge.config import get_settings
 from insightforge.db.models import ApiToken, User
+from insightforge.services import oidc
 from insightforge.services.auth import (
     API_TOKEN_PREFIX,
     create_access_token,
@@ -47,6 +52,54 @@ def login(body: Credentials, db: Db):
 @router.get("/me", response_model=UserOut)
 def me(user: CurrentUser):
     return user
+
+
+@router.get("/oidc/config")
+def oidc_config():
+    """Whether single sign-on is available, and the name to show on the button."""
+    settings = get_settings()
+    return {"enabled": oidc.enabled(settings), "name": settings.oidc_provider_name}
+
+
+@router.get("/oidc/start")
+def oidc_start():
+    """Send the browser to the identity provider."""
+    settings = get_settings()
+    try:
+        started = oidc.start(settings)
+    except (oidc.OIDCError, httpx.HTTPError) as error:
+        raise HTTPException(503, f"Single sign-on is unavailable: {error}") from error
+    response = RedirectResponse(started.url, status_code=302)
+    response.set_cookie(
+        oidc.STATE_COOKIE,
+        started.state,
+        max_age=oidc.STATE_SECONDS,
+        httponly=True,
+        samesite="lax",
+        secure=settings.environment == "production",
+        path="/api/auth/oidc",
+    )
+    return response
+
+
+@router.get("/oidc/callback")
+def oidc_callback(
+    request: Request, db: Db, code: str | None = None, state: str | None = None, error: str | None = None
+):
+    """The identity provider returns here. The session token is passed back after "#", so it never
+    reaches a server log, and the state cookie is cleared."""
+    settings = get_settings()
+    login = settings.oidc_frontend_url.rstrip("/") + "/login"
+    try:
+        if error or not code or not state:
+            raise oidc.OIDCError("The identity provider did not complete the sign-in")
+        token = oidc.finish(db, settings, code, state, request.cookies.get(oidc.STATE_COOKIE))
+        target = f"{login}#{urlencode({'oidc_token': token})}"
+    except (oidc.OIDCError, httpx.HTTPError) as problem:
+        target = f"{login}#{urlencode({'oidc_error': str(problem)[:200]})}"
+    response = RedirectResponse(target, status_code=302)
+    response.delete_cookie(oidc.STATE_COOKIE, path="/api/auth/oidc")
+    return response
 
 
 @router.get("/tokens", response_model=list[ApiTokenOut])

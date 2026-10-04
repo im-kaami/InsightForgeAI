@@ -9,6 +9,7 @@ type AuthContextValue = {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithToken: (token: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   logout: () => void;
 };
@@ -44,6 +45,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(result.access_token);
     setUser(await auth.me());
   }
+  async function loginWithToken(value: string) {
+    localStorage.setItem("if_token", value);
+    setToken(value);
+    setUser(await auth.me());
+  }
   async function register(email: string, password: string) {
     await auth.register(email, password);
     await login(email, password);
@@ -55,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/login");
   }
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, loginWithToken, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
