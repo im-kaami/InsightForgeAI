@@ -347,6 +347,26 @@ The index is built for each question from the confirmed data version, so it is n
 
 Limits: drift compares the new data with the training data; it does not prove the model is right or wrong, and it says nothing about causes. Scoring stops when the chosen version is missing a feature column, or when it breaks a blocking validation rule. Models are stored as files under the storage directory and kept until you delete the model or its dataset. Model files are only ever written and read by the server; never replace them with files from elsewhere, because the format can run code when loaded.
 
+## API access tokens
+
+Use InsightForge from scripts and other tools with a personal API token. Open **API tokens** in the sidebar, give the token a name, choose its access and when it expires (1 to 365 days, 90 by default), and copy it: it is shown only once, and InsightForge stores only a SHA-256 fingerprint of it.
+
+- **Read only:** read your datasets, previews, sessions, runs, reports and downloads (every `GET`).
+- **Read and ask questions:** also start sessions (`POST /api/sessions`) and ask questions (`POST /api/sessions/{id}/runs`). Answers follow each dataset's privacy mode, as in the app.
+- No token can upload or delete data, change settings, metrics or rules, or create, list or revoke tokens; those need a signed-in session. Revoked and expired tokens stop working at once. A token only ever reaches its owner's data.
+
+```bash
+TOKEN=ifk_...   # from the API tokens page
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/datasets
+curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"dataset_id": "<dataset id>"}' http://localhost:8000/api/sessions
+curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"goal": "What is revenue by region?"}' http://localhost:8000/api/sessions/<session id>/runs
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/runs/<run id>
+```
+
+Runs are asynchronous: the last call returns the run with status `pending` or `running`; fetch it again until it is `completed` or `failed`. The full API is described at `http://localhost:8000/docs` (OpenAPI). Each user can have at most 20 active tokens.
+
 ## Safety
 
 - SQL is parsed with SQLGlot and restricted to one SELECT or UNION statement.

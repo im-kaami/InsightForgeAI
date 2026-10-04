@@ -33,6 +33,29 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class ApiTokenIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    scope: Literal["read", "ask"] = "read"
+    expires_in_days: int = Field(default=90, ge=1, le=365)
+
+
+class ApiTokenOut(APIModel):
+    id: str
+    name: str
+    scope: str
+    prefix: str
+    expires_at: datetime
+    last_used_at: datetime | None
+    revoked_at: datetime | None
+    created_at: datetime | None
+
+
+class ApiTokenCreated(ApiTokenOut):
+    """Returned once, when the token is created. The token itself is never shown again."""
+
+    token: str
+
+
 class HealthOut(BaseModel):
     status: str
     llm: str

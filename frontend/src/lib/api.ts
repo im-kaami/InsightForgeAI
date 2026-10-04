@@ -91,6 +91,16 @@ export const auth = {
   me: () => apiFetch<User>("/auth/me"),
 };
 
+export type ApiToken = components["schemas"]["ApiTokenOut"];
+export type ApiTokenCreated = components["schemas"]["ApiTokenCreated"];
+
+export const apiTokens = {
+  list: () => apiFetch<ApiToken[]>("/auth/tokens"),
+  create: (body: components["schemas"]["ApiTokenIn"]) =>
+    apiFetch<ApiTokenCreated>("/auth/tokens", json(body)),
+  revoke: (id: string) => apiFetch<void>(`/auth/tokens/${id}`, { method: "DELETE" }),
+};
+
 export const datasets = {
   list: () => apiFetch<Dataset[]>("/datasets"),
   get: (id: string) => apiFetch<Dataset>(`/datasets/${id}`),

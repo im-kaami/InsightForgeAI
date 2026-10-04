@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { BellRing, CalendarClock, Database, History, LogOut } from "lucide-react";
+import { BellRing, CalendarClock, Database, History, KeyRound, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { RequireAuth } from "@/components/require-auth";
@@ -16,6 +16,7 @@ const nav = [
   { href: "/datasets", label: "Datasets", icon: Database },
   { href: "/history", label: "History", icon: History },
   { href: "/schedules", label: "Schedules", icon: CalendarClock },
+  { href: "/api-tokens", label: "API tokens", icon: KeyRound },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
