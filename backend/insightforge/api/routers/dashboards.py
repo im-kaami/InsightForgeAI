@@ -2,13 +2,19 @@ import asyncio
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
 
 from insightforge.api.deps import CurrentUser, Db
-from insightforge.api.schemas import DashboardIn, DashboardItemIn, DashboardItemOut, DashboardOut
+from insightforge.api.schemas import (
+    DashboardIn,
+    DashboardItemIn,
+    DashboardItemOut,
+    DashboardOut,
+    WorkspaceShareIn,
+)
 from insightforge.db.models import Dashboard
 from insightforge.db.session import SessionLocal
 from insightforge.services import dashboards as service
+from insightforge.services.access import dashboard_access, visible_dashboards, workspace_role
 from insightforge.services.dashboards import DashboardError
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
@@ -18,9 +24,11 @@ def _guard(error: DashboardError) -> HTTPException:
     return HTTPException(error.status, str(error))
 
 
-def _out(db: Db, dashboard: Dashboard, with_items: bool = True) -> DashboardOut:
+def _out(db: Db, dashboard: Dashboard, with_items: bool = True, user=None) -> DashboardOut:
     items = service.items_of(db, dashboard)
     return DashboardOut(
+        workspace_id=dashboard.workspace_id,
+        access=dashboard_access(db, user, dashboard) if user is not None else "own",
         id=dashboard.id,
         name=dashboard.name,
         description=dashboard.description or "",
@@ -40,10 +48,8 @@ def _owned(db: Db, user: CurrentUser, dashboard_id: str) -> Dashboard:
 
 @router.get("", response_model=list[DashboardOut])
 def list_dashboards(db: Db, user: CurrentUser):
-    values = db.scalars(
-        select(Dashboard).where(Dashboard.owner_id == user.id).order_by(Dashboard.updated_at.desc())
-    ).all()
-    return [_out(db, value, with_items=False) for value in values]
+    """Your dashboards and those shared with your workspaces (read only)."""
+    return [_out(db, value, with_items=False, user=user) for value in visible_dashboards(db, user)]
 
 
 @router.post("", response_model=DashboardOut, status_code=201)
@@ -57,7 +63,21 @@ def create_dashboard(body: DashboardIn, db: Db, user: CurrentUser):
 
 @router.get("/{dashboard_id}", response_model=DashboardOut)
 def get_dashboard(dashboard_id: str, db: Db, user: CurrentUser):
-    return _out(db, _owned(db, user, dashboard_id))
+    dashboard = db.get(Dashboard, dashboard_id)
+    if dashboard is None or dashboard_access(db, user, dashboard) is None:
+        raise HTTPException(404, "Dashboard not found")
+    return _out(db, dashboard, user=user)
+
+
+@router.put("/{dashboard_id}/workspace", response_model=DashboardOut)
+def share_dashboard(dashboard_id: str, body: WorkspaceShareIn, db: Db, user: CurrentUser):
+    """Show the dashboard to a workspace's members (read only), or stop (workspace_id null)."""
+    dashboard = _owned(db, user, dashboard_id)
+    if body.workspace_id and workspace_role(db, user.id, body.workspace_id) is None:
+        raise HTTPException(404, "Workspace not found")
+    dashboard.workspace_id = body.workspace_id
+    db.commit()
+    return _out(db, dashboard, user=user)
 
 
 @router.patch("/{dashboard_id}", response_model=DashboardOut)

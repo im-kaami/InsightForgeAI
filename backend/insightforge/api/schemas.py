@@ -250,6 +250,65 @@ class DashboardOut(APIModel):
     updated_at: datetime | None
     items: list[DashboardItemOut] = Field(default_factory=list)
     item_count: int = 0
+    workspace_id: str | None = None
+    access: str = "own"
+
+
+class WorkspaceShareIn(BaseModel):
+    """Share with this workspace, or stop sharing (null)."""
+
+    workspace_id: str | None = Field(default=None, max_length=32)
+
+
+class WorkspaceIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
+class MemberOut(BaseModel):
+    user_id: str
+    email: str
+    role: str
+    joined_at: datetime | None
+
+
+class InviteIn(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    role: Literal["viewer", "editor", "owner"] = "viewer"
+
+
+class InviteOut(APIModel):
+    id: str
+    email: str
+    role: str
+    expires_at: datetime
+    accepted_at: datetime | None
+    revoked_at: datetime | None
+    created_at: datetime | None
+
+
+class InviteCreated(InviteOut):
+    """Returned once; the secret is part of the invite link."""
+
+    secret: str
+
+
+class InviteAccept(BaseModel):
+    secret: str = Field(min_length=10, max_length=100)
+
+
+class RoleIn(BaseModel):
+    role: Literal["viewer", "editor", "owner"]
+
+
+class WorkspaceOut(BaseModel):
+    id: str
+    name: str
+    role: str
+    created_at: datetime | None
+    members: list[MemberOut] = Field(default_factory=list)
+    invites: list[InviteOut] = Field(default_factory=list)
+    datasets: list[dict[str, str]] = Field(default_factory=list)
+    dashboards: list[dict[str, str]] = Field(default_factory=list)
 
 
 class MetricReportCreate(ReportPeriod):
@@ -275,6 +334,9 @@ class DatasetOut(APIModel):
     relationships: SavedRelationships = Field(default_factory=SavedRelationships)
     metrics: SavedMetrics = Field(default_factory=SavedMetrics)
     queries: SavedQueries = Field(default_factory=SavedQueries)
+    workspace_id: str | None = None
+    # The caller's access: "own", "edit" or "read" (set where it is known, else None).
+    access: str | None = None
     profile: DataProfile | None = None
     review_version_id: str | None = None
     created_at: datetime

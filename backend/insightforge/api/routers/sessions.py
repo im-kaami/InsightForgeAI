@@ -16,6 +16,7 @@ from insightforge.db.models import (
     User,
 )
 from insightforge.db.session import SessionLocal
+from insightforge.services.access import AccessError, accessible_dataset
 from insightforge.services.datasets import ensure_current_version
 from insightforge.services.runs import start_run
 
@@ -87,11 +88,11 @@ def owned(db: Db, user: User, session_id: str) -> ChatSession:
 
 @router.post("", response_model=SessionOut, status_code=201)
 def create_session(body: SessionCreate, db: Db, user: CurrentUser):
-    dataset = db.scalar(
-        select(Dataset).where(Dataset.id == body.dataset_id, Dataset.owner_id == user.id)
-    )
-    if not dataset:
-        raise HTTPException(404, "Dataset not found")
+    # Any access is enough to ask questions; the session belongs to the person asking.
+    try:
+        dataset = accessible_dataset(db, user, body.dataset_id, "read")
+    except AccessError as error:
+        raise HTTPException(error.status, str(error)) from error
     session = ChatSession(
         owner_id=user.id,
         dataset_id=dataset.id,

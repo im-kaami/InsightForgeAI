@@ -54,7 +54,7 @@ def _guard(error: FollowError) -> HTTPException:
 
 
 def _apply(db: Db, user: CurrentUser, follow: MetricFollow, body: FollowIn) -> None:
-    dataset = owned(db, user, follow.dataset_id)
+    dataset = owned(db, user, follow.dataset_id, "read")
     version = ensure_current_version(db, dataset)
     if version is None or version.state != "ready":
         raise HTTPException(409, "Confirm the dataset version before following a metric")
@@ -86,7 +86,7 @@ def _reschedule(follow: MetricFollow) -> None:
 
 @router.get("/datasets/{dataset_id}/follows", response_model=list[FollowOut])
 def list_follows(dataset_id: str, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "read")
     follows = db.scalars(
         select(MetricFollow)
         .where(MetricFollow.dataset_id == dataset.id, MetricFollow.owner_id == user.id)
@@ -97,7 +97,7 @@ def list_follows(dataset_id: str, db: Db, user: CurrentUser):
 
 @router.post("/datasets/{dataset_id}/follows", response_model=FollowOut, status_code=201)
 def create_follow(dataset_id: str, body: FollowIn, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "read")
     follow = MetricFollow(owner_id=user.id, dataset_id=dataset.id, metric=body.metric)
     _apply(db, user, follow, body)
     db.add(follow)

@@ -24,7 +24,8 @@ from sqlalchemy.orm import Session
 from insightforge.config import get_settings
 from insightforge.core.queries import SavedQueries
 from insightforge.core.sql_guard import guard_sql
-from insightforge.db.models import Artifact, ChatSession, Dashboard, DashboardItem, Dataset, Run
+from insightforge.db.models import Artifact, ChatSession, Dashboard, DashboardItem, Dataset, Run, User
+from insightforge.services.access import AccessError, accessible_dataset, dataset_access
 from insightforge.services.metric_reports import FollowError, approved_metric, rolling_report
 
 MAX_ITEMS = 30
@@ -66,10 +67,12 @@ def items_of(db: Session, dashboard: Dashboard) -> list[DashboardItem]:
 
 
 def _owned_dataset(db: Session, owner_id: str, dataset_id: str) -> Dataset:
-    dataset = db.scalar(select(Dataset).where(Dataset.id == dataset_id, Dataset.owner_id == owner_id))
-    if dataset is None:
-        raise DashboardError("Dataset not found", status=404)
-    return dataset
+    """A dataset the dashboard owner can read (their own, or one shared with their workspace)."""
+    user = db.get(User, owner_id)
+    try:
+        return accessible_dataset(db, user, dataset_id, "read")
+    except AccessError as error:
+        raise DashboardError(str(error), status=error.status) from error
 
 
 def _trust(payload: dict[str, Any]) -> str:
@@ -299,8 +302,9 @@ def refresh(db: Session, item: DashboardItem) -> DashboardItem:
         return item
     dataset = db.get(Dataset, item.dataset_id) if item.dataset_id else None
     try:
-        if dataset is None or dataset.owner_id != item.owner_id:
-            raise DashboardError("The dataset was deleted")
+        user = db.get(User, item.owner_id)
+        if dataset is None or user is None or dataset_access(db, user, dataset) is None:
+            raise DashboardError("The dataset was deleted or is no longer shared with you")
         (_refresh_metric if item.kind == "metric" else _refresh_question)(db, item, dataset)
         item.error = None
     except DashboardError as error:
@@ -329,10 +333,6 @@ def delete_dashboard(db: Session, dashboard: Dashboard) -> None:
     db.commit()
 
 
-def forget_dataset(db: Session, owner_id: str, dataset_id: str) -> None:
-    """Deleting a dataset deletes its tiles too, pinned copies included: they hold its data."""
-    db.execute(
-        delete(DashboardItem).where(
-            DashboardItem.owner_id == owner_id, DashboardItem.dataset_id == dataset_id
-        )
-    )
+def forget_dataset(db: Session, dataset_id: str) -> None:
+    """Deleting a dataset deletes its tiles on every dashboard, pinned copies included."""
+    db.execute(delete(DashboardItem).where(DashboardItem.dataset_id == dataset_id))

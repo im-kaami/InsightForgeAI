@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LogOut,
   Share2,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -26,6 +27,7 @@ const nav = [
   { href: "/dashboards", label: "Dashboards", icon: LayoutDashboard },
   { href: "/history", label: "History", icon: History },
   { href: "/schedules", label: "Schedules", icon: CalendarClock },
+  { href: "/workspaces", label: "Workspaces", icon: Users },
   { href: "/sharing", label: "Sharing", icon: Share2 },
   { href: "/api-tokens", label: "API tokens", icon: KeyRound },
 ];

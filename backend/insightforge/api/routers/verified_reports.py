@@ -136,7 +136,7 @@ async def create_metric_report(
     llm: LLMDep,
 ):
     """Start a checked report for one approved metric. Code calculates everything; no AI is used."""
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "read")
     version = (
         owned_version(db, user, dataset, body.version_id)
         if body.version_id

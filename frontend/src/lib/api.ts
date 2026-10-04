@@ -251,6 +251,40 @@ export const verifiedReports = {
 
 export type Dashboard = components["schemas"]["DashboardOut"];
 export type DashboardItem = components["schemas"]["DashboardItemOut"];
+export type Workspace = components["schemas"]["WorkspaceOut"];
+type Role = "viewer" | "editor" | "owner";
+
+export const workspaces = {
+  list: () => apiFetch<Workspace[]>("/workspaces"),
+  create: (name: string) => apiFetch<Workspace>("/workspaces", json({ name })),
+  remove: (id: string) => apiFetch<void>(`/workspaces/${id}`, { method: "DELETE" }),
+  invite: (id: string, email: string, role: Role) =>
+    apiFetch<components["schemas"]["InviteCreated"]>(
+      `/workspaces/${id}/invites`,
+      json({ email, role }),
+    ),
+  revokeInvite: (id: string, inviteId: string) =>
+    apiFetch<void>(`/workspaces/${id}/invites/${inviteId}`, { method: "DELETE" }),
+  accept: (secret: string) => apiFetch<Workspace>("/workspaces/invites/accept", json({ secret })),
+  setRole: (id: string, userId: string, role: Role) =>
+    apiFetch<Workspace>(`/workspaces/${id}/members/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    }),
+  removeMember: (id: string, userId: string) =>
+    apiFetch<void>(`/workspaces/${id}/members/${userId}`, { method: "DELETE" }),
+  shareDataset: (datasetId: string, workspaceId: string | null) =>
+    apiFetch<Dataset>(`/datasets/${datasetId}/workspace`, {
+      method: "PUT",
+      body: JSON.stringify({ workspace_id: workspaceId }),
+    }),
+  shareDashboard: (dashboardId: string, workspaceId: string | null) =>
+    apiFetch<Dashboard>(`/dashboards/${dashboardId}/workspace`, {
+      method: "PUT",
+      body: JSON.stringify({ workspace_id: workspaceId }),
+    }),
+};
+
 export type ShareLink = components["schemas"]["ShareOut"];
 export type ShareCreated = components["schemas"]["ShareCreated"];
 export type SharedView = {

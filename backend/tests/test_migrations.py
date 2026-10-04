@@ -47,7 +47,7 @@ def test_legacy_database_with_empty_alembic_version_is_upgraded(tmp_path, monkey
     } <= set(inspect(engine).get_table_names())
     with engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == (
-            "0014_share_links"
+            "0015_workspaces"
         )
     engine.dispose()
     get_settings.cache_clear()
@@ -116,7 +116,7 @@ def test_upgrade_from_0002_preserves_existing_rows(tmp_path, monkeypatch):
         assert connection.execute(text("SELECT metrics_json FROM datasets WHERE id='d'")).scalar() == "{}"
         assert connection.execute(text("SELECT queries_json FROM datasets WHERE id='d'")).scalar() == "{}"
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == (
-            "0014_share_links"
+            "0015_workspaces"
         )
     engine.dispose()
     get_settings.cache_clear()

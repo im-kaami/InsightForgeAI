@@ -19,6 +19,7 @@ from insightforge.api.routers import (
     sessions,
     shares,
     verified_reports,
+    workspaces,
 )
 from insightforge.api.schemas import HealthOut, ImportOptions
 from insightforge.config import get_settings, validate_settings
@@ -93,6 +94,7 @@ def create_app() -> FastAPI:
         follows.router,
         dashboards.router,
         shares.router,
+        workspaces.router,
     ):
         application.include_router(router, prefix="/api")
 

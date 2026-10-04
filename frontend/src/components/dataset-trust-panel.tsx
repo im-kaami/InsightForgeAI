@@ -15,7 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { datasets, health, type Dataset, type DatasetVersion } from "@/lib/api";
+import { WorkspaceShare } from "@/components/workspace-share";
+import { datasets, health, workspaces, type Dataset, type DatasetVersion } from "@/lib/api";
 
 const descriptions = {
   local:
@@ -101,7 +102,24 @@ export function DatasetTrustPanel({
         <CardContent className="space-y-4">
           <p className="text-sm">
             Current policy: <Badge variant="outline">{dataset.llm_policy}</Badge>
+            {dataset.access && dataset.access !== "own" ? (
+              <Badge variant="secondary" className="ml-2" data-testid="dataset-access">
+                {dataset.access === "edit"
+                  ? "Shared with you: can edit"
+                  : "Shared with you: view only"}
+              </Badge>
+            ) : null}
           </p>
+          {dataset.access === "own" ? (
+            <WorkspaceShare
+              label="Share with workspace"
+              value={dataset.workspace_id}
+              onChange={async (workspaceId) => {
+                await workspaces.shareDataset(dataset.id, workspaceId);
+                await queryClient.invalidateQueries({ queryKey: ["dataset", dataset.id] });
+              }}
+            />
+          ) : null}
           <div className="space-y-2">
             <Label htmlFor="privacy-mode">Data sharing</Label>
             <select

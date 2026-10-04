@@ -357,6 +357,20 @@ Limits: drift compares the new data with the training data; it does not prove th
 
 **Refresh** (one tile) and **Refresh all** re-run the metric and question tiles on the current data version with tested code; no AI is used. If a refresh fails (for example, the metric or question was removed), the tile shows why and keeps its last good result. **Up** and **Down** reorder tiles. Deleting a dataset deletes its tiles from every dashboard, pinned copies included, because they contain its data.
 
+## Workspaces (teams and roles)
+
+**Workspaces** in the sidebar lets you work with your team. Create a workspace, then **Invite someone** by email with a role; InsightForge shows an invitation link (valid for 7 days, once, for that address only) that you send yourself, since it does not send email. The invited person signs in with that address, opens the link and clicks **Accept invitation**.
+
+Share what you own with one workspace: **Share with workspace** in a dataset's "Data sharing and privacy" card, and **Show to workspace** on a dashboard. What members can do depends on their role:
+
+| Role | Shared datasets | Shared dashboards | Workspace |
+|---|---|---|---|
+| Viewer | View, preview, ask questions, run checked metric reports, follow metrics | View | See members |
+| Editor | Also change notes, relationships, metrics, approved questions, cleaning recipes, validation rules and data versions | View | See members |
+| Owner | Same as editor | View | Also invite, change roles, remove members, rename or delete it |
+
+Only a dataset's or dashboard's own owner can change its privacy mode, stop sharing it, create share links to it, or delete it. Questions you ask stay in your own sessions; other members do not see them. A workspace always keeps at least one owner. When someone leaves or is removed, the datasets and dashboards they shared with it stop being shared. Deleting a workspace stops sharing everything in it. Saved prediction models, scheduled analyses and verified sales reports remain personal for now.
+
 ## Share links
 
 **Share** on a dashboard or on a completed answer creates a read-only link that anyone can open without signing in. Choose when it expires (1, 7, 30 or 90 days) and tick that you understand anyone with the link can see the data it shows; the link is shown once (InsightForge keeps only a fingerprint of it). **Sharing** in the sidebar lists your links with their views and last view, and **Revoke** stops a link at once.

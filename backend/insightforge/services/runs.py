@@ -33,8 +33,9 @@ from insightforge.core.verified_report import (
     SalesDefinition,
     calculate_sales_report,
 )
-from insightforge.db.models import Artifact, ChatSession, Connection, Dataset, DatasetVersion, Run
+from insightforge.db.models import Artifact, ChatSession, Connection, Dataset, DatasetVersion, Run, User
 from insightforge.db.session import SessionLocal, configure
+from insightforge.services.access import dataset_access
 from insightforge.services.crypto import decrypt
 from insightforge.services.datasets import ensure_current_version, open_catalog
 from insightforge.services.events import RunEventBus
@@ -295,7 +296,9 @@ def execute_run(
         if chat is None:
             raise ValueError("The run session is unavailable")
         dataset = db.get(Dataset, chat.dataset_id)
-        if dataset is None or dataset.owner_id != run.owner_id:
+        asker = db.get(User, run.owner_id)
+        # The person asking needs access to the dataset (their own, or shared with their workspace).
+        if dataset is None or asker is None or dataset_access(db, asker, dataset) is None:
             raise ValueError("The run dataset is unavailable")
         connection = db.get(Connection, dataset.connection_id) if dataset.connection_id else None
         uri = decrypt(connection.encrypted_uri) if connection else None
@@ -303,7 +306,7 @@ def execute_run(
         if run.dataset_version_id and (
             version is None
             or version.dataset_id != dataset.id
-            or version.owner_id != run.owner_id
+            or version.owner_id != dataset.owner_id
             or version.state != "ready"
         ):
             raise ValueError("The pinned dataset version is unavailable or not confirmed")

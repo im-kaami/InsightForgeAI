@@ -7,10 +7,11 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { DashboardTileBody } from "@/components/dashboard-tile";
 import { ShareButton } from "@/components/share-button";
+import { WorkspaceShare } from "@/components/workspace-share";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { dashboards, datasets, type DashboardItemIn } from "@/lib/api";
+import { dashboards, datasets, workspaces, type DashboardItemIn } from "@/lib/api";
 
 const selectClass = "h-9 rounded-md border bg-background px-2 text-sm";
 
@@ -149,7 +150,8 @@ export default function DashboardPage() {
   const board = query.data;
   if (!board) return <p className="text-muted-foreground">Loading...</p>;
   const items = board.items ?? [];
-  const live = items.some((item) => item.kind !== "pinned");
+  const mine = board.access === "own";
+  const live = mine && items.some((item) => item.kind !== "pinned");
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -161,7 +163,23 @@ export default function DashboardPage() {
           {board.description ? <p className="text-muted-foreground">{board.description}</p> : null}
         </div>
         <div className="flex flex-wrap items-start gap-2">
-          <ShareButton kind="dashboard" targetId={id} />
+          {board.access !== "own" ? (
+            <span className="text-sm text-muted-foreground" data-testid="dashboard-view-only">
+              Shared with you: view only
+            </span>
+          ) : (
+            <>
+              <WorkspaceShare
+                label="Show to workspace"
+                value={board.workspace_id}
+                onChange={async (workspaceId) => {
+                  await workspaces.shareDashboard(id, workspaceId);
+                  await reload();
+                }}
+              />
+              <ShareButton kind="dashboard" targetId={id} />
+            </>
+          )}
           {live ? (
             <Button
               type="button"
@@ -172,20 +190,22 @@ export default function DashboardPage() {
               {busy ? "Working..." : "Refresh all"}
             </Button>
           ) : null}
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={busy}
-            onClick={async () => {
-              if (!window.confirm(`Delete the dashboard "${board.name}"? Its tiles are removed.`))
-                return;
-              await act(() => dashboards.remove(id));
-              await client.invalidateQueries({ queryKey: ["dashboards"] });
-              router.push("/dashboards");
-            }}
-          >
-            Delete dashboard
-          </Button>
+          {mine ? (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy}
+              onClick={async () => {
+                if (!window.confirm(`Delete the dashboard "${board.name}"? Its tiles are removed.`))
+                  return;
+                await act(() => dashboards.remove(id));
+                await client.invalidateQueries({ queryKey: ["dashboards"] });
+                router.push("/dashboards");
+              }}
+            >
+              Delete dashboard
+            </Button>
+          ) : null}
         </div>
       </header>
       {items.length === 0 ? (
@@ -198,7 +218,7 @@ export default function DashboardPage() {
           <Card key={item.id} data-testid="dashboard-tile">
             <CardHeader className="flex-row items-start justify-between gap-2">
               <CardTitle className="text-base">{item.title}</CardTitle>
-              <div className="flex shrink-0 gap-1">
+              <div className={mine ? "flex shrink-0 gap-1" : "hidden"}>
                 {item.kind !== "pinned" ? (
                   <Button
                     type="button"
@@ -248,7 +268,7 @@ export default function DashboardPage() {
           </Card>
         ))}
       </div>
-      <AddTile dashboardId={id} onDone={async () => void (await reload())} />
+      {mine ? <AddTile dashboardId={id} onDone={async () => void (await reload())} /> : null}
     </div>
   );
 }

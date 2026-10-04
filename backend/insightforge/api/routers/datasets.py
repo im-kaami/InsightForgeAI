@@ -23,6 +23,7 @@ from insightforge.api.schemas import (
     URLDatasetCreate,
     VersionConfirm,
     VersionOut,
+    WorkspaceShareIn,
 )
 from insightforge.config import get_settings
 from insightforge.core.metrics import (
@@ -59,6 +60,14 @@ from insightforge.db.models import (
     User,
 )
 from insightforge.ingest import IngestError, detect_source, parse_db_uri, public_source
+from insightforge.services.access import (
+    AccessError,
+    Need,
+    accessible_dataset,
+    dataset_access,
+    visible_datasets,
+    workspace_role,
+)
 from insightforge.services.crypto import decrypt, encrypt
 from insightforge.services.datasets import (
     activate_version,
@@ -118,8 +127,12 @@ def _utc(value: datetime | None) -> datetime | None:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
-def output(dataset: Dataset, review_version_id: str | None = None) -> DatasetOut:
+def output(
+    dataset: Dataset, review_version_id: str | None = None, access: str | None = None
+) -> DatasetOut:
     return DatasetOut(
+        workspace_id=dataset.workspace_id,
+        access=access,
         id=dataset.id,
         name=dataset.name,
         kind=dataset.kind,
@@ -158,21 +171,27 @@ def version_output(version: DatasetVersion) -> VersionOut:
     )
 
 
-def owned(db: Db, user: User, dataset_id: str) -> Dataset:
-    dataset = db.scalar(
-        select(Dataset).where(Dataset.id == dataset_id, Dataset.owner_id == user.id)
-    )
-    if not dataset:
-        raise HTTPException(404, "Dataset not found")
-    return dataset
+def owned(db: Db, user: User, dataset_id: str, need: Need = "own") -> Dataset:
+    """The dataset if ``user`` has at least ``need`` access (own, or a workspace role); else 404/403."""
+    try:
+        return accessible_dataset(db, user, dataset_id, need)
+    except AccessError as error:
+        raise HTTPException(error.status, str(error)) from error
+
+
+def _owner(db: Db, dataset: Dataset) -> User:
+    owner = db.get(User, dataset.owner_id)
+    assert owner is not None
+    return owner
 
 
 def owned_version(db: Db, user: User, dataset: Dataset, version_id: str) -> DatasetVersion:
+    """A version of a dataset the caller already has access to (versions belong to its owner)."""
     version = db.scalar(
         select(DatasetVersion).where(
             DatasetVersion.id == version_id,
             DatasetVersion.dataset_id == dataset.id,
-            DatasetVersion.owner_id == user.id,
+            DatasetVersion.owner_id == dataset.owner_id,
         )
     )
     if not version:
@@ -200,19 +219,20 @@ def connection_uri(db: Db, dataset: Dataset) -> str | None:
 
 @router.get("", response_model=list[DatasetOut])
 def list_datasets(db: Db, user: CurrentUser):
+    visible = visible_datasets(db, user)
     drafts: dict[str, str] = {}
     for dataset_id, version_id in db.execute(
         select(DatasetVersion.dataset_id, DatasetVersion.id)
         .where(
-            DatasetVersion.owner_id == user.id,
+            DatasetVersion.dataset_id.in_([item.id for item in visible]),
             DatasetVersion.state == "draft",
         )
         .order_by(DatasetVersion.created_at.desc())
     ):
         drafts.setdefault(dataset_id, version_id)
     return [
-        output(item, review_version_id=drafts.get(item.id))
-        for item in db.scalars(select(Dataset).where(Dataset.owner_id == user.id))
+        output(item, review_version_id=drafts.get(item.id), access=dataset_access(db, user, item))
+        for item in visible
     ]
 
 
@@ -282,7 +302,7 @@ def from_connection(body: ConnectionDatasetCreate, db: Db, user: CurrentUser):
 
 @router.get("/{dataset_id}/versions", response_model=list[VersionOut])
 def versions(dataset_id: str, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "read")
     if dataset.connection_id:
         raise HTTPException(422, "Live connection datasets do not have immutable versions")
     return [version_output(item) for item in list_versions(db, dataset)]
@@ -297,16 +317,16 @@ async def replace_version(
     storage: StorageDep,
     options_json: Annotated[str | None, Form()] = None,
 ):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "edit")
     if dataset.connection_id:
         raise HTTPException(422, "Live connection datasets do not have immutable versions")
     values: list[tuple[str, Path]] = []
     try:
         for file in files:
             values.append((file.filename or "upload", await _stream_upload(file, storage)))
-        _, version = stage_files(
-            db, user, values, None, dataset=dataset, options=_options(options_json, len(values))
-        )
+        # Versions belong to the dataset's owner, also when an editor uploads them.
+        options = _options(options_json, len(values))
+        _, version = stage_files(db, _owner(db, dataset), values, None, dataset=dataset, options=options)
         return version_output(version)
     except IngestError as error:
         raise HTTPException(400, str(error)) from error
@@ -323,14 +343,14 @@ def confirm_version(
     db: Db,
     user: CurrentUser,
 ):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "edit")
     version = owned_version(db, user, dataset, version_id)
     return output(activate_version(db, dataset, version, body.expected_current_version_id))
 
 
 @router.post("/{dataset_id}/versions/{version_id}/profile", response_model=VersionOut)
 def refresh_version_profile(dataset_id: str, version_id: str, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "edit")
     version = owned_version(db, user, dataset, version_id)
     try:
         return version_output(reprofile_version(db, dataset, version))
@@ -340,9 +360,9 @@ def refresh_version_profile(dataset_id: str, version_id: str, db: Db, user: Curr
 
 @router.post("/{dataset_id}/refresh", response_model=DatasetOut)
 def refresh_dataset(dataset_id: str, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "edit")
     try:
-        version = refresh_url_dataset(db, user, dataset)
+        version = refresh_url_dataset(db, _owner(db, dataset), dataset)
     except IngestError as error:
         raise HTTPException(422, str(error)) from error
     return output(dataset, review_version_id=version.id)
@@ -350,7 +370,7 @@ def refresh_dataset(dataset_id: str, db: Db, user: CurrentUser):
 
 @router.put("/{dataset_id}/notes", response_model=DatasetOut)
 def update_notes(dataset_id: str, body: DatasetNotes, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "edit")
     dataset.notes_json = body.model_dump(mode="json")
     db.commit()
     db.refresh(dataset)
@@ -364,7 +384,7 @@ def _versioned(dataset: Dataset) -> None:
 
 @router.get("/{dataset_id}/suggestions", response_model=Suggestions)
 def suggestions(dataset_id: str, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "read")
     _versioned(dataset)
     ensure_current_version(db, dataset)
     if not dataset.profile_json:
@@ -375,7 +395,7 @@ def suggestions(dataset_id: str, db: Db, user: CurrentUser):
 
 @router.get("/{dataset_id}/relationships/suggestions", response_model=RelationshipSuggestions)
 def relationship_suggestions(dataset_id: str, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "read")
     _versioned(dataset)
     ensure_current_version(db, dataset)
     schema = SchemaInfo.model_validate(dataset.schema_json or {"tables": []})
@@ -397,7 +417,7 @@ def relationship_suggestions(dataset_id: str, db: Db, user: CurrentUser):
 
 @router.put("/{dataset_id}/relationships", response_model=DatasetOut)
 def update_relationships(dataset_id: str, body: RelationshipSet, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "edit")
     schema = SchemaInfo.model_validate(dataset.schema_json or {"tables": []})
     missing = unknown_columns(body.relationships, schema)
     if missing:
@@ -422,7 +442,7 @@ def _metric_context(dataset: Dataset) -> tuple[SchemaInfo, list]:
 
 @router.get("/{dataset_id}/metrics/suggestions", response_model=MetricSuggestions)
 def metric_suggestions(dataset_id: str, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "read")
     schema, _ = _metric_context(dataset)
     existing = SavedMetrics.model_validate(dataset.metrics_json or {}).metrics
     return MetricSuggestions(suggestions=suggest_metrics(schema, existing))
@@ -430,7 +450,7 @@ def metric_suggestions(dataset_id: str, db: Db, user: CurrentUser):
 
 @router.put("/{dataset_id}/metrics", response_model=DatasetOut)
 def update_metrics(dataset_id: str, body: MetricSet, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "edit")
     schema, relationships = _metric_context(dataset)
     problems = definition_problems(body.metrics, schema, relationships)
     if problems:
@@ -448,7 +468,7 @@ def update_metrics(dataset_id: str, body: MetricSet, db: Db, user: CurrentUser):
 @router.post("/{dataset_id}/metrics/preview", response_model=MetricPreviewOut)
 def preview_metric(dataset_id: str, body: MetricPreviewIn, db: Db, user: CurrentUser):
     """Calculate a metric (saved or still being edited) on the current version, in code."""
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "read")
     schema, relationships = _metric_context(dataset)
     query = body.query or MetricQuery(metric=body.metric.name)
     request = query.model_copy(update={"metric": body.metric.name})
@@ -523,13 +543,13 @@ def _save_queries(db: Db, dataset: Dataset, body: QuerySet) -> DatasetOut:
 
 @router.put("/{dataset_id}/queries", response_model=DatasetOut)
 def update_queries(dataset_id: str, body: QuerySet, db: Db, user: CurrentUser):
-    return _save_queries(db, owned(db, user, dataset_id), body)
+    return _save_queries(db, owned(db, user, dataset_id, "edit"), body)
 
 
 @router.post("/{dataset_id}/queries/from-run", response_model=DatasetOut)
 def save_query_from_run(dataset_id: str, body: SaveQueryIn, db: Db, user: CurrentUser):
     """Approve a result table's SQL from one of this dataset's runs as an answer to its question."""
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "edit")
     run = db.scalar(
         select(Run)
         .join(ChatSession, ChatSession.id == Run.session_id)
@@ -559,7 +579,7 @@ def save_query_from_run(dataset_id: str, body: SaveQueryIn, db: Db, user: Curren
 
 @router.put("/{dataset_id}/recipe", response_model=DatasetOut)
 def update_recipe(dataset_id: str, body: CleaningRecipe, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "edit")
     _versioned(dataset)
     save_recipe(db, dataset, body.steps, body.auto_apply)
     return output(dataset, review_version_id=latest_draft_id(db, dataset))
@@ -567,7 +587,7 @@ def update_recipe(dataset_id: str, body: CleaningRecipe, db: Db, user: CurrentUs
 
 @router.post("/{dataset_id}/recipe/apply", response_model=VersionOut, status_code=201)
 def apply_saved_recipe(dataset_id: str, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "edit")
     try:
         return version_output(stage_recipe_version(db, dataset))
     except IngestError as error:
@@ -576,7 +596,7 @@ def apply_saved_recipe(dataset_id: str, db: Db, user: CurrentUser):
 
 @router.put("/{dataset_id}/rules", response_model=DatasetOut)
 def update_rules(dataset_id: str, body: RuleSet, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "edit")
     _versioned(dataset)
     save_rules(db, dataset, body.rules)
     current = ensure_current_version(db, dataset)
@@ -590,12 +610,24 @@ def update_rules(dataset_id: str, body: RuleSet, db: Db, user: CurrentUser):
 
 @router.post("/{dataset_id}/versions/{version_id}/validate", response_model=VersionOut)
 def recheck_version(dataset_id: str, version_id: str, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "edit")
     version = owned_version(db, user, dataset, version_id)
     try:
         return version_output(validate_version(db, dataset, version))
     except IngestError as error:
         raise HTTPException(400, str(error)) from error
+
+
+@router.put("/{dataset_id}/workspace", response_model=DatasetOut)
+def share_dataset(dataset_id: str, body: WorkspaceShareIn, db: Db, user: CurrentUser):
+    """Share the dataset with one of your workspaces (members get access by role), or stop."""
+    dataset = owned(db, user, dataset_id)
+    if body.workspace_id and workspace_role(db, user.id, body.workspace_id) is None:
+        raise HTTPException(404, "Workspace not found")
+    dataset.workspace_id = body.workspace_id
+    db.commit()
+    db.refresh(dataset)
+    return output(dataset, review_version_id=latest_draft_id(db, dataset), access="own")
 
 
 @router.patch("/{dataset_id}/privacy", response_model=DatasetOut)
@@ -631,7 +663,7 @@ async def add_dataset_source(
     user: CurrentUser,
     storage: StorageDep,
 ):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "edit")
     temp_path: Path | None = None
     try:
         if request.headers.get("content-type", "").startswith("multipart/"):
@@ -664,15 +696,17 @@ async def add_dataset_source(
 
 @router.get("/{dataset_id}", response_model=DatasetOut)
 def get_dataset(dataset_id: str, db: Db, user: CurrentUser):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "read")
     if not dataset.connection_id:
         ensure_current_version(db, dataset)
-    return output(dataset, review_version_id=latest_draft_id(db, dataset))
+    return output(
+        dataset, review_version_id=latest_draft_id(db, dataset), access=dataset_access(db, user, dataset)
+    )
 
 
 @router.get("/{dataset_id}/schema")
 def schema(dataset_id: str, db: Db, user: CurrentUser):
-    return owned(db, user, dataset_id).schema_json
+    return owned(db, user, dataset_id, "read").schema_json
 
 
 @router.get("/{dataset_id}/preview")
@@ -684,7 +718,7 @@ def preview(
     limit: int = 50,
     version_id: str | None = None,
 ):
-    dataset = owned(db, user, dataset_id)
+    dataset = owned(db, user, dataset_id, "read")
     if version_id is None and not dataset.connection_id:
         ensure_current_version(db, dataset)
     if version_id:
@@ -751,9 +785,9 @@ def delete_dataset(
     from insightforge.services.models import delete_models_for_dataset
     from insightforge.services.scheduler import follow_job_id, scheduler
 
-    for follow_id in delete_follows_for_dataset(db, user.id, dataset.id):
+    for follow_id in delete_follows_for_dataset(db, dataset.id):
         scheduler.remove(follow_job_id(follow_id))
-    forget_dataset(db, user.id, dataset.id)
+    forget_dataset(db, dataset.id)
     delete_models_for_dataset(db, user.id, dataset.id)
     db.delete(dataset)
     db.commit()

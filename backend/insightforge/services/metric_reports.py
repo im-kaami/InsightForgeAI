@@ -363,15 +363,9 @@ def delete_follow(db: Session, follow: MetricFollow) -> None:
     db.commit()
 
 
-def delete_follows_for_dataset(db: Session, owner_id: str, dataset_id: str) -> list[str]:
-    """Remove a dataset's follows and their checks; returns the removed follow ids."""
-    ids = list(
-        db.scalars(
-            select(MetricFollow.id).where(
-                MetricFollow.owner_id == owner_id, MetricFollow.dataset_id == dataset_id
-            )
-        )
-    )
+def delete_follows_for_dataset(db: Session, dataset_id: str) -> list[str]:
+    """Remove every member's follows of a dataset and their checks; returns the removed ids."""
+    ids = list(db.scalars(select(MetricFollow.id).where(MetricFollow.dataset_id == dataset_id)))
     if ids:
         db.execute(delete(MetricCheck).where(MetricCheck.follow_id.in_(ids)))
         db.execute(delete(MetricFollow).where(MetricFollow.id.in_(ids)))
