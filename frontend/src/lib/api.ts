@@ -30,6 +30,9 @@ export type MetricSuggestions = components["schemas"]["MetricSuggestions"];
 export type MetricPreview = components["schemas"]["MetricPreviewOut"];
 export type ApprovedQuery = components["schemas"]["ApprovedQuery"];
 export type MetricReportCreate = components["schemas"]["MetricReportCreate"];
+export type FollowIn = components["schemas"]["FollowIn"];
+export type Follow = components["schemas"]["FollowOut"];
+export type MetricCheck = components["schemas"]["MetricCheckOut"];
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -234,6 +237,19 @@ export const verifiedReports = {
     apiFetch<ReportDefinition>(`/datasets/${datasetId}/reports`, json(body)),
   run: (datasetId: string, definitionId: string, body: components["schemas"]["ReportRunCreate"]) =>
     apiFetch<Run>(`/datasets/${datasetId}/reports/${definitionId}/runs`, json(body)),
+};
+
+export const follows = {
+  list: (datasetId: string) => apiFetch<Follow[]>(`/datasets/${datasetId}/follows`),
+  create: (datasetId: string, body: FollowIn) =>
+    apiFetch<Follow>(`/datasets/${datasetId}/follows`, json(body)),
+  update: (id: string, body: FollowIn) =>
+    apiFetch<Follow>(`/follows/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  remove: (id: string) => apiFetch<void>(`/follows/${id}`, { method: "DELETE" }),
+  check: (id: string) => apiFetch<MetricCheck>(`/follows/${id}/check`, { method: "POST" }),
+  acknowledge: (id: string, checkId: string) =>
+    apiFetch<MetricCheck>(`/follows/${id}/checks/${checkId}/acknowledge`, { method: "POST" }),
+  alerts: () => apiFetch<MetricCheck[]>("/metric-alerts"),
 };
 
 export const models = {

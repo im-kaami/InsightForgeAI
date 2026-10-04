@@ -12,7 +12,7 @@ All texts are ASCII so the CLI and the Windows console can print them.
 from __future__ import annotations
 
 import math
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any, Literal
 
 import pandas as pd
@@ -78,6 +78,32 @@ def _percent(change: float | None, previous: float | None) -> float | None:
     if change is None or previous is None or previous <= 0:
         return None
     return round(change / previous * 100, 2)
+
+
+def latest_date(
+    catalog: DataCatalog, metric: Metric, schema: SchemaInfo, timeout_seconds: float = 30
+) -> date | None:
+    """The most recent readable date among the metric's rows (after its fixed conditions)."""
+    if not metric.date_column or schema.table(metric.table) is None:
+        return None
+    table, date_col = _canonical(schema, metric.table, metric.date_column)
+    fixed = " AND ".join(
+        _condition(f"{_quote('t0')}.{_quote(_canonical(schema, table, item.column)[1])}", item)
+        for item in metric.filters
+    )
+    sql = (
+        f"SELECT MAX(TRY_CAST({_quote('t0')}.{_quote(date_col)} AS DATE)) FROM {_qualified(table)} "
+        f"AS {_quote('t0')}" + (f" WHERE {fixed}" if fixed else "")
+    )
+    value = catalog.query(sql, timeout_seconds=timeout_seconds).iloc[0, 0]
+    if value is None or pd.isna(value):
+        return None
+    return pd.Timestamp(value).date()
+
+
+def rolling_period(end: date, days: int) -> ReportPeriod:
+    """The ``days`` days ending on ``end`` (inclusive); compared with the ``days`` days before."""
+    return ReportPeriod(start_date=end - timedelta(days=days - 1), end_date=end)
 
 
 def calculate_metric_report(

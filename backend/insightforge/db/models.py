@@ -219,3 +219,44 @@ class ModelScoring(Base):
     alert: Mapped[bool] = mapped_column(Boolean, default=False)
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MetricFollow(Base):
+    """An approved metric whose checked report is re-run on a schedule or on new data (Phase 4e)."""
+
+    __tablename__ = "metric_follows"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("datasets.id"), index=True)
+    metric: Mapped[str] = mapped_column(String(60))
+    group_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    days: Mapped[int] = mapped_column(Integer, default=30)
+    threshold_percent: Mapped[float] = mapped_column(Float, default=10.0)
+    cron: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    timezone: Mapped[str] = mapped_column(String(64), default="UTC")
+    on_new_data: Mapped[bool] = mapped_column(Boolean, default=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_run_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MetricCheck(Base):
+    """One check of a followed metric: the report run, its change and whether it raised an alert."""
+
+    __tablename__ = "metric_checks"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    follow_id: Mapped[str] = mapped_column(ForeignKey("metric_follows.id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    trigger: Mapped[str] = mapped_column(String(20))
+    version_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    status: Mapped[str] = mapped_column(String(20))
+    current: Mapped[float | None] = mapped_column(Float, nullable=True)
+    previous: Mapped[float | None] = mapped_column(Float, nullable=True)
+    change_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    message: Mapped[str] = mapped_column(Text, default="")
+    alert: Mapped[bool] = mapped_column(Boolean, default=False)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

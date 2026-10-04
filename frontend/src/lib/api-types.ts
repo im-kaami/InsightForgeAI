@@ -982,6 +982,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/datasets/{dataset_id}/follows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Follows */
+        get: operations["list_follows_api_datasets__dataset_id__follows_get"];
+        put?: never;
+        /** Create Follow */
+        post: operations["create_follow_api_datasets__dataset_id__follows_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/follows/{follow_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Follow */
+        put: operations["update_follow_api_follows__follow_id__put"];
+        post?: never;
+        /** Delete Follow */
+        delete: operations["delete_follow_api_follows__follow_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/follows/{follow_id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Now
+         * @description Run the followed metric's checked report now (code only; no AI) and record the result.
+         */
+        post: operations["check_now_api_follows__follow_id__check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/follows/{follow_id}/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Checks */
+        get: operations["list_checks_api_follows__follow_id__checks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/follows/{follow_id}/checks/{check_id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge */
+        post: operations["acknowledge_api_follows__follow_id__checks__check_id__acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/metric-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Metric Alerts */
+        get: operations["metric_alerts_api_metric_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1565,6 +1672,80 @@ export interface components {
             /** Conditions */
             conditions: components["schemas"]["Condition"][];
         };
+        /**
+         * FollowIn
+         * @description Follow an approved metric: re-run its checked report and alert on large changes.
+         */
+        FollowIn: {
+            /** Metric */
+            metric: string;
+            /** Group By */
+            group_by?: string | null;
+            /**
+             * Days
+             * @default 30
+             */
+            days: number;
+            /**
+             * Threshold Percent
+             * @default 10
+             */
+            threshold_percent: number;
+            /** Cron */
+            cron?: string | null;
+            /**
+             * Timezone
+             * @default UTC
+             */
+            timezone: string;
+            /**
+             * On New Data
+             * @default true
+             */
+            on_new_data: boolean;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+        };
+        /** FollowOut */
+        FollowOut: {
+            /** Id */
+            id: string;
+            /** Dataset Id */
+            dataset_id: string;
+            /** Metric */
+            metric: string;
+            /** Group By */
+            group_by: string | null;
+            /** Days */
+            days: number;
+            /** Threshold Percent */
+            threshold_percent: number;
+            /** Cron */
+            cron: string | null;
+            /** Timezone */
+            timezone: string;
+            /** On New Data */
+            on_new_data: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Last Run Id */
+            last_run_id: string | null;
+            /** Last Checked At */
+            last_checked_at: string | null;
+            /** Next Run At */
+            next_run_at: string | null;
+            /** Created At */
+            created_at: string | null;
+            last_check?: components["schemas"]["MetricCheckOut"] | null;
+            /**
+             * Open Alerts
+             * @default 0
+             */
+            open_alerts: number;
+        };
         /** FreshnessRule */
         FreshnessRule: {
             /** Id */
@@ -1667,6 +1848,43 @@ export interface components {
              * @default false
              */
             approved: boolean;
+        };
+        /** MetricCheckOut */
+        MetricCheckOut: {
+            /** Id */
+            id: string;
+            /** Follow Id */
+            follow_id: string;
+            /** Run Id */
+            run_id: string | null;
+            /** Trigger */
+            trigger: string;
+            /** Version Id */
+            version_id: string | null;
+            /** Status */
+            status: string;
+            /** Current */
+            current: number | null;
+            /** Previous */
+            previous: number | null;
+            /** Change Percent */
+            change_percent: number | null;
+            /** Message */
+            message: string;
+            /** Alert */
+            alert: boolean;
+            /** Acknowledged At */
+            acknowledged_at: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Metric */
+            metric?: string | null;
+            /** Metric Label */
+            metric_label?: string | null;
+            /** Dataset Id */
+            dataset_id?: string | null;
+            /** Session Id */
+            session_id?: string | null;
         };
         /**
          * MetricFilter
@@ -4835,6 +5053,250 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScoringOut"][];
+                };
+            };
+        };
+    };
+    list_follows_api_datasets__dataset_id__follows_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_follow_api_datasets__dataset_id__follows_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FollowIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_follow_api_follows__follow_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                follow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FollowIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_follow_api_follows__follow_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                follow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_now_api_follows__follow_id__check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                follow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_checks_api_follows__follow_id__checks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                follow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricCheckOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_api_follows__follow_id__checks__check_id__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                follow_id: string;
+                check_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    metric_alerts_api_metric_alerts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricCheckOut"][];
                 };
             };
         };

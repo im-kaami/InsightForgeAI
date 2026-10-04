@@ -310,6 +310,10 @@ Limits: questions that do not name a metric are planned as before; questions tha
 
 When the previous period has no rows, or its value is zero or negative, the change is shown as unavailable, not as zero. The report freezes the dataset version, the metric definition and its revision.
 
+**Follow a metric.** Under each approved metric with a date column, **Follow** watches it for you. Choose a window in days (for example 30), the change in percent that should raise an alert, optionally a grouping to split by, and when to check: **Every day**, **Every Monday** or **On the 1st of each month** (all at 08:00 in your browser's time zone), and/or **when new data is confirmed**. **Check now** runs a check at once.
+
+Each check runs the checked report for the last N days that have data (ending on the latest date in the metric's rows) against the N days before. It records the result in plain words, for example "Revenue rose 116.67% in the 30 days to 2025-04-25 (GBP 130 against GBP 60 in the previous 30 days); at or above the 50% alert threshold." When the total changes by at least the threshold, or the check cannot run (the metric was removed, a blocking check failed), an alert appears under **Metric alerts** in the sidebar until you **Dismiss** it. **Open report** shows the full checked report. No AI is used. The last 100 checks per follow are kept; alerts are in-app only for now.
+
 ## Value index
 
 People rarely type values exactly as they are stored: "the west" for `West`, "electronic goods" for `Electronics`, "business customers" for `Business`. Before planning, code reads the distinct values of short, category-like text columns (at most 500 values each; identifiers, sensitive columns and long free text are skipped) and matches the question's words to them, allowing different case, plurals and small typos ("close spelling"). No AI is involved.

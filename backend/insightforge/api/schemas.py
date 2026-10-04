@@ -101,6 +101,58 @@ class ReportRunCreate(ReportPeriod):
     version_id: str
 
 
+class FollowIn(BaseModel):
+    """Follow an approved metric: re-run its checked report and alert on large changes."""
+
+    metric: str = Field(min_length=1, max_length=60)
+    group_by: str | None = Field(default=None, max_length=200)
+    days: int = Field(default=30, ge=1, le=366)
+    threshold_percent: float = Field(default=10, gt=0, le=1000)
+    cron: str | None = Field(default=None, max_length=100)
+    timezone: str = Field(default="UTC", max_length=64)
+    on_new_data: bool = True
+    enabled: bool = True
+
+
+class MetricCheckOut(APIModel):
+    id: str
+    follow_id: str
+    run_id: str | None
+    trigger: str
+    version_id: str | None
+    status: str
+    current: float | None
+    previous: float | None
+    change_percent: float | None
+    message: str
+    alert: bool
+    acknowledged_at: datetime | None
+    created_at: datetime | None
+    metric: str | None = None
+    metric_label: str | None = None
+    dataset_id: str | None = None
+    session_id: str | None = None
+
+
+class FollowOut(APIModel):
+    id: str
+    dataset_id: str
+    metric: str
+    group_by: str | None
+    days: int
+    threshold_percent: float
+    cron: str | None
+    timezone: str
+    on_new_data: bool
+    enabled: bool
+    last_run_id: str | None
+    last_checked_at: datetime | None
+    next_run_at: datetime | None
+    created_at: datetime | None
+    last_check: MetricCheckOut | None = None
+    open_alerts: int = 0
+
+
 class MetricReportCreate(ReportPeriod):
     """A checked report for one approved metric; the current version is used when none is given."""
 

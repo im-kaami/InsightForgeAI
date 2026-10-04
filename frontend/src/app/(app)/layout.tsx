@@ -8,7 +8,7 @@ import { RequireAuth } from "@/components/require-auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { health, models } from "@/lib/api";
+import { follows, health, models } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +25,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const alertsQuery = useQuery({
     queryKey: ["model-alerts"],
     queryFn: models.alerts,
+    enabled: Boolean(user),
+    refetchInterval: 60_000,
+  });
+  const metricAlertsQuery = useQuery({
+    queryKey: ["metric-alerts"],
+    queryFn: follows.alerts,
     enabled: Boolean(user),
     refetchInterval: 60_000,
   });
@@ -73,6 +79,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 >
                   {item.model_name ?? "A saved model"}:{" "}
                   {item.status === "failed" ? "check failed" : "retraining recommended"}
+                </Link>
+              ))}
+            </div>
+          )}
+          {metricAlertsQuery.data && metricAlertsQuery.data.length > 0 && (
+            <div
+              role="status"
+              data-testid="metric-alerts-nav"
+              className="mt-4 space-y-1 rounded-md border border-destructive/40 p-3 text-xs"
+            >
+              <p className="flex items-center gap-2 font-medium">
+                <BellRing className="size-4" />
+                Metric alerts
+              </p>
+              {Array.from(
+                new Map(metricAlertsQuery.data.map((item) => [item.follow_id, item])).values(),
+              ).map((item) => (
+                <Link
+                  key={item.follow_id}
+                  href={
+                    item.session_id
+                      ? `/sessions/${item.session_id}`
+                      : `/datasets/${item.dataset_id}`
+                  }
+                  className="block truncate hover:underline"
+                  title={item.message}
+                >
+                  {item.metric_label ?? item.metric ?? "A metric"}:{" "}
+                  {item.status === "failed"
+                    ? "check failed"
+                    : `${(item.change_percent ?? 0) > 0 ? "up" : "down"} ${Math.abs(item.change_percent ?? 0)}%`}
                 </Link>
               ))}
             </div>

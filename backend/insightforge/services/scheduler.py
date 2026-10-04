@@ -6,7 +6,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
 
-from insightforge.db.models import Dataset, ModelSchedule, Run, Schedule
+from insightforge.db.models import Dataset, MetricFollow, ModelSchedule, Run, Schedule
 from insightforge.db.session import SessionLocal, configure
 from insightforge.services.datasets import ensure_current_version
 from insightforge.services.runs import execute_run
@@ -22,6 +22,11 @@ def schedule_timezone(value: str) -> ZoneInfo:
 def model_job_id(schedule_id: str) -> str:
     """APScheduler job id for a model-scoring schedule (kept apart from analysis schedules)."""
     return f"model-{schedule_id}"
+
+
+def follow_job_id(follow_id: str) -> str:
+    """APScheduler job id for a followed metric's checks."""
+    return f"follow-{follow_id}"
 
 
 def next_run(cron: str, timezone: str) -> datetime | None:
@@ -48,7 +53,47 @@ class SchedulerService:
             self.add(schedule)
         for model_schedule in db.query(ModelSchedule).filter(ModelSchedule.enabled.is_(True)).all():
             self.add_model(model_schedule)
+        follows = db.query(MetricFollow).filter(
+            MetricFollow.enabled.is_(True), MetricFollow.cron.is_not(None)
+        )
+        for follow in follows.all():
+            self.add_follow(follow)
         db.commit()
+
+    def add_follow(self, follow: MetricFollow) -> None:
+        trigger = CronTrigger.from_crontab(follow.cron, timezone=schedule_timezone(follow.timezone))
+        self.scheduler.add_job(
+            self.run_follow,
+            trigger,
+            args=[follow.id],
+            id=follow_job_id(follow.id),
+            replace_existing=True,
+        )
+        follow.next_run_at = next_run(follow.cron, follow.timezone)
+
+    def reschedule_follow(self, follow: MetricFollow) -> None:
+        self.remove(follow_job_id(follow.id))
+        if follow.enabled and follow.cron:
+            self.add_follow(follow)
+
+    def run_follow(self, follow_id: str) -> str | None:
+        """Job body: run the followed metric's checked report and record the check."""
+        from insightforge.services.metric_reports import run_check
+
+        configure()
+        db = SessionLocal()
+        try:
+            follow = db.get(MetricFollow, follow_id)
+            if not follow or not follow.enabled:
+                return None
+            check = run_check(db, follow_id, "scheduled")
+            follow = db.get(MetricFollow, follow_id)
+            if follow is not None and follow.cron:
+                follow.next_run_at = next_run(follow.cron, follow.timezone)
+                db.commit()
+            return check.id
+        finally:
+            db.close()
 
     def add_model(self, schedule: ModelSchedule) -> None:
         trigger = CronTrigger.from_crontab(

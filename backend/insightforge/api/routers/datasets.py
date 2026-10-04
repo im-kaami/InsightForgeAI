@@ -746,7 +746,12 @@ def delete_dataset(
             db.execute(delete(Artifact).where(Artifact.run_id.in_(run_ids)))
             db.execute(delete(Run).where(Run.id.in_(run_ids)))
         db.execute(delete(ChatSession).where(ChatSession.id.in_(session_ids)))
+    from insightforge.services.metric_reports import delete_follows_for_dataset
     from insightforge.services.models import delete_models_for_dataset
+    from insightforge.services.scheduler import follow_job_id, scheduler
+
+    for follow_id in delete_follows_for_dataset(db, user.id, dataset.id):
+        scheduler.remove(follow_job_id(follow_id))
     delete_models_for_dataset(db, user.id, dataset.id)
     db.delete(dataset)
     db.commit()

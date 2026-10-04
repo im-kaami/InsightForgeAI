@@ -364,7 +364,10 @@ def activate_version(
         version.confirmed_at = datetime.now(UTC)
         db.commit()
         db.refresh(dataset)
-        return dataset
+    from insightforge.services.metric_reports import on_new_version
+
+    on_new_version(db, dataset.id)
+    return dataset
 
 
 def list_versions(db: Session, dataset: Dataset) -> list[DatasetVersion]:

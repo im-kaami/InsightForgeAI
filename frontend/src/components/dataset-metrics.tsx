@@ -8,9 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { MetricFollow } from "@/components/metric-follow";
 import { MetricReportForm } from "@/components/metric-report-form";
 import {
   datasets,
+  follows,
   type Dataset,
   type Metric,
   type MetricFilter,
@@ -122,6 +124,10 @@ export function DatasetMetrics({ dataset }: { dataset: Dataset }) {
     queryKey: ["metric-suggestions", dataset.id, dataset.current_version_id],
     queryFn: () => datasets.metricSuggestions(dataset.id),
     enabled: showSuggestions,
+  });
+  const followed = useQuery({
+    queryKey: ["follows", dataset.id],
+    queryFn: () => follows.list(dataset.id),
   });
   if (tables.length === 0) return null;
 
@@ -331,7 +337,14 @@ export function DatasetMetrics({ dataset }: { dataset: Dataset }) {
                   {item.synonyms?.length ? `; also called ${item.synonyms.join(", ")}` : ""}
                 </p>
                 {item.approved && item.date_column && !dirty ? (
-                  <MetricReportForm datasetId={dataset.id} metric={item} />
+                  <>
+                    <MetricReportForm datasetId={dataset.id} metric={item} />
+                    <MetricFollow
+                      datasetId={dataset.id}
+                      metric={item}
+                      items={(followed.data ?? []).filter((follow) => follow.metric === item.name)}
+                    />
+                  </>
                 ) : null}
                 {preview?.name === item.name && (
                   <div data-testid="metric-preview" className="space-y-1">
