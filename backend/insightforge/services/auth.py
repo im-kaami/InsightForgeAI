@@ -37,7 +37,12 @@ def decode_token(token: str) -> str:
 API_TOKEN_PREFIX = "ifk_"
 API_TOKEN_SCOPES = ("read", "ask")
 # Besides reading (GET), an "ask" token may only start sessions and runs.
-_ASK_ROUTES = (re.compile(r"^/api/sessions/?$"), re.compile(r"^/api/sessions/[^/]+/runs/?$"))
+_ASK_ROUTES = (
+    re.compile(r"^/api/sessions/?$"),
+    re.compile(r"^/api/sessions/[^/]+/runs/?$"),
+    # A checked metric report reads data and writes only a run, like asking a question.
+    re.compile(r"^/api/datasets/[^/]+/reports/metric/?$"),
+)
 
 
 def new_api_token() -> tuple[str, str]:

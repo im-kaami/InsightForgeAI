@@ -176,6 +176,82 @@ class FollowOut(APIModel):
     open_alerts: int = 0
 
 
+class ShareIn(BaseModel):
+    kind: Literal["dashboard", "run"]
+    target_id: str = Field(min_length=1, max_length=32)
+    expires_in_days: int = Field(default=7, ge=1, le=90)
+    # The owner must confirm that anyone with the link may see the data it shows.
+    acknowledged: Literal[True]
+
+
+class ShareOut(APIModel):
+    id: str
+    kind: str
+    target_id: str
+    title: str
+    prefix: str
+    expires_at: datetime
+    revoked_at: datetime | None
+    view_count: int
+    last_viewed_at: datetime | None
+    created_at: datetime | None
+
+
+class ShareView(BaseModel):
+    secret: str = Field(min_length=10, max_length=100)
+
+
+class ShareCreated(ShareOut):
+    """Returned once. The secret is part of the link and is never shown again."""
+
+    secret: str
+
+
+class DashboardIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=1000)
+
+
+class DashboardItemIn(BaseModel):
+    """``pinned``: run_id + position; ``metric``: dataset_id + metric (+ days, group_by);
+    ``question``: dataset_id + query_id."""
+
+    kind: Literal["pinned", "metric", "question"]
+    title: str | None = Field(default=None, max_length=300)
+    run_id: str | None = None
+    position: int | None = Field(default=None, ge=0)
+    dataset_id: str | None = None
+    metric: str | None = Field(default=None, max_length=60)
+    days: int = Field(default=30, ge=1, le=366)
+    group_by: str | None = Field(default=None, max_length=200)
+    query_id: str | None = Field(default=None, max_length=40)
+
+
+class DashboardItemOut(APIModel):
+    id: str
+    kind: str
+    title: str
+    position: int
+    dataset_id: str | None
+    config: dict[str, Any] = Field(validation_alias="config_json")
+    snapshot: dict[str, Any] = Field(validation_alias="snapshot_json")
+    source_run_id: str | None
+    version_id: str | None
+    refreshed_at: datetime | None
+    error: str | None
+    created_at: datetime | None
+
+
+class DashboardOut(APIModel):
+    id: str
+    name: str
+    description: str
+    created_at: datetime | None
+    updated_at: datetime | None
+    items: list[DashboardItemOut] = Field(default_factory=list)
+    item_count: int = 0
+
+
 class MetricReportCreate(ReportPeriod):
     """A checked report for one approved metric; the current version is used when none is given."""
 

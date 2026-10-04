@@ -347,6 +347,22 @@ The index is built for each question from the confirmed data version, so it is n
 
 Limits: drift compares the new data with the training data; it does not prove the model is right or wrong, and it says nothing about causes. Scoring stops when the chosen version is missing a feature column, or when it breaks a blocking validation rule. Models are stored as files under the storage directory and kept until you delete the model or its dataset. Model files are only ever written and read by the server; never replace them with files from elsewhere, because the format can run code when loaded.
 
+## Dashboards
+
+**Dashboards** in the sidebar collects results in one place. A dashboard holds up to 30 tiles of three kinds:
+
+- **Pinned result:** under any result table or chart in a session, **Pin to dashboard** copies it to a dashboard (or a new one). The copy never changes and shows which question produced it and how (approved metric, approved query or AI-written SQL). It stays when the session is deleted.
+- **Approved metric report:** the checked report for an approved metric (with a date column) over the last N days that have data, against the N days before.
+- **Approved question:** the result of an approved question's SQL on the current data.
+
+**Refresh** (one tile) and **Refresh all** re-run the metric and question tiles on the current data version with tested code; no AI is used. If a refresh fails (for example, the metric or question was removed), the tile shows why and keeps its last good result. **Up** and **Down** reorder tiles. Deleting a dataset deletes its tiles from every dashboard, pinned copies included, because they contain its data.
+
+## Share links
+
+**Share** on a dashboard or on a completed answer creates a read-only link that anyone can open without signing in. Choose when it expires (1, 7, 30 or 90 days) and tick that you understand anyone with the link can see the data it shows; the link is shown once (InsightForge keeps only a fingerprint of it). **Sharing** in the sidebar lists your links with their views and last view, and **Revoke** stops a link at once.
+
+A shared answer shows its question, summary, result tables, charts and assumptions. A shared dashboard shows its tiles as they are now. Visitors never see SQL, the run trace, sources, downloads or your account, and cannot refresh or change anything. The secret part of the link comes after `#`, which browsers never send to a server, so it does not appear in server logs. API tokens cannot create share links.
+
 ## API access tokens
 
 Use InsightForge from scripts and other tools with a personal API token. Open **API tokens** in the sidebar, give the token a name, choose its access and when it expires (1 to 365 days, 90 by default), and copy it: it is shown only once, and InsightForge stores only a SHA-256 fingerprint of it.
@@ -366,6 +382,36 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/runs/<run id>
 ```
 
 Runs are asynchronous: the last call returns the run with status `pending` or `running`; fetch it again until it is `completed` or `failed`. The full API is described at `http://localhost:8000/docs` (OpenAPI). Each user can have at most 20 active tokens.
+
+## MCP server (Claude Desktop, Cursor and other assistants)
+
+Use your datasets, approved metrics and approved questions from any assistant that supports the Model Context Protocol. The server runs on your computer and talks to InsightForge with an API token, so it can reach only your data and only what the token allows.
+
+1. Install the extra once: `backend/.venv/Scripts/python.exe -m pip install -e "backend[mcp]"`.
+2. Create a token on the **API tokens** page: **Read and ask questions** to ask and run reports, or **Read only** to browse.
+3. Add the server to your assistant. For Claude Desktop (`claude_desktop_config.json`) or Cursor (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "insightforge": {
+      "command": "E:/InsightForgeAI/backend/.venv/Scripts/insightforge.exe",
+      "args": ["mcp", "--url", "http://localhost:8000"],
+      "env": { "INSIGHTFORGE_TOKEN": "ifk_..." }
+    }
+  }
+}
+```
+
+Tools: `list_datasets`, `describe_dataset`, `ask` (waits for the checked answer), `metric_report` (a checked report for an approved metric) and `get_run`. Results keep their trust label (approved metric, approved query or AI-written SQL), the assumptions and at most 50 rows per table.
+
+The assistant sends what it receives to its own AI model, so each dataset's privacy mode decides what MCP returns:
+
+| Privacy mode | What the assistant can see |
+|---|---|
+| Full sharing | Everything: sample values, approved SQL, answers and report numbers |
+| Schema only | Table and column names and types, metric definitions without their fixed values, and approved questions; asking and reports are refused |
+| Local | The dataset's name only |
 
 ## Safety
 

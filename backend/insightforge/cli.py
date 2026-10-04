@@ -51,6 +51,11 @@ def _parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--out", type=Path)
     evaluate.add_argument("--baseline", type=Path)
     evaluate.add_argument("--max-drop", type=float, default=0.05)
+
+    serve = commands.add_parser(
+        "mcp", help="Run the MCP server on stdio (set INSIGHTFORGE_TOKEN to an API token)"
+    )
+    serve.add_argument("--url", help="InsightForge API address (default: INSIGHTFORGE_URL or localhost:8000)")
     return parser
 
 
@@ -75,8 +80,7 @@ def _pipe_rows(columns: list[str], rows: list[dict[str, Any]]) -> str:
         "| " + " | ".join("---" for _ in columns) + " |",
     ]
     lines.extend(
-        "| " + " | ".join(cell(row.get(column, "")) for column in columns) + " |"
-        for row in rows[:20]
+        "| " + " | ".join(cell(row.get(column, "")) for column in columns) + " |" for row in rows[:20]
     )
     return "\n".join(lines)
 
@@ -149,9 +153,7 @@ def _ask(args: argparse.Namespace) -> int:
             if args.base_url:
                 updates["llm_base_url"] = args.base_url
             llm = build_llm(settings.model_copy(update=updates))
-        result = InsightForgeAgent(llm, artifact_dir=args.out, render_png=args.png).run(
-            args.goal, catalog
-        )
+        result = InsightForgeAgent(llm, artifact_dir=args.out, render_png=args.png).run(args.goal, catalog)
         _print_result(result)
         return 0
     finally:
@@ -229,6 +231,14 @@ def _run(argv: list[str] | None = None) -> int:
     try:
         if args.command == "eval":
             return _eval(args)
+        if args.command == "mcp":
+            try:
+                from insightforge.mcp_server import run_from_environment
+            except ImportError:
+                print('Install the MCP extra first: pip install -e "backend[mcp]"', file=sys.stderr)
+                return 1
+            run_from_environment(args.url)
+            return 0
         return _ask(args) if args.command == "ask" else _schema(args)
     except IngestError as error:
         print(f"Ingestion error: {error}", file=sys.stderr)

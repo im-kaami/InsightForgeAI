@@ -147,6 +147,47 @@ def _record(db: Session, follow: MetricFollow, trigger: str, **values: Any) -> M
     return check
 
 
+def rolling_report(
+    db: Session,
+    owner_id: str,
+    dataset: Dataset | None,
+    metric_name: str,
+    days: int,
+    group_by: str | None,
+    execute: Callable[[str], None] | None = None,
+) -> tuple[Metric, ReportPeriod, Run]:
+    """Run the checked report for the last ``days`` days with data, now, and return the finished run.
+
+    Raises FollowError for anything that stops the report from starting (no confirmed version, a
+    removed metric, no readable dates). A report that starts and is then blocked returns its run.
+    """
+    from insightforge.services.datasets import ensure_current_version, open_catalog
+    from insightforge.services.runs import execute_run
+
+    version = ensure_current_version(db, dataset) if dataset else None
+    if dataset is None or version is None or version.state != "ready":
+        raise FollowError("the dataset has no confirmed version")
+    metric, revision = approved_metric(dataset, metric_name)
+    try:
+        check_request(dataset, version, metric, group_by)
+    except MetricError as error:
+        raise FollowError(str(error)) from error
+    catalog = open_catalog(dataset, for_run=True, version_id=version.id)
+    try:
+        end = latest_date(catalog, metric, SchemaInfo.model_validate(version.schema_json))
+    finally:
+        catalog.close()
+    if end is None:
+        raise FollowError(f"{metric.date_column} has no readable dates")
+    period = rolling_period(end, days)
+    run_id = new_report_run(db, owner_id, dataset, version, metric, revision, group_by, period).id
+    (execute or execute_run)(run_id)
+    db.expire_all()
+    run = db.get(Run, run_id)
+    assert run is not None
+    return metric, period, run
+
+
 def run_check(
     db: Session,
     follow_id: str,
@@ -154,8 +195,7 @@ def run_check(
     execute: Callable[[str], None] | None = None,
 ) -> MetricCheck:
     """Run the follow's checked report now and record the outcome. Never raises for data problems."""
-    from insightforge.services.datasets import ensure_current_version, open_catalog
-    from insightforge.services.runs import execute_run
+    from insightforge.services.datasets import ensure_current_version
 
     follow = db.get(MetricFollow, follow_id)
     if follow is None:
@@ -175,29 +215,16 @@ def run_check(
             alert=True,
         )
 
-    if dataset is None or version is None or version.state != "ready":
-        return failed("The check could not run: the dataset has no confirmed version")
     try:
-        metric, revision = approved_metric(dataset, follow.metric)
-        check_request(dataset, version, metric, follow.group_by)
-        catalog = open_catalog(dataset, for_run=True, version_id=version.id)
-        try:
-            end = latest_date(catalog, metric, SchemaInfo.model_validate(version.schema_json))
-        finally:
-            catalog.close()
-    except (FollowError, MetricError) as error:
+        metric, period, run = rolling_report(
+            db, follow.owner_id, dataset, follow.metric, follow.days, follow.group_by, execute
+        )
+    except FollowError as error:
         return failed(f"The check could not run: {error}")
     except Exception as error:  # noqa: BLE001 - recorded as a failed check with an alert
         log.warning("metric follow %s failed: %s", follow.id, error)
         return failed(f"The check could not run: {error}")
-    if end is None:
-        return failed(f"The check could not run: {metric.date_column} has no readable dates")
-    period = rolling_period(end, follow.days)
-    run = new_report_run(db, follow.owner_id, dataset, version, metric, revision, follow.group_by, period)
     run_id = run.id
-    (execute or execute_run)(run_id)
-    db.expire_all()
-    run = db.get(Run, run_id)
     window = f"the {follow.days} days to {period.end_date.isoformat()}"
     if run is None or run.status != "completed":
         reason = (run.error if run else None) or "the report did not finish"

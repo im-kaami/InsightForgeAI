@@ -1124,6 +1124,191 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/dashboards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Dashboards */
+        get: operations["list_dashboards_api_dashboards_get"];
+        put?: never;
+        /** Create Dashboard */
+        post: operations["create_dashboard_api_dashboards_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dashboards/{dashboard_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Dashboard */
+        get: operations["get_dashboard_api_dashboards__dashboard_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Dashboard */
+        delete: operations["delete_dashboard_api_dashboards__dashboard_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Dashboard */
+        patch: operations["update_dashboard_api_dashboards__dashboard_id__patch"];
+        trace?: never;
+    };
+    "/api/dashboards/{dashboard_id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Item */
+        post: operations["add_item_api_dashboards__dashboard_id__items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dashboards/{dashboard_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Dashboard
+         * @description Re-run every metric and question tile on the current data (code only; pinned tiles stay).
+         */
+        post: operations["refresh_dashboard_api_dashboards__dashboard_id__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dashboards/{dashboard_id}/items/{item_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Item */
+        post: operations["refresh_item_api_dashboards__dashboard_id__items__item_id__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dashboards/{dashboard_id}/items/{item_id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move Item */
+        post: operations["move_item_api_dashboards__dashboard_id__items__item_id__move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dashboards/{dashboard_id}/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Item */
+        delete: operations["delete_item_api_dashboards__dashboard_id__items__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Links */
+        get: operations["list_links_api_shares_get"];
+        put?: never;
+        /**
+         * Create Link
+         * @description Create a read-only link. Anyone with it can see the dashboard or answer until it expires.
+         */
+        post: operations["create_link_api_shares_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/shares/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke Link */
+        delete: operations["revoke_link_api_shares__link_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/shares/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * View Link
+         * @description The shared content, for anyone with the link. No sign-in; read-only.
+         *
+         *     The secret travels in the body, not the URL, so it never appears in access logs.
+         */
+        post: operations["view_link_api_public_shares_view_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1522,6 +1707,98 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /** DashboardIn */
+        DashboardIn: {
+            /** Name */
+            name: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+        };
+        /**
+         * DashboardItemIn
+         * @description ``pinned``: run_id + position; ``metric``: dataset_id + metric (+ days, group_by);
+         *     ``question``: dataset_id + query_id.
+         */
+        DashboardItemIn: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pinned" | "metric" | "question";
+            /** Title */
+            title?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            /** Position */
+            position?: number | null;
+            /** Dataset Id */
+            dataset_id?: string | null;
+            /** Metric */
+            metric?: string | null;
+            /**
+             * Days
+             * @default 30
+             */
+            days: number;
+            /** Group By */
+            group_by?: string | null;
+            /** Query Id */
+            query_id?: string | null;
+        };
+        /** DashboardItemOut */
+        DashboardItemOut: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Title */
+            title: string;
+            /** Position */
+            position: number;
+            /** Dataset Id */
+            dataset_id: string | null;
+            /** Config */
+            config: {
+                [key: string]: unknown;
+            };
+            /** Snapshot */
+            snapshot: {
+                [key: string]: unknown;
+            };
+            /** Source Run Id */
+            source_run_id: string | null;
+            /** Version Id */
+            version_id: string | null;
+            /** Refreshed At */
+            refreshed_at: string | null;
+            /** Error */
+            error: string | null;
+            /** Created At */
+            created_at: string | null;
+        };
+        /** DashboardOut */
+        DashboardOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Created At */
+            created_at: string | null;
+            /** Updated At */
+            updated_at: string | null;
+            /** Items */
+            items?: components["schemas"]["DashboardItemOut"][];
+            /**
+             * Item Count
+             * @default 0
+             */
+            item_count: number;
         };
         /** DataProfile */
         DataProfile: {
@@ -2813,6 +3090,88 @@ export interface components {
             run_count: number;
             /** Last Activity At */
             last_activity_at?: string | null;
+        };
+        /**
+         * ShareCreated
+         * @description Returned once. The secret is part of the link and is never shown again.
+         */
+        ShareCreated: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Target Id */
+            target_id: string;
+            /** Title */
+            title: string;
+            /** Prefix */
+            prefix: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** View Count */
+            view_count: number;
+            /** Last Viewed At */
+            last_viewed_at: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Secret */
+            secret: string;
+        };
+        /** ShareIn */
+        ShareIn: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "dashboard" | "run";
+            /** Target Id */
+            target_id: string;
+            /**
+             * Expires In Days
+             * @default 7
+             */
+            expires_in_days: number;
+            /**
+             * Acknowledged
+             * @constant
+             */
+            acknowledged: true;
+        };
+        /** ShareOut */
+        ShareOut: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Target Id */
+            target_id: string;
+            /** Title */
+            title: string;
+            /** Prefix */
+            prefix: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** View Count */
+            view_count: number;
+            /** Last Viewed At */
+            last_viewed_at: string | null;
+            /** Created At */
+            created_at: string | null;
+        };
+        /** ShareView */
+        ShareView: {
+            /** Secret */
+            secret: string;
         };
         /** StepResult */
         StepResult: {
@@ -5479,6 +5838,431 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MetricCheckOut"][];
+                };
+            };
+        };
+    };
+    list_dashboards_api_dashboards_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardOut"][];
+                };
+            };
+        };
+    };
+    create_dashboard_api_dashboards_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DashboardIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_dashboard_api_dashboards__dashboard_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dashboard_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_dashboard_api_dashboards__dashboard_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dashboard_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_dashboard_api_dashboards__dashboard_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dashboard_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DashboardIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_item_api_dashboards__dashboard_id__items_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dashboard_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DashboardItemIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardItemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_dashboard_api_dashboards__dashboard_id__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dashboard_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_item_api_dashboards__dashboard_id__items__item_id__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dashboard_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardItemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_item_api_dashboards__dashboard_id__items__item_id__move_post: {
+        parameters: {
+            query: {
+                direction: number;
+            };
+            header?: never;
+            path: {
+                dashboard_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_item_api_dashboards__dashboard_id__items__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dashboard_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_links_api_shares_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareOut"][];
+                };
+            };
+        };
+    };
+    create_link_api_shares_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_link_api_shares__link_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_link_api_public_shares_view_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareView"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

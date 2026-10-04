@@ -276,3 +276,53 @@ class ApiToken(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Dashboard(Base):
+    """A page of pinned results, approved metric reports and approved questions (Phase 5c)."""
+
+    __tablename__ = "dashboards"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DashboardItem(Base):
+    """One tile. ``snapshot_json`` keeps the shown result, so a pinned tile survives its session."""
+
+    __tablename__ = "dashboard_items"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    dashboard_id: Mapped[str] = mapped_column(ForeignKey("dashboards.id"), index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    dataset_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str] = mapped_column(String(300))
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    source_run_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    version_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    refreshed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ShareLink(Base):
+    """A read-only link to a dashboard or an answer (Phase 5d). Only a hash of its secret is stored."""
+
+    __tablename__ = "share_links"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    target_id: Mapped[str] = mapped_column(String(32), index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    prefix: Mapped[str] = mapped_column(String(16))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    view_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

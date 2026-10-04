@@ -249,6 +249,68 @@ export const verifiedReports = {
     apiFetch<Run>(`/datasets/${datasetId}/reports/${definitionId}/runs`, json(body)),
 };
 
+export type Dashboard = components["schemas"]["DashboardOut"];
+export type DashboardItem = components["schemas"]["DashboardItemOut"];
+export type ShareLink = components["schemas"]["ShareOut"];
+export type ShareCreated = components["schemas"]["ShareCreated"];
+export type SharedView = {
+  title: string;
+  expires_at: string;
+  content: Record<string, unknown>;
+};
+
+export const shares = {
+  list: () => apiFetch<ShareLink[]>("/shares"),
+  create: (kind: "dashboard" | "run", targetId: string, days: number) =>
+    apiFetch<ShareCreated>(
+      "/shares",
+      json({ kind, target_id: targetId, expires_in_days: days, acknowledged: true }),
+    ),
+  revoke: (id: string) => apiFetch<void>(`/shares/${id}`, { method: "DELETE" }),
+  // Public: no sign-in token is sent, and a 401 never redirects to the login page.
+  view: async (secret: string): Promise<SharedView> => {
+    const response = await fetch(`${API_BASE}/public/shares/view`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new ApiError(response.status, errorMessage(body.detail, "Not found"));
+    return body as SharedView;
+  },
+};
+
+export const shareUrl = (secret: string) =>
+  `${typeof window === "undefined" ? "" : window.location.origin}/share#${secret}`;
+
+// Fields with server-side defaults are optional when sending.
+export type DashboardItemIn = Partial<components["schemas"]["DashboardItemIn"]> &
+  Pick<components["schemas"]["DashboardItemIn"], "kind">;
+
+export const dashboards = {
+  list: () => apiFetch<Dashboard[]>("/dashboards"),
+  get: (id: string) => apiFetch<Dashboard>(`/dashboards/${id}`),
+  create: (name: string, description = "") =>
+    apiFetch<Dashboard>("/dashboards", json({ name, description })),
+  update: (id: string, name: string, description = "") =>
+    apiFetch<Dashboard>(`/dashboards/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name, description }),
+    }),
+  remove: (id: string) => apiFetch<void>(`/dashboards/${id}`, { method: "DELETE" }),
+  addItem: (id: string, body: DashboardItemIn) =>
+    apiFetch<DashboardItem>(`/dashboards/${id}/items`, json(body)),
+  refresh: (id: string) => apiFetch<Dashboard>(`/dashboards/${id}/refresh`, { method: "POST" }),
+  refreshItem: (id: string, itemId: string) =>
+    apiFetch<DashboardItem>(`/dashboards/${id}/items/${itemId}/refresh`, { method: "POST" }),
+  move: (id: string, itemId: string, direction: -1 | 1) =>
+    apiFetch<Dashboard>(`/dashboards/${id}/items/${itemId}/move?direction=${direction}`, {
+      method: "POST",
+    }),
+  removeItem: (id: string, itemId: string) =>
+    apiFetch<void>(`/dashboards/${id}/items/${itemId}`, { method: "DELETE" }),
+};
+
 export const follows = {
   list: (datasetId: string) => apiFetch<Follow[]>(`/datasets/${datasetId}/follows`),
   create: (datasetId: string, body: FollowIn) =>

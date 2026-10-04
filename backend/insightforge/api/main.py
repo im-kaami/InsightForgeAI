@@ -10,12 +10,14 @@ from fastapi.responses import JSONResponse
 from insightforge.api.routers import (
     auth,
     connections,
+    dashboards,
     datasets,
     follows,
     models,
     runs,
     schedules,
     sessions,
+    shares,
     verified_reports,
 )
 from insightforge.api.schemas import HealthOut, ImportOptions
@@ -89,6 +91,8 @@ def create_app() -> FastAPI:
         verified_reports.router,
         models.router,
         follows.router,
+        dashboards.router,
+        shares.router,
     ):
         application.include_router(router, prefix="/api")
 

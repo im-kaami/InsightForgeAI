@@ -15,6 +15,8 @@ import {
 import { CodeResultCard, type CodeResult } from "@/components/code-result";
 import { DataTable } from "@/components/data-table";
 import { Markdown } from "@/components/markdown";
+import { PinToDashboard } from "@/components/pin-to-dashboard";
+import { ShareButton } from "@/components/share-button";
 import { Plot } from "@/components/plot";
 import { StatResultCard, type StatResult } from "@/components/stat-result";
 import { StepTimeline } from "@/components/step-timeline";
@@ -201,6 +203,9 @@ export function RunCard({
           )}
         </CardHeader>
         <CardContent className="space-y-5">
+          {run.status === "completed" && datasetId ? (
+            <ShareButton kind="run" targetId={run.id} />
+          ) : null}
           <StepTimeline events={events} />
           {run.error && (
             <div role="alert" className="rounded border border-destructive/30 p-3 text-sm">
@@ -284,6 +289,9 @@ export function RunCard({
                       {savedQueries.includes(index) ? "Saved" : "Save as approved question"}
                     </Button>
                   ) : null}
+                  {run.status === "completed" ? (
+                    <PinToDashboard runId={run.id} position={index} />
+                  ) : null}
                 </section>
               );
             if (item.type === "plot")
@@ -298,6 +306,11 @@ export function RunCard({
                     <p className="mt-1 text-xs text-muted-foreground" data-testid="chart-note">
                       {String(item.note)}
                     </p>
+                  ) : null}
+                  {run.status === "completed" ? (
+                    <div className="mt-2">
+                      <PinToDashboard runId={run.id} position={index} />
+                    </div>
                   ) : null}
                 </section>
               );

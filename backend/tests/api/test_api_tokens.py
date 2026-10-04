@@ -60,7 +60,7 @@ async def test_ask_tokens_can_also_ask_questions_but_nothing_else(client, auth_h
     assert (await client.get(f"/api/runs/{run.json()['id']}", headers=token)).status_code == 200
     assert (await client.delete(f"/api/sessions/{session.json()['id']}", headers=token)).status_code == 403
     rename = await client.patch(
-        f"/api/datasets/{dataset['id']}/privacy", headers=token, json={"llm_policy": "full"}
+        f"/api/datasets/{dataset['id']}/privacy", headers=token, json={"mode": "full", "acknowledged": True}
     )
     assert rename.status_code == 403
 
