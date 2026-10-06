@@ -13,6 +13,7 @@ from insightforge.config import get_settings
 from insightforge.core.agent import InsightForgeAgent
 from insightforge.core.artifacts import PlotArtifact, RunResult, TableArtifact, TextArtifact
 from insightforge.core.checks import SERIOUS_FINDINGS
+from insightforge.core.costs import estimate_cost, price_for
 from insightforge.core.executor import truncation_note
 from insightforge.core.llm import LLMClient, build_llm, build_local_llm, llm_mode, resolved_model
 from insightforge.core.memory import ConversationMemory
@@ -428,13 +429,17 @@ def execute_run(
                 )
             configured = llm or build_llm()
             local = local_llm if local_llm is not None else build_local_llm(settings)
+            billed: tuple[str, str] | None = None
             if policy == "local":
                 name = getattr(local, "model", settings.local_llm_model)
                 model = f"local: {name}" if local else "offline (no AI model)"
+                if local:
+                    billed = ("local", str(name))
             elif llm_mode(configured) == "fake":
                 model = "offline (no AI model)"
             else:
                 model = f"{settings.llm_provider}: {resolved_model(settings)}"
+                billed = (settings.llm_provider, resolved_model(settings))
             agent = InsightForgeAgent(
                 configured,
                 artifact_dir=run_dir,
@@ -537,6 +542,28 @@ def execute_run(
                     for finding in result.findings
                 ],
             }
+            if billed:
+                provider, model_name = billed
+                prompt_tokens = int(result.token_usage.get("prompt_tokens", 0))
+                completion_tokens = int(result.token_usage.get("completion_tokens", 0))
+                price = None if provider == "local" else price_for(model_name, settings.llm_prices)
+                cost = (
+                    0.0
+                    if provider == "local"
+                    else estimate_cost(prompt_tokens, completion_tokens, price)
+                )
+                run.llm_provider, run.llm_model, run.cost_usd = provider, model_name, cost
+                run.provenance_json = {
+                    **run.provenance_json,
+                    "cost": {
+                        "provider": provider,
+                        "model": model_name,
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "cost_usd": cost,
+                        "price": price.model_dump() if price else None,
+                    },
+                }
         run.status = "completed"
         run.plan_json = result.plan.model_dump(mode="json")
         run.summary = result.summary

@@ -367,6 +367,9 @@ class RunOut(APIModel):
     warnings: list[str] = Field(default_factory=list)
     fallback_reason: str | None = None
     error: str | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    cost_usd: float | None = None
     created_at: datetime
     finished_at: datetime | None = None
 
@@ -601,3 +604,38 @@ class MetricPreviewOut(BaseModel):
     columns: list[str]
     rows: list[dict[str, Any]]
     total_rows: int
+
+
+class UsageTotals(BaseModel):
+    runs: int
+    prompt_tokens: int
+    completion_tokens: int
+    cost_usd: float
+    unpriced_runs: int
+
+
+class UsageByModel(BaseModel):
+    provider: str
+    model: str
+    runs: int
+    prompt_tokens: int
+    completion_tokens: int
+    cost_usd: float
+    unpriced_runs: int
+
+
+class UsageByDay(BaseModel):
+    date: str
+    runs: int
+    prompt_tokens: int
+    completion_tokens: int
+    cost_usd: float
+    unpriced_runs: int
+
+
+class UsageOut(BaseModel):
+    days: int
+    since: datetime
+    totals: UsageTotals
+    by_model: list[UsageByModel]
+    by_day: list[UsageByDay]

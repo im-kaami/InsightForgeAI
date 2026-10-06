@@ -124,6 +124,9 @@ class Run(Base):
     warnings_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     fallback_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    llm_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

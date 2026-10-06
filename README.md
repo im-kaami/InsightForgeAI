@@ -110,6 +110,7 @@ Copy `.env.example` to `.env` and adjust these values:
 | `LLM_API_KEY` | API key for the configured provider | empty |
 | `LLM_BASE_URL` | Optional endpoint override; required for `openai-compatible` | provider default |
 | `LLM_MODEL` | Optional model override | provider default |
+| `LLM_PRICES` | JSON map of exact model name to `{"input": ..., "output": ...}` in USD per million tokens, used for the Usage page cost estimates; models without a price show "price not set" | empty |
 | `DATABASE_URL` | SQLAlchemy application database | `sqlite:///./insightforge.db` |
 | `STORAGE_DIR` | Dataset catalogs, uploads, downloads, and run artifacts | `./storage` |
 | `JWT_SECRET` | Access-token signing secret | `change-me` |

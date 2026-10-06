@@ -162,6 +162,15 @@ Full → tick the box → save), then repeat a few questions in Local and Schema
 - [ ] **Schedules** → **New schedule**: choose the shop dataset, a question, preset "Daily 09:00" →
   create. **Run now** runs it at once and the answer appears in its session.
 
+### 2.12 Usage and cost (new in Phase 0c)
+- [ ] After asking a few questions, open the answer's details: a line "Model: … · N tokens · …" shows
+  the model, the tokens and "price not set" (or "local, no cost" in Local privacy).
+- [ ] **Usage** in the sidebar lists the runs per model and per day for 7, 30 or 90 days. Only
+  questions asked after this feature was installed are counted.
+- [ ] Optional: add `LLM_PRICES={"<model name>": {"input": 0.1, "output": 0.4}}` (US dollars per
+  million tokens; the model name exactly as `/api/health` shows it) to `backend/.env`, restart the
+  backend, ask again: the new answer shows "est. $…" and Usage shows an estimated cost.
+
 ---
 
 ## Part 3. Tested methods (statistics, forecasts, predictions)

@@ -18,6 +18,7 @@ from insightforge.api.routers import (
     schedules,
     sessions,
     shares,
+    usage,
     verified_reports,
     workspaces,
 )
@@ -94,6 +95,7 @@ def create_app() -> FastAPI:
         follows.router,
         dashboards.router,
         shares.router,
+        usage.router,
         workspaces.router,
     ):
         application.include_router(router, prefix="/api")

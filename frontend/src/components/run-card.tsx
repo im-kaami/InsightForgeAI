@@ -22,6 +22,7 @@ import { StatResultCard, type StatResult } from "@/components/stat-result";
 import { StepTimeline } from "@/components/step-timeline";
 import { api, ApiError, datasets, runs, type Run } from "@/lib/api";
 import type { RunEvent } from "@/lib/sse";
+import { formatUsd } from "@/lib/utils";
 
 const verificationLabels: Record<string, string> = {
   exploratory: "Exploratory analysis",
@@ -412,6 +413,20 @@ export function RunCard({
                     : "Not recorded"),
               )}
             </span>
+            {run.llm_model && (
+              <span data-testid="run-cost">
+                Model: {run.llm_model} ·{" "}
+                {(
+                  (run.token_usage?.prompt_tokens ?? 0) + (run.token_usage?.completion_tokens ?? 0)
+                ).toLocaleString()}{" "}
+                tokens ·{" "}
+                {run.llm_provider === "local"
+                  ? "local, no cost"
+                  : run.cost_usd === null || run.cost_usd === undefined
+                    ? "price not set"
+                    : `est. ${formatUsd(run.cost_usd)}`}
+              </span>
+            )}
             <span>
               Engine:{" "}
               {String(provenance.engine_version ?? provenance.engine_kind ?? "Not available")}

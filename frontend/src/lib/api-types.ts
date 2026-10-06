@@ -1450,6 +1450,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Usage
+         * @description Totals of the caller's AI-answered runs; costs are estimates from configured prices.
+         */
+        get: operations["usage_api_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces": {
         parameters: {
             query?: never;
@@ -3071,6 +3091,12 @@ export interface components {
             fallback_reason?: string | null;
             /** Error */
             error?: string | null;
+            /** Llm Provider */
+            llm_provider?: string | null;
+            /** Llm Model */
+            llm_model?: string | null;
+            /** Cost Usd */
+            cost_usd?: number | null;
             /**
              * Created At
              * Format: date-time
@@ -3639,6 +3665,66 @@ export interface components {
              * @enum {string}
              */
             kind: "unique";
+        };
+        /** UsageByDay */
+        UsageByDay: {
+            /** Date */
+            date: string;
+            /** Runs */
+            runs: number;
+            /** Prompt Tokens */
+            prompt_tokens: number;
+            /** Completion Tokens */
+            completion_tokens: number;
+            /** Cost Usd */
+            cost_usd: number;
+            /** Unpriced Runs */
+            unpriced_runs: number;
+        };
+        /** UsageByModel */
+        UsageByModel: {
+            /** Provider */
+            provider: string;
+            /** Model */
+            model: string;
+            /** Runs */
+            runs: number;
+            /** Prompt Tokens */
+            prompt_tokens: number;
+            /** Completion Tokens */
+            completion_tokens: number;
+            /** Cost Usd */
+            cost_usd: number;
+            /** Unpriced Runs */
+            unpriced_runs: number;
+        };
+        /** UsageOut */
+        UsageOut: {
+            /** Days */
+            days: number;
+            /**
+             * Since
+             * Format: date-time
+             */
+            since: string;
+            totals: components["schemas"]["UsageTotals"];
+            /** By Model */
+            by_model: components["schemas"]["UsageByModel"][];
+            /** By Day */
+            by_day: components["schemas"]["UsageByDay"][];
+        };
+        /** UsageTotals */
+        UsageTotals: {
+            /** Runs */
+            runs: number;
+            /** Prompt Tokens */
+            prompt_tokens: number;
+            /** Completion Tokens */
+            completion_tokens: number;
+            /** Cost Usd */
+            cost_usd: number;
+            /** Unpriced Runs */
+            unpriced_runs: number;
         };
         /** UserOut */
         UserOut: {
@@ -6875,6 +6961,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    usage_api_usage_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageOut"];
                 };
             };
             /** @description Validation Error */

@@ -5,6 +5,7 @@ import {
   BellRing,
   CalendarClock,
   Database,
+  Gauge,
   History,
   KeyRound,
   LayoutDashboard,
@@ -29,6 +30,7 @@ const nav = [
   { href: "/schedules", label: "Schedules", icon: CalendarClock },
   { href: "/workspaces", label: "Workspaces", icon: Users },
   { href: "/sharing", label: "Sharing", icon: Share2 },
+  { href: "/usage", label: "Usage", icon: Gauge },
   { href: "/api-tokens", label: "API tokens", icon: KeyRound },
 ];
 

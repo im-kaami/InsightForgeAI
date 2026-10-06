@@ -34,6 +34,7 @@ export type FollowIn = components["schemas"]["FollowIn"];
 export type Follow = components["schemas"]["FollowOut"];
 export type MetricCheck = components["schemas"]["MetricCheckOut"];
 export type SqlQueryResult = components["schemas"]["SqlQueryOut"];
+export type Usage = components["schemas"]["UsageOut"];
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -101,6 +102,8 @@ export const apiTokens = {
     apiFetch<ApiTokenCreated>("/auth/tokens", json(body)),
   revoke: (id: string) => apiFetch<void>(`/auth/tokens/${id}`, { method: "DELETE" }),
 };
+
+export const usage = (days: number) => apiFetch<Usage>(`/usage?days=${days}`);
 
 export const datasets = {
   list: () => apiFetch<Dataset[]>("/datasets"),

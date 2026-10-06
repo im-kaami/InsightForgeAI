@@ -5,10 +5,17 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Provider = Literal["openai", "openai-compatible", "gemini", "groq", "ollama", "fake"]
+
+
+class Price(BaseModel):
+    """USD per million tokens."""
+
+    input: float = Field(ge=0)
+    output: float = Field(ge=0)
 
 
 class Settings(BaseSettings):
@@ -18,6 +25,7 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_model: str | None = None
     llm_provider: Provider = "openai"
+    llm_prices: dict[str, Price] = Field(default_factory=dict)
     database_url: str = "sqlite:///./insightforge.db"
     storage_dir: Path = Path("./storage")
     jwt_secret: str = "change-me"

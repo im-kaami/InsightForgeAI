@@ -45,6 +45,9 @@ def run_output(db: Db, run: Run) -> RunOut:
         warnings=run.warnings_json or [],
         fallback_reason=run.fallback_reason,
         error=run.error,
+        llm_provider=run.llm_provider,
+        llm_model=run.llm_model,
+        cost_usd=run.cost_usd,
         created_at=run.created_at,
         finished_at=run.finished_at,
     )
