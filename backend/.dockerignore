@@ -1,0 +1,14 @@
+.venv
+storage
+*.db
+*.db.bak-*
+.env
+.pytest_tmp
+.pytest_cache
+.ruff_cache
+__pycache__
+*.egg-info
+evals
+tests
+sandbox
+.scratch_*

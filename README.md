@@ -81,6 +81,22 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). The API documentation is available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
+### Run with Docker Compose
+
+```bash
+cp .env.example backend/.env      # set an LLM key (LLM_API_KEY) and JWT_SECRET / APP_SECRET of 32+ characters
+docker compose up --build
+```
+
+Open [http://localhost:3000](http://localhost:3000). The browser only talks to the frontend; it forwards `/api` to the backend inside the Compose network.
+
+- Data (the SQLite database and uploaded files) lives in the `insightforge-data` Docker volume and survives `docker compose down`; `docker compose down -v` deletes it.
+- The local model (`LOCAL_LLM_MODEL`) and the Python sandbox (`SANDBOX_ENABLED`) are off in Compose. The local model must be on a loopback address, which a container cannot use to reach Ollama on your computer, and the sandbox would need the Docker socket, which is not mounted.
+- For production, set `ENVIRONMENT=production` (in your shell or a `.env` file next to `docker-compose.yml`) together with strong `JWT_SECRET` and `APP_SECRET` values in `backend/.env`; the backend refuses to start with unsafe settings.
+- If ports 3000 or 8000 are taken (for example while `npm run dev` runs), set `FRONTEND_PORT` and `BACKEND_PORT`, e.g. `FRONTEND_PORT=3100 BACKEND_PORT=8100 docker compose up`.
+- `INSIGHTFORGE_ENV_FILE` points Compose at a different settings file than `backend/.env`, for example one with `LLM_PROVIDER=fake` to try the app without an API key.
+- The frontend image bakes in the backend address (`http://backend:8000`) when it is built, because Next.js fixes rewrites at build time.
+
 ### CLI
 
 ```bash

@@ -1,0 +1,45 @@
+# Run everything with: docker compose up --build   (see README, "Run with Docker Compose")
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - path: ${INSIGHTFORGE_ENV_FILE:-backend/.env}
+        required: false
+    environment:
+      DATABASE_URL: sqlite:////data/insightforge.db
+      STORAGE_DIR: /data/storage
+      # The local model must be on a loopback address, which a container cannot reach on the host.
+      LOCAL_LLM_MODEL: ""
+      # The Python sandbox needs the Docker socket; it is not mounted.
+      SANDBOX_ENABLED: "false"
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    volumes:
+      - insightforge-data:/data
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4)
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        API_PROXY_TARGET: http://backend:8000
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  insightforge-data:
