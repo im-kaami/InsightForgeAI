@@ -89,6 +89,17 @@ characters.
   findings. **Update health check** refreshes it.
 - [ ] Columns with sensitive-looking names (for example email or phone) show "Hidden (sensitive)".
 
+### 1.6 SQL editor (new in Phase 0c)
+- [ ] On a dataset page, **SQL editor** opens a page with the tables and columns on the left and a
+  query box prefilled with `SELECT * FROM "<table>" LIMIT 100`. **Run** (or Ctrl+Enter) shows the
+  rows and a line such as "Showing 100 of 100 rows · 12 ms". No AI is involved and nothing is saved.
+- [ ] Clicking a table name inserts its quoted name where the cursor is.
+- [ ] Write your own query, for example
+  `SELECT region, SUM(amount) AS revenue FROM orders GROUP BY region ORDER BY revenue DESC`.
+- [ ] `DELETE FROM orders` (or `DROP TABLE orders`) is refused with a red message; the data is
+  unchanged.
+- [ ] **Download CSV** saves the result (up to 10,000 rows).
+
 ---
 
 ## Part 2. Asking questions

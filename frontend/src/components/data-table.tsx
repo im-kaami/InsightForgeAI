@@ -19,6 +19,7 @@ export function DataTable({
   truncated = false,
   fullRowCount,
   sql,
+  maxRows = 200,
 }: {
   columns: string[];
   rows: Record<string, unknown>[];
@@ -26,10 +27,11 @@ export function DataTable({
   truncated?: boolean;
   fullRowCount?: number | null;
   sql?: string;
+  maxRows?: number;
 }) {
   const [all, setAll] = useState(false);
   const [showSql, setShowSql] = useState(false);
-  const visible = rows.slice(0, all ? 200 : 20);
+  const visible = rows.slice(0, all ? maxRows : 20);
   const kept = totalRows ?? rows.length;
   return (
     <div className="space-y-2">

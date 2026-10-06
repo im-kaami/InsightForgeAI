@@ -572,6 +572,22 @@ class MetricSuggestions(BaseModel):
     method: str = "drafted from column names and types only; no AI model is used and nothing is approved"
 
 
+class SqlQueryIn(BaseModel):
+    sql: str = Field(min_length=1, max_length=20000)
+    version_id: str | None = None
+
+
+class SqlQueryOut(BaseModel):
+    sql: str
+    columns: list[str]
+    rows: list[dict[str, Any]]
+    row_count: int
+    total_rows: int
+    truncated: bool
+    full_row_count: int | None = None
+    elapsed_ms: int
+
+
 class MetricPreviewIn(BaseModel):
     metric: Metric
     query: MetricQuery | None = None

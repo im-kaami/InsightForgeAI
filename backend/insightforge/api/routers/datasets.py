@@ -1,10 +1,12 @@
 import json
 import tempfile
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+import pandas as pd
+from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import delete, func, select
 from starlette.datastructures import UploadFile as StarletteUploadFile
@@ -19,6 +21,8 @@ from insightforge.api.schemas import (
     MetricSuggestions,
     PrivacyUpdate,
     SaveQueryIn,
+    SqlQueryIn,
+    SqlQueryOut,
     Suggestions,
     URLDatasetCreate,
     VersionConfirm,
@@ -46,7 +50,7 @@ from insightforge.core.relationships import (
     unknown_columns,
 )
 from insightforge.core.schema import DatasetNotes, SchemaInfo
-from insightforge.core.sql_guard import guard_sql
+from insightforge.core.sql_guard import SQLGuardError, guard_query, guard_sql
 from insightforge.core.validation import RuleSet, SavedRules, ValidationReport, suggest_rules
 from insightforge.db.models import (
     Artifact,
@@ -88,6 +92,8 @@ from insightforge.services.datasets import (
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 _OPTIONS = TypeAdapter(list[ImportOptions])
+SQL_EDITOR_MAX_ROWS = 10000
+SQL_EDITOR_SHOWN_ROWS = 1000
 
 
 async def _stream_upload(file: UploadFile, storage: StorageDep) -> Path:
@@ -743,6 +749,69 @@ def preview(
         }
     finally:
         catalog.close()
+
+
+def _run_user_sql(db, user, dataset_id: str, body: SqlQueryIn) -> tuple[str, pd.DataFrame, int | None, int]:
+    dataset = owned(db, user, dataset_id, "read")
+    if body.version_id is None and not dataset.connection_id:
+        ensure_current_version(db, dataset)
+    if body.version_id:
+        owned_version(db, user, dataset, body.version_id)
+    try:
+        guarded = guard_query(body.sql, SQL_EDITOR_MAX_ROWS)
+    except SQLGuardError as error:
+        raise HTTPException(422, str(error)) from error
+    timeout = get_settings().query_timeout_seconds
+    catalog = open_catalog(
+        dataset,
+        connection_uri(db, dataset),
+        for_run=True,
+        version_id=body.version_id,
+    )
+    try:
+        started = time.monotonic()
+        try:
+            frame = catalog.query(guarded.sql, timeout_seconds=timeout)
+        except Exception as error:  # noqa: BLE001 - reported to the user as a failed query
+            raise HTTPException(422, f"The query failed: {error}") from error
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        full_row_count = None
+        if guarded.count_sql and len(frame) >= SQL_EDITOR_MAX_ROWS:
+            try:
+                full_row_count = int(catalog.query(guarded.count_sql, timeout_seconds=timeout).iloc[0, 0])
+            except Exception as error:  # noqa: BLE001 - reported to the user as a failed query
+                raise HTTPException(422, f"The query failed: {error}") from error
+        return guarded.sql, frame, full_row_count, elapsed_ms
+    finally:
+        catalog.close()
+
+
+@router.post("/{dataset_id}/sql", response_model=SqlQueryOut)
+def run_sql(dataset_id: str, body: SqlQueryIn, db: Db, user: CurrentUser):
+    """Run the user's own read-only SQL. Nothing is stored and no AI model is called."""
+    sql, frame, full_row_count, elapsed_ms = _run_user_sql(db, user, dataset_id, body)
+    shown = frame.head(SQL_EDITOR_SHOWN_ROWS)
+    truncated = full_row_count is not None and full_row_count > len(frame)
+    return SqlQueryOut(
+        sql=sql,
+        columns=[str(column) for column in frame.columns],
+        rows=json.loads(shown.to_json(orient="records", date_format="iso")),
+        row_count=len(shown),
+        total_rows=len(frame),
+        truncated=truncated,
+        full_row_count=full_row_count if truncated else None,
+        elapsed_ms=elapsed_ms,
+    )
+
+
+@router.post("/{dataset_id}/sql/csv")
+def run_sql_csv(dataset_id: str, body: SqlQueryIn, db: Db, user: CurrentUser):
+    _, frame, _, _ = _run_user_sql(db, user, dataset_id, body)
+    return Response(
+        content=frame.to_csv(index=False),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="query.csv"'},
+    )
 
 
 @router.delete("/{dataset_id}", status_code=204)

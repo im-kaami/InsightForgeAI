@@ -33,6 +33,7 @@ export type MetricReportCreate = components["schemas"]["MetricReportCreate"];
 export type FollowIn = components["schemas"]["FollowIn"];
 export type Follow = components["schemas"]["FollowOut"];
 export type MetricCheck = components["schemas"]["MetricCheckOut"];
+export type SqlQueryResult = components["schemas"]["SqlQueryOut"];
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -158,6 +159,14 @@ export const datasets = {
     }),
   saveQueryFromRun: (id: string, runId: string, position: number) =>
     apiFetch<Dataset>(`/datasets/${id}/queries/from-run`, json({ run_id: runId, position })),
+  runSql: (id: string, sql: string, versionId?: string) =>
+    apiFetch<SqlQueryResult>(`/datasets/${id}/sql`, json({ sql, version_id: versionId ?? null })),
+  downloadSqlCsv: (id: string, sql: string, versionId?: string) =>
+    downloadBlob(
+      `/datasets/${id}/sql/csv`,
+      "query.csv",
+      json({ sql, version_id: versionId ?? null }),
+    ),
   relationshipSuggestions: (id: string) =>
     apiFetch<RelationshipSuggestions>(`/datasets/${id}/relationships/suggestions`),
   saveRelationships: (id: string, relationships: Relationship[]) =>
@@ -212,11 +221,12 @@ export const sessions = {
     apiFetch<Run>(`/sessions/${id}/runs`, json({ goal, mode, clarified })),
 };
 
-export async function downloadBlob(path: string, filename: string) {
+export async function downloadBlob(path: string, filename: string, init: RequestInit = {}) {
   const token = localStorage.getItem("if_token");
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const headers = new Headers(init.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (init.body) headers.set("Content-Type", "application/json");
+  const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new ApiError(response.status, errorMessage(body.detail, response.statusText));

@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -9,7 +10,7 @@ import { DataTable } from "@/components/data-table";
 import { DatasetTrustPanel } from "@/components/dataset-trust-panel";
 import { SavedModels } from "@/components/saved-models";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VerifiedReportBuilder } from "@/components/verified-report-builder";
@@ -97,6 +98,9 @@ export default function DatasetPage() {
               void client.invalidateQueries({ queryKey: ["dataset-versions", id] });
             }}
           />
+          <Link href={`/datasets/${id}/sql`} className={buttonVariants({ variant: "outline" })}>
+            SQL editor
+          </Link>
           <Button disabled={!canAnalyze || creating || isNavigating} onClick={startAnalysis}>
             {creating || isNavigating ? "Opening..." : "Start analysis"}
           </Button>
