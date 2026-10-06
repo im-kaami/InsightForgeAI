@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import delete, func, select
 
-from insightforge.api.deps import BusDep, CurrentUser, Db, LLMDep
+from insightforge.api.deps import CurrentUser, Db
 from insightforge.api.schemas import RunCreate, RunOut, SessionCreate, SessionOut
 from insightforge.config import get_settings
 from insightforge.db.models import (
@@ -15,10 +15,8 @@ from insightforge.db.models import (
     Schedule,
     User,
 )
-from insightforge.db.session import SessionLocal
 from insightforge.services.access import AccessError, accessible_dataset
 from insightforge.services.datasets import ensure_current_version
-from insightforge.services.runs import start_run
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -181,8 +179,6 @@ async def create_run(
     request: Request,
     db: Db,
     user: CurrentUser,
-    bus: BusDep,
-    llm: LLMDep,
 ):
     session = owned(db, user, session_id)
     dataset = db.get(Dataset, session.dataset_id)
@@ -213,5 +209,5 @@ async def create_run(
     db.add(run)
     db.commit()
     db.refresh(run)
-    start_run(SessionLocal, bus, run.id, request.app.state.tasks, llm)
+    request.app.state.queue.enqueue(run.id)
     return run_output(db, run)

@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     duckdb_memory_limit: str = "2GB"
     duckdb_threads: int = 4
     max_concurrent_runs_per_user: int = 2
+    run_workers: int = Field(default=4, ge=1, le=32)
+    run_max_attempts: int = Field(default=2, ge=1, le=5)
     max_upload_bytes: int = 200_000_000
     llm_send_sample_values: bool = True
     llm_summary_max_rows: int = 20

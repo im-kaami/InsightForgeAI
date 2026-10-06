@@ -176,7 +176,9 @@ export function RunCard({
                   {Number(provenance.rounds ?? 1) === 1 ? "" : "s"}
                 </Badge>
               )}
-              <Badge variant="outline">{run.status}</Badge>
+              <Badge variant="outline">
+                {run.status === "pending" ? "Waiting in queue" : run.status}
+              </Badge>
               <Badge variant="outline">
                 {verificationLabels[run.verification_status] ?? run.verification_status}
               </Badge>

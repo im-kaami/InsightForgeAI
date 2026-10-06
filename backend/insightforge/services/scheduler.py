@@ -38,9 +38,10 @@ def next_run(cron: str, timezone: str) -> datetime | None:
 class SchedulerService:
     def __init__(self):
         self.scheduler = BackgroundScheduler(timezone="UTC")
+        self.app: Any = None
 
     def start(self, app: Any = None) -> None:
-        del app
+        self.app = app
         if not self.scheduler.running:
             self.scheduler.start()
 
@@ -179,7 +180,10 @@ class SchedulerService:
             schedule.last_run_at = datetime.now(UTC)
             schedule.last_run_id = run.id
             db.commit()
-            execute_run(run.id)
+            if self.app is not None:
+                self.app.state.queue.enqueue(run.id)
+            else:
+                execute_run(run.id)
             trigger = CronTrigger.from_crontab(
                 schedule.cron, timezone=schedule_timezone(schedule.timezone)
             )

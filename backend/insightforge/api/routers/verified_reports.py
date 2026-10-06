@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import func, select
 
-from insightforge.api.deps import BusDep, CurrentUser, Db, LLMDep
+from insightforge.api.deps import CurrentUser, Db
 from insightforge.api.routers.datasets import owned, owned_version
 from insightforge.api.routers.sessions import run_output
 from insightforge.api.schemas import (
@@ -23,10 +23,8 @@ from insightforge.core.verified_report import (
     validate_definition,
 )
 from insightforge.db.models import ChatSession, ReportDefinition, Run
-from insightforge.db.session import SessionLocal
 from insightforge.services.datasets import ensure_current_version
 from insightforge.services.metric_reports import FollowError, approved_metric, check_request, new_report_run
-from insightforge.services.runs import start_run
 
 router = APIRouter(prefix="/datasets/{dataset_id}/reports", tags=["verified-reports"])
 
@@ -132,8 +130,6 @@ async def create_metric_report(
     request: Request,
     db: Db,
     user: CurrentUser,
-    bus: BusDep,
-    llm: LLMDep,
 ):
     """Start a checked report for one approved metric. Code calculates everything; no AI is used."""
     dataset = owned(db, user, dataset_id, "read")
@@ -160,7 +156,7 @@ async def create_metric_report(
     if active >= get_settings().max_concurrent_runs_per_user:
         raise HTTPException(429, "Too many analyses running; wait for one to finish")
     run = new_report_run(db, user.id, dataset, version, metric, revision, body.group_by, period)
-    start_run(SessionLocal, bus, run.id, request.app.state.tasks, llm)
+    request.app.state.queue.enqueue(run.id)
     return run_output(db, run)
 
 
@@ -176,8 +172,6 @@ async def create_report_run(
     request: Request,
     db: Db,
     user: CurrentUser,
-    bus: BusDep,
-    llm: LLMDep,
 ):
     dataset = owned(db, user, dataset_id)
     definition = owned_definition(db, user.id, dataset.id, definition_id)
@@ -215,5 +209,5 @@ async def create_report_run(
     db.add(run)
     db.commit()
     db.refresh(run)
-    start_run(SessionLocal, bus, run.id, request.app.state.tasks, llm)
+    request.app.state.queue.enqueue(run.id)
     return run_output(db, run)

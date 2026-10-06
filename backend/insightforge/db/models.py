@@ -124,6 +124,7 @@ class Run(Base):
     warnings_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     fallback_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     llm_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
     llm_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
     cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)

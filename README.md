@@ -125,6 +125,8 @@ Copy `.env.example` to `.env` and adjust these values:
 | `DUCKDB_MEMORY_LIMIT` | Memory available to each opened dataset catalog | `2GB` |
 | `DUCKDB_THREADS` | DuckDB worker threads per catalog | `4` |
 | `MAX_CONCURRENT_RUNS_PER_USER` | Pending/running analyses allowed per user | `2` |
+| `RUN_WORKERS` | Analyses that run at the same time (1-32); the rest wait in the queue | `4` |
+| `RUN_MAX_ATTEMPTS` | Times a run is tried when the server restarts mid-run (1-5), then it is marked failed | `2` |
 | `MAX_UPLOAD_BYTES` | Maximum bytes accepted for each uploaded file | `200000000` |
 | `LLM_SEND_SAMPLE_VALUES` | Include non-sensitive schema samples in planner prompts | `true` |
 | `LLM_SUMMARY_MAX_ROWS` | Result rows included per table in summary prompts | `20` |

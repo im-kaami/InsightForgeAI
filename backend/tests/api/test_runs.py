@@ -29,7 +29,7 @@ async def test_runs_events_memory_and_reports(client, auth_headers, hr_dataset, 
         json={"goal": "profile departments"},
     )
     assert first.status_code == 202
-    assert app.state.tasks
+    assert app.state.queue.threads
     completed = await _wait(client, auth_headers, first.json()["id"])
     payload = completed.json()
     assert payload["status"] == "completed", payload
@@ -88,7 +88,7 @@ async def test_runs_events_memory_and_reports(client, auth_headers, hr_dataset, 
     assert pdf.status_code in {200, 501}
 
 
-async def test_lifespan_marks_interrupted_runs_failed(app):
+async def test_lifespan_fails_runs_that_used_all_their_attempts(app):
     from insightforge.db.models import Run
     from insightforge.db.session import SessionLocal
 
@@ -98,17 +98,19 @@ async def test_lifespan_marks_interrupted_runs_failed(app):
         owner_id="missing-owner",
         goal="interrupted",
         status="running",
+        attempts=2,
     )
     db.add(interrupted)
     db.commit()
     run_id = interrupted.id
     db.close()
 
+    app.state.queue.stop()
     async with app.router.lifespan_context(app):
         db = SessionLocal()
         try:
             restored = db.get(Run, run_id)
             assert restored.status == "failed"
-            assert restored.error == "Interrupted by server restart"
+            assert restored.error == "Interrupted by server restart (tried 2 times)"
         finally:
             db.close()

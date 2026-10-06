@@ -25,10 +25,10 @@ from insightforge.api.routers import (
 from insightforge.api.schemas import HealthOut, ImportOptions
 from insightforge.config import get_settings, validate_settings
 from insightforge.core.llm import build_llm, build_local_llm, llm_mode, resolved_model
-from insightforge.db.models import Run
 from insightforge.db.session import SessionLocal, configure, init_db
 from insightforge.services.datasets import DatasetBusyError
 from insightforge.services.events import RunEventBus
+from insightforge.services.queue import RunQueue
 from insightforge.services.scheduler import scheduler
 
 
@@ -42,19 +42,11 @@ async def lifespan(app: FastAPI):
         logging.getLogger("insightforge").warning("Configuration warning: %s", problem)
     init_db()
     configure()
-    db = SessionLocal()
-    try:
-        interrupted = db.query(Run).filter(Run.status.in_({"pending", "running"})).all()
-        for run in interrupted:
-            run.status = "failed"
-            run.error = "Interrupted by server restart"
-        db.commit()
-    finally:
-        db.close()
     app.state.llm = build_llm(settings)
     app.state.local_llm = build_local_llm(settings)
     app.state.bus = RunEventBus(asyncio.get_running_loop())
-    app.state.tasks = set()
+    app.state.queue = RunQueue(app, settings.run_workers, settings.run_max_attempts)
+    app.state.queue.start()
     if settings.scheduler_enabled:
         scheduler.start(app)
         configure()
@@ -66,6 +58,7 @@ async def lifespan(app: FastAPI):
     yield
     if settings.scheduler_enabled:
         scheduler.shutdown()
+    app.state.queue.stop(timeout=5.0)
 
 
 def create_app() -> FastAPI:

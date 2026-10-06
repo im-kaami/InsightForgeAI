@@ -171,6 +171,11 @@ Full → tick the box → save), then repeat a few questions in Local and Schema
   million tokens; the model name exactly as `/api/health` shows it) to `backend/.env`, restart the
   backend, ask again: the new answer shows "est. $…" and Usage shows an estimated cost.
 
+### 2.13 Questions survive a restart (new in Phase 0c)
+- [ ] Ask a question, and while it shows "Waiting in queue" or "running", stop the backend and start
+  it again. The answer still arrives (the question is run again; it may take a few seconds after
+  the backend is back).
+
 ---
 
 ## Part 3. Tested methods (statistics, forecasts, predictions)

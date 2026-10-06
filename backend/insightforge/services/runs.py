@@ -1,4 +1,3 @@
-import asyncio
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -47,22 +46,6 @@ REPORT_KINDS = ("sales_margin_v1", "metric_report_v1")
 
 def _utc_iso(value: datetime) -> str:
     return (value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)).isoformat()
-
-
-def start_run(
-    db_factory: Callable[[], Session],
-    bus: RunEventBus,
-    run_id: str,
-    tasks: set[asyncio.Task[Any]],
-    llm: LLMClient | None = None,
-    local_llm: LLMClient | None = None,
-) -> asyncio.Task[Any]:
-    task = asyncio.create_task(
-        asyncio.to_thread(execute_run, run_id, db_factory, bus, llm, local_llm)
-    )
-    tasks.add(task)
-    task.add_done_callback(tasks.discard)
-    return task
 
 
 def _persist_artifacts(db: Session, run: Run, artifacts: list[Any]) -> None:
