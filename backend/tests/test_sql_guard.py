@@ -59,6 +59,32 @@ def test_guard_query_does_not_count_explicitly_limited_queries():
     assert (guarded.limit, guarded.full_sql, guarded.count_sql) == (None, None, None)
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT * FROM query('SELECT 1')",
+        "SELECT * FROM sniff_csv('x')",
+        "SELECT * FROM parquet_metadata('x')",
+        "SELECT * FROM duckdb_databases()",
+        "SELECT * FROM duckdb_settings()",
+        "SELECT * FROM sqlite_attach('x')",
+        "SELECT * FROM postgres_execute('pg', 'x')",
+        "SELECT * FROM mysql_execute('my', 'x')",
+        "SELECT * FROM pragma_database_size()",
+        "SELECT getenv('PATH')",
+    ],
+)
+def test_guard_rejects_server_reading_functions(query):
+    with pytest.raises(SQLGuardError):
+        guard_sql(query)
+
+
+def test_guard_caps_a_larger_user_limit():
+    guarded = guard_sql("SELECT range AS r FROM range(5000000) LIMIT 5000000", 10000)
+    assert guarded.endswith("LIMIT 10000")
+    assert guard_sql("SELECT 1 LIMIT 5", 10000).endswith("LIMIT 5")
+
+
 def test_guard_query_wraps_unions():
     guarded = guard_query("SELECT 1 AS v UNION ALL SELECT 2", default_limit=10)
     assert guarded.sql.endswith("LIMIT 10")

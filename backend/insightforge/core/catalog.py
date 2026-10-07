@@ -41,7 +41,9 @@ class DataCatalog:
         threads: int | None = None,
         read_only: bool = False,
     ):
-        config = {"enable_external_access": False} if read_only else {}
+        config: dict[str, Any] = {"autoinstall_known_extensions": False}
+        if read_only:
+            config["enable_external_access"] = False
         self.connection = duckdb.connect(
             str(db_path) if db_path is not None else ":memory:", read_only=read_only, config=config
         )

@@ -778,6 +778,12 @@ def open_catalog(
             name=sanitize_identifier(source_info.get("name") or source_info["kind"]),
             options=source_info.get("options") or {},
         )
-        load_source(source, catalog)
+        try:
+            load_source(source, catalog)
+            # Attached databases keep working; files, new attachments and extension installs do not.
+            catalog.lock()
+        except Exception:
+            catalog.close()
+            raise
     # DuckDB 1.4.5 cannot re-enable external access on a running file-backed database.
     return catalog

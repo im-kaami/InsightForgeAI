@@ -18,7 +18,32 @@ class GuardedQuery:
 
 
 _FILE_SUFFIX = re.compile(r"\.(csv|parquet|json|jsonl|xlsx|db|duckdb)$", re.IGNORECASE)
-_FORBIDDEN_FUNCTIONS = {"glob", "getenv", "current_setting", "load", "install", "copy"}
+_FORBIDDEN_FUNCTIONS = {
+    "glob",
+    "getenv",
+    "current_setting",
+    "load",
+    "install",
+    "copy",
+    "query",
+    "query_table",
+    "which_secret",
+    "sniff_csv",
+    "st_read",
+    "getvariable",
+}
+_FORBIDDEN_PREFIXES = (
+    "read_",
+    "parquet_",
+    "duckdb_",
+    "pragma_",
+    "sqlite_",
+    "postgres_",
+    "mysql_",
+    "iceberg_",
+    "delta_",
+)
+_FORBIDDEN_SUFFIXES = ("_scan", "_query", "_execute", "_attach")
 
 
 def _unsafe_path(value: str) -> bool:
@@ -60,9 +85,8 @@ def _validated(sql: str) -> exp.Expression:
         if isinstance(node, exp.Func):
             name = node.name.lower() if isinstance(node, exp.Anonymous) else node.sql_name().lower()
             if (
-                name.startswith("read_")
-                or name.endswith("_scan")
-                or name.endswith("_query")
+                name.startswith(_FORBIDDEN_PREFIXES)
+                or name.endswith(_FORBIDDEN_SUFFIXES)
                 or name in _FORBIDDEN_FUNCTIONS
             ):
                 raise SQLGuardError(f"Forbidden SQL function: {name}")
@@ -77,9 +101,20 @@ def _validated(sql: str) -> exp.Expression:
 
 def guard_query(sql: str, default_limit: int = 10000) -> GuardedQuery:
     expression = _validated(sql)
-    if expression.args.get("limit") is not None:
-        return GuardedQuery(sql=expression.sql(dialect="duckdb"))
     limit = int(default_limit)
+    existing = expression.args.get("limit")
+    if existing is not None:
+        amount = existing.expression
+        within = (
+            isinstance(amount, exp.Literal)
+            and amount.is_int
+            and int(amount.this) <= limit
+            and not expression.args.get("offset")
+        )
+        if within:
+            return GuardedQuery(sql=expression.sql(dialect="duckdb"))
+        # A query's own LIMIT may not exceed the cap: wrap it so the cap always applies.
+        return GuardedQuery(sql=f"SELECT * FROM ({expression.sql(dialect='duckdb')}) AS q LIMIT {limit}")
     full_sql = expression.sql(dialect="duckdb")
     if isinstance(expression, exp.Union):
         limited = f"SELECT * FROM ({full_sql}) AS q LIMIT {limit}"
