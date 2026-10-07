@@ -90,3 +90,25 @@ async def test_links_need_consent_expire_and_are_owner_scoped(client, auth_heade
     tokened = await _share(client, {"Authorization": f"Bearer {token}"}, "dashboard", board["id"])
     assert tokened.status_code == 403
     assert dataset["id"]
+
+
+async def test_viewers_cannot_publish_a_shared_dataset_through_answers_or_dashboards(client, auth_headers):
+    from .test_workspaces import _team
+
+    _, dataset, people = await _team(client, auth_headers)
+    viewer = people["viewer"]
+    run = await _run(client, viewer, dataset, "How many orders are there?")
+    refused = await _share(client, viewer, "run", run["id"])
+    assert refused.status_code == 403, refused.text
+    board = (await client.post("/api/dashboards", headers=viewer, json={"name": "Mine"})).json()
+    table = next(item for item in run["artifacts"] if item["type"] == "table")
+    position = run["artifacts"].index(table)
+    pinned = await client.post(
+        f"/api/dashboards/{board['id']}/items",
+        headers=viewer,
+        json={"kind": "pinned", "run_id": run["id"], "position": position},
+    )
+    assert pinned.status_code == 201, pinned.text
+    link = (await _share(client, viewer, "dashboard", board["id"])).json()
+    viewed = (await _view(client, link["secret"])).json()
+    assert viewed["content"]["items"] == []

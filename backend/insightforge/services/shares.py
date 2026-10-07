@@ -159,12 +159,25 @@ def run_view(db: Session, run: Run) -> dict[str, Any]:
     }
 
 
+def _publishable_tile(db: Session, owner: User | None, item: DashboardItem) -> bool:
+    """A public link shows a tile only while the dashboard's owner can edit the tile's dataset."""
+    if item.dataset_id is None:
+        return True
+    dataset = db.get(Dataset, item.dataset_id)
+    return bool(owner and dataset and dataset_access(db, owner, dataset) in {"own", "edit"})
+
+
 def dashboard_view(db: Session, dashboard: Dashboard) -> dict[str, Any]:
-    items = db.scalars(
-        select(DashboardItem)
-        .where(DashboardItem.dashboard_id == dashboard.id)
-        .order_by(DashboardItem.position, DashboardItem.created_at)
-    )
+    owner = db.get(User, dashboard.owner_id)
+    items = [
+        item
+        for item in db.scalars(
+            select(DashboardItem)
+            .where(DashboardItem.dashboard_id == dashboard.id)
+            .order_by(DashboardItem.position, DashboardItem.created_at)
+        )
+        if _publishable_tile(db, owner, item)
+    ]
     return {
         "type": "dashboard",
         "name": dashboard.name,
