@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
+import { DatabaseConnectForm } from "@/components/database-connect-form";
 import { ImportReview } from "@/components/import-review";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,13 +16,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   connections,
@@ -61,10 +55,6 @@ export function AddDataDialog({
   const [fileOptions, setFileOptions] = useState<EditableOptions[]>([]);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
-  const [uri, setUri] = useState("");
-  const [connectionName, setConnectionName] = useState("");
-  const [connectionId, setConnectionId] = useState("");
-  const [tables, setTables] = useState("");
   const [reviewDatasetId, setReviewDatasetId] = useState<string | null>(null);
   const [reviewVersion, setReviewVersion] = useState<DatasetVersion | null>(null);
   const existing = useQuery({
@@ -79,10 +69,6 @@ export function AddDataDialog({
     setFileOptions([]);
     setName("");
     setUrl("");
-    setUri("");
-    setConnectionName("");
-    setConnectionId("");
-    setTables("");
     setReviewDatasetId(null);
     setReviewVersion(null);
     setOpen(false);
@@ -353,56 +339,12 @@ export function AddDataDialog({
                       Load sheet
                     </Button>
                   </TabsContent>
-                  <TabsContent value="db" className="space-y-4">
-                    <Label>Existing connection</Label>
-                    <Select
-                      value={connectionId}
-                      onValueChange={(value) => setConnectionId(value ?? "")}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a connection" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {existing.data?.map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      placeholder="Connection name"
-                      value={connectionName}
-                      onChange={(event) => setConnectionName(event.target.value)}
+                  <TabsContent value="db">
+                    <DatabaseConnectForm
+                      busy={busy}
+                      existing={existing.data ?? []}
+                      onConnect={(value) => execute(() => datasets.fromConnection(value))}
                     />
-                    <Input
-                      placeholder="postgresql://, mysql://, or sqlite:///"
-                      value={uri}
-                      onChange={(event) => setUri(event.target.value)}
-                    />
-                    <Input
-                      placeholder="Optional tables: orders, customers"
-                      value={tables}
-                      onChange={(event) => setTables(event.target.value)}
-                    />
-                    <Button
-                      type="button"
-                      disabled={(!connectionId && !uri) || busy}
-                      onClick={() =>
-                        execute(() =>
-                          datasets.fromConnection({
-                            connection_id: connectionId || undefined,
-                            uri: uri || undefined,
-                            name: name || connectionName || "Connected data",
-                            tables: tables
-                              ? tables.split(",").map((value) => value.trim())
-                              : undefined,
-                          }),
-                        )
-                      }
-                    >
-                      Connect
-                    </Button>
                   </TabsContent>
                 </>
               )}

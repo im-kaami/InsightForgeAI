@@ -301,7 +301,10 @@ def from_connection(body: ConnectionDatasetCreate, db: Db, user: CurrentUser):
     if not connection:
         raise HTTPException(404, "Connection not found")
     try:
-        return output(create_dataset_from_connection(db, user, connection, body.name, body.tables))
+        return output(create_dataset_from_connection(
+                db, user, connection, body.name, body.tables, body.schema_name
+            )
+        )
     except IngestError as error:
         raise HTTPException(400, str(error)) from error
 

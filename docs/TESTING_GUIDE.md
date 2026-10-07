@@ -95,6 +95,19 @@ characters.
   "Anyone with the link").
 - [ ] Private or internal addresses (for example `http://localhost:...` or `192.168...`) are refused.
 
+### 1.3b Databases (new in Phase 5g; needs Docker Desktop)
+- [ ] Start a test SQL Server (the image is already downloaded):
+  `docker run -d --name if-mssql -e ACCEPT_EULA=Y -e "MSSQL_SA_PASSWORD=Test-Passw0rd!" -p 127.0.0.1:14330:1433 mcr.microsoft.com/mssql/server:2022-latest`
+  and wait about 30 seconds.
+- [ ] **Add data** → **Database** → type **SQL Server**, host `127.0.0.1`, port `14330`, database
+  `master`, user `sa`, password `Test-Passw0rd!` → **Test connection** lists the tables (an empty
+  server lists only system tables or none; create a table first with any SQL tool if you want data).
+- [ ] Untick tables you don't need; the dataset only shows the ticked ones. Ask a question.
+- [ ] Type **PostgreSQL in the cloud** adds SSL; fill in your Supabase or Neon details if you have
+  an account. A wrong password shows a clear error, and the password never appears on screen.
+- [ ] The **SQLite file** type is hidden (turned off unless `ALLOW_SQLITE_FILES=true`).
+- [ ] Afterwards: `docker rm -f if-mssql`.
+
 ### 1.4 New versions
 - [ ] On the shop dataset, **Upload new version** with an edited `orders.csv` (for example change one
   amount). A draft is shown for review; after **Confirm import** it becomes the current version, and

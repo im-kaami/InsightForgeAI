@@ -297,6 +297,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/connections/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Connection
+         * @description Connect and list the tables without saving anything.
+         */
+        post: operations["test_connection_api_connections_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/connections/{connection_id}/tables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Connection Tables */
+        get: operations["connection_tables_api_connections__connection_id__tables_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/connections/{connection_id}": {
         parameters: {
             query?: never;
@@ -2081,6 +2118,8 @@ export interface components {
             name: string;
             /** Tables */
             tables?: string[] | null;
+            /** Schema */
+            schema?: string | null;
         };
         /** ConnectionOut */
         ConnectionOut: {
@@ -2092,6 +2131,22 @@ export interface components {
             kind: string;
             /** Redacted Uri */
             redacted_uri: string;
+        };
+        /** ConnectionTables */
+        ConnectionTables: {
+            /** Kind */
+            kind: string;
+            /** Tables */
+            tables: string[];
+            /** Redacted Uri */
+            redacted_uri: string;
+        };
+        /** ConnectionTest */
+        ConnectionTest: {
+            /** Uri */
+            uri: string;
+            /** Schema */
+            schema?: string | null;
         };
         /** ContributionOut */
         ContributionOut: {
@@ -4530,6 +4585,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConnectionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_connection_api_connections_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectionTest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionTables"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connection_tables_api_connections__connection_id__tables_get: {
+        parameters: {
+            query?: {
+                schema?: string | null;
+            };
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionTables"];
                 };
             };
             /** @description Validation Error */

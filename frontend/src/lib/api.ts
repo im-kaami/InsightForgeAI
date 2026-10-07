@@ -3,6 +3,7 @@ import type { components } from "./api-types";
 export type User = components["schemas"]["UserOut"];
 export type Dataset = components["schemas"]["DatasetOut"];
 export type Connection = components["schemas"]["ConnectionOut"];
+export type ConnectionTables = components["schemas"]["ConnectionTables"];
 export type Session = components["schemas"]["SessionOut"];
 export type Run = components["schemas"]["RunOut"];
 export type Schedule = components["schemas"]["ScheduleOut"];
@@ -206,6 +207,7 @@ export const datasets = {
     uri?: string;
     name: string;
     tables?: string[];
+    schema?: string;
   }) => apiFetch<Dataset>("/datasets/from-connection", json(value)),
   addSource: (id: string, source: File | string) => {
     if (typeof source === "string")
@@ -227,6 +229,13 @@ export const connections = {
   list: () => apiFetch<Connection[]>("/connections"),
   create: (name: string, uri: string) => apiFetch<Connection>("/connections", json({ name, uri })),
   remove: (id: string) => apiFetch<void>(`/connections/${id}`, { method: "DELETE" }),
+  options: () => apiFetch<{ sqlite_files: boolean }>("/connections/options"),
+  test: (uri: string, schema?: string) =>
+    apiFetch<ConnectionTables>("/connections/test", json({ uri, schema: schema ?? null })),
+  tables: (id: string, schema?: string) =>
+    apiFetch<ConnectionTables>(
+      `/connections/${id}/tables${schema ? `?schema=${encodeURIComponent(schema)}` : ""}`,
+    ),
 };
 
 export const sessions = {

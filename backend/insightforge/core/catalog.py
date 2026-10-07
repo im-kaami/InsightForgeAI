@@ -51,6 +51,8 @@ class DataCatalog:
         if threads is not None:
             self.connection.execute(f"SET threads={int(threads)}")
         self.attachments: dict[str, str] = {}
+        self.attachment_schemas: dict[str, str] = {}
+        self.attachment_allow: dict[str, set[str]] = {}
 
     def register_df(self, name: str, df: pd.DataFrame) -> None:
         table_name = "__".join(sanitize_identifier(part) for part in name.split("__"))
@@ -68,25 +70,41 @@ class DataCatalog:
         )
 
     def attach(
-        self, alias: str, uri: str, db_type: Literal["postgres", "mysql", "sqlite"]
+        self,
+        alias: str,
+        uri: str,
+        db_type: Literal["postgres", "mysql", "sqlite"],
+        schema: str | None = None,
+        allow: set[str] | None = None,
     ) -> None:
         clean_alias = sanitize_identifier(alias)
         escaped_uri = uri.replace("'", "''")
+        options = "READ_ONLY"
+        if schema and db_type == "postgres":
+            options += ", SCHEMA '" + schema.replace("'", "''") + "'"
         self.connection.execute(f"INSTALL {db_type}")
         self.connection.execute(f"LOAD {db_type}")
         self.connection.execute(
-            f"ATTACH '{escaped_uri}' AS {_quote(clean_alias)} (TYPE {db_type}, READ_ONLY)"
+            f"ATTACH '{escaped_uri}' AS {_quote(clean_alias)} (TYPE {db_type}, {options})"
         )
         self.attachments[clean_alias] = db_type
+        if db_type == "postgres":
+            self.attachment_schemas[clean_alias] = schema or "public"
+        if allow:
+            self.attachment_allow[clean_alias] = set(allow)
 
     def table_names(self) -> list[str]:
         rows = self.connection.execute(
-            "SELECT database_name, table_name FROM duckdb_tables() "
+            "SELECT database_name, schema_name, table_name FROM duckdb_tables() "
             "WHERE NOT internal ORDER BY database_name, table_name"
         ).fetchall()
+        # An attached PostgreSQL database lists every schema, but names resolve only in its default
+        # schema, so only that schema's tables are offered.
         return [
             f"{database}.{table}" if database in self.attachments else str(table)
-            for database, table in rows
+            for database, schema, table in rows
+            if self.attachment_schemas.get(database, schema) == schema
+            and (database not in self.attachment_allow or table in self.attachment_allow[database])
         ]
 
     def introspect(

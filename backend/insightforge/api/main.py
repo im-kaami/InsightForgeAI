@@ -26,6 +26,7 @@ from insightforge.api.schemas import HealthOut, ImportOptions
 from insightforge.config import get_settings, validate_settings
 from insightforge.core.llm import build_llm, build_local_llm, llm_mode, resolved_model
 from insightforge.db.session import SessionLocal, configure, init_db
+from insightforge.ingest import IngestError
 from insightforge.services.datasets import DatasetBusyError
 from insightforge.services.events import RunEventBus
 from insightforge.services.queue import RunQueue
@@ -110,6 +111,10 @@ def create_app() -> FastAPI:
     @application.exception_handler(DatasetBusyError)
     async def dataset_busy(_request: Request, error: DatasetBusyError):
         return JSONResponse({"detail": str(error)}, status_code=409)
+
+    @application.exception_handler(IngestError)
+    async def ingest_problem(_request: Request, error: IngestError):
+        return JSONResponse({"detail": str(error)}, status_code=422)
 
     @application.get("/api/health", response_model=HealthOut)
     def health():

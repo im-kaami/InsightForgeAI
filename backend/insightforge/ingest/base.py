@@ -18,6 +18,7 @@ SourceKind = Literal[
     "mysql",
     "sqlite",
     "sqlalchemy",
+    "mssql",
 ]
 
 
@@ -125,7 +126,7 @@ def load_source(source: DataSource, catalog: DataCatalog) -> LoadResult:
         from insightforge.ingest.gsheets import load_gsheet
 
         return load_gsheet(source, catalog, source.options.get("dest_dir"))
-    if source.kind in {"postgres", "mysql", "sqlite", "sqlalchemy"}:
+    if source.kind in {"postgres", "mysql", "sqlite", "sqlalchemy", "mssql"}:
         from insightforge.ingest.database import load_database
 
         return load_database(source, catalog)

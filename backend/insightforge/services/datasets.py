@@ -25,6 +25,7 @@ from insightforge.ingest import (
     public_source,
     redact_uri,
 )
+from insightforge.ingest.database import check_database_target
 from insightforge.services.storage import Storage
 
 if TYPE_CHECKING:
@@ -476,7 +477,12 @@ def refresh_url_dataset(db: Session, user: User, dataset: Dataset) -> DatasetVer
 
 
 def create_dataset_from_connection(
-    db: Session, user: User, connection: Connection, name: str, tables: list[str] | None
+    db: Session,
+    user: User,
+    connection: Connection,
+    name: str,
+    tables: list[str] | None,
+    schema: str | None = None,
 ) -> Dataset:
     from insightforge.services.crypto import decrypt
 
@@ -490,7 +496,7 @@ def create_dataset_from_connection(
                 "kind": connection.kind,
                 "location": redact_uri(decrypt(connection.encrypted_uri)),
                 "name": connection.name,
-                "options": {"tables": tables or []},
+                "options": {"tables": tables or [], **({"schema": schema} if schema else {})},
             }
         ],
     )
@@ -760,6 +766,11 @@ def open_catalog(
             raise DatasetBusyError("Dataset is currently busy") from error
         raise
     if connection_uri:
+        try:
+            check_database_target(connection_uri)
+        except IngestError:
+            catalog.close()
+            raise
         source_info = dataset.sources_json[0]
         source = DataSource(
             kind=source_info["kind"],

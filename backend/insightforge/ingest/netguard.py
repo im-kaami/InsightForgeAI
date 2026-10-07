@@ -33,6 +33,15 @@ def validate_public_url(
     hostname = parsed.hostname
     if not hostname:
         raise IngestError("URL must include a hostname")
+    check_public_host(hostname, "Private or internal URLs are not allowed", resolver)
+
+
+def check_public_host(
+    hostname: str,
+    message: str,
+    resolver: Callable[[str], list[str]] | None = None,
+) -> None:
+    """Refuse a host that is, or resolves to, a private, local or otherwise non-public address."""
     lowered = hostname.lower().rstrip(".")
     if (
         lowered in _BLOCKED_HOSTS
@@ -40,7 +49,7 @@ def validate_public_url(
         or lowered.endswith(".internal")
         or lowered.endswith(".local")
     ):
-        raise IngestError("Private or internal URLs are not allowed")
+        raise IngestError(message)
     try:
         addresses = [lowered] if ipaddress.ip_address(lowered) else []
     except ValueError:
@@ -58,4 +67,4 @@ def validate_public_url(
         except ValueError as error:
             raise IngestError("Could not resolve host") from error
         if address in _BLOCKED_ADDRESSES or not address.is_global or address.is_multicast:
-            raise IngestError("Private or internal URLs are not allowed")
+            raise IngestError(message)

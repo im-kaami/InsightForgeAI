@@ -442,11 +442,34 @@ class URLDatasetCreate(BaseModel):
     sheets: list[str] | None = None
 
 
+SCHEMA_NAME = r"^[A-Za-z_][A-Za-z0-9_$]*$"
+
+
 class ConnectionDatasetCreate(BaseModel):
     connection_id: str | None = None
     uri: str | None = None
     name: str
     tables: list[str] | None = None
+    schema_name: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=SCHEMA_NAME, alias="schema"
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ConnectionTest(BaseModel):
+    uri: str = Field(min_length=1, max_length=2000)
+    schema_name: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=SCHEMA_NAME, alias="schema"
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ConnectionTables(BaseModel):
+    kind: str
+    tables: list[str]
+    redacted_uri: str
 
 
 class SessionCreate(BaseModel):

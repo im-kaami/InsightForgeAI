@@ -31,8 +31,9 @@ The same engine powers the web application, CLI, Python package, and submission 
 | Excel | Multi-sheet `.xlsx`, `.xlsm`, and `.xls` workbooks |
 | HTTP URLs | Direct CSV, Excel, Parquet, and JSON downloads |
 | Google Sheets | Public share links, including individual tabs |
-| PostgreSQL / MySQL / SQLite | Read-only DuckDB attachments |
-| Other databases | SQLAlchemy URIs with installed drivers |
+| PostgreSQL / MySQL / SQLite | Read-only DuckDB attachments (live) |
+| SQL Server | Copied into a snapshot each time the data is opened (driver `pymssql`, in the `db` extra) |
+| Other databases | SQLAlchemy URIs with installed drivers, copied the same way |
 
 ## Architecture
 
@@ -147,6 +148,8 @@ Copy `.env.example` to `.env` and adjust these values:
 | `SMTP_FROM` | Sender address of emails | empty |
 | `SMTP_SECURITY` | `starttls`, `ssl` or `none` (`none` is only accepted for a server on this computer in production) | `starttls` |
 | `SMTP_TIMEOUT_SECONDS` | Mail server timeout | `10` |
+| `ALLOW_SQLITE_FILES` | Allow "SQLite file" database connections (refused when `ENVIRONMENT=production`; never the app's own database or storage) | `false` |
+| `ALLOW_PRIVATE_DATABASES` | Allow database hosts that are private, local or internal; empty means allowed in development and refused in production | empty |
 | `LOGIN_MAX_FAILURES` | Failed sign-ins per email allowed within the window before that email is locked (keyed by email, not IP; someone who knows an email can lock it for the window) | `5` |
 | `LOGIN_WINDOW_MINUTES` | Length of the sign-in failure window and lockout, in minutes | `15` |
 | `RUN_MAX_ATTEMPTS` | Times a run is tried when the server restarts mid-run (1-5), then it is marked failed | `2` |
@@ -386,6 +389,16 @@ Limits: drift compares the new data with the training data; it does not prove th
 - **Approved question:** the result of an approved question's SQL on the current data.
 
 **Refresh** (one tile) and **Refresh all** re-run the metric and question tiles on the current data version with tested code; no AI is used. If a refresh fails (for example, the metric or question was removed), the tile shows why and keeps its last good result. **Up** and **Down** reorder tiles. Deleting a dataset deletes its tiles from every dashboard, pinned copies included, because they contain its data.
+
+## Database connections
+
+Open **Add data > Database**, pick the database type, and fill in host, port, database, user and password (the address is built in your browser with the user and password encoded). **Test connection** lists the tables without saving anything; untick the tables you do not want. The options are PostgreSQL, PostgreSQL in the cloud (Supabase, Neon: adds `sslmode=require`), MySQL, SQL Server, a SQLite file on the server (only when `ALLOW_SQLITE_FILES` is on), and any other SQLAlchemy URI.
+
+- **What a server will connect to.** A SQLite file connection reads a path on the server's own disk, so it is off by default (`ALLOW_SQLITE_FILES`); when on, the application database, anything inside the storage folder and missing files are still refused, and it must not be on in production. Database hosts that are, or resolve to, private, local or internal addresses (for example `127.0.0.1`, `10.x`, `localhost`) are allowed in development and refused in production unless `ALLOW_PRIVATE_DATABASES=true`, so a signed-in user cannot probe the internal network; a PostgreSQL keyword-style address (`host=... dbname=...`) cannot be checked and is refused when private hosts are not allowed. The checks run when you create, test or list a connection and again every time its data is opened, so changing the settings affects saved connections too.
+- **Schema.** For PostgreSQL and SQL Server you can name one schema (letters, digits, `_`, `$`). Without it, PostgreSQL uses `public` and SQL Server uses the login's default schema, usually `dbo`. Tables in other PostgreSQL schemas are not listed unless you choose that schema.
+- **PostgreSQL, MySQL and SQLite** are attached live and read-only through DuckDB, so questions see current data. A table list narrows what InsightForge shows and sends to the AI; it is not an access control, because the whole database is attached read-only and your own SQL could still name a table you unticked. Use a database user that can only read what you want to expose.
+- **SQL Server and other SQLAlchemy databases** are copied into a DuckDB snapshot **every time the dataset is opened**, not once: each question, preview, SQL-editor query and schema load copies the allowed tables again, up to 2,000,000 rows each. For a large database, always use the table list to copy only what you need. Nothing is written to the server; use a read-only login anyway. The driver is `pymssql`, installed with `pip install "insightforge[db]"` (the Docker image includes it).
+- Passwords are stored encrypted and never returned or logged; addresses are shown with the password replaced by `***`. Redshift, Snowflake and BigQuery are not supported.
 
 ## Accounts and sign-in security
 

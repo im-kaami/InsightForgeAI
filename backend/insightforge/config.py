@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True
     environment: Literal["development", "production"] = "development"
     allow_private_urls: bool = False
+    allow_sqlite_files: bool = False
+    allow_private_databases: bool | None = None
     query_timeout_seconds: int = 60
     duckdb_memory_limit: str = "2GB"
     duckdb_threads: int = 4
@@ -93,6 +95,13 @@ class Settings(BaseSettings):
         return value
 
 
+def private_databases_allowed(settings: Settings) -> bool:
+    """Whether database connections may point at private or local addresses (default: development only)."""
+    if settings.allow_private_databases is not None:
+        return settings.allow_private_databases
+    return settings.environment != "production"
+
+
 def is_loopback_host(host: str | None) -> bool:
     if not host:
         return False
@@ -121,6 +130,8 @@ def validate_settings(settings: Settings) -> list[str]:
         problems.append("APP_SECRET must be at least 32 characters and not use change-me")
     if settings.environment == "production" and settings.allow_private_urls:
         problems.append("ALLOW_PRIVATE_URLS must be false in production")
+    if settings.environment == "production" and settings.allow_sqlite_files:
+        problems.append("ALLOW_SQLITE_FILES must be false in production")
     if (
         settings.oidc_issuer
         and settings.environment == "production"

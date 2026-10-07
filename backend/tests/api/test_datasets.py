@@ -117,7 +117,11 @@ async def test_from_url(client, auth_headers):
     assert response.json()["tables"] == ["data"]
 
 
-async def test_connection_dataset_reattaches(client, auth_headers, tmp_path):
+async def test_connection_dataset_reattaches(client, auth_headers, tmp_path, monkeypatch):
+    from insightforge.config import get_settings
+
+    monkeypatch.setenv("ALLOW_SQLITE_FILES", "true")
+    get_settings.cache_clear()
     path = tmp_path / "remote.sqlite"
     with sqlite3.connect(path) as connection:
         connection.execute("CREATE TABLE widgets (id INTEGER, name TEXT)")
