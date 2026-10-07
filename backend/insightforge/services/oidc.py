@@ -178,9 +178,18 @@ def finish(
     if domains and email.rsplit("@", 1)[-1] not in domains:
         raise OIDCError("This email domain is not allowed to sign in here")
     user = db.scalar(select(User).where(User.email == email))
+    if user is not None and not user.sso_account:
+        # Registration does not verify email addresses, so a password account is never taken over by
+        # an SSO sign-in that merely claims the same address.
+        raise OIDCError("An account with this email already exists and uses a password; sign in with it")
     if user is None:
         # A random password nobody knows: this account signs in with single sign-on.
-        user = User(email=email, password_hash=hash_password(secrets.token_urlsafe(32)))
+        user = User(
+            email=email,
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+            sso_account=True,
+            email_verified=True,
+        )
         db.add(user)
         db.commit()
         db.refresh(user)

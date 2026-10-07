@@ -131,6 +131,14 @@ async def test_single_sign_on_creates_an_account_and_returns_a_session(client, s
     assert second.json()["id"] == me.json()["id"]
 
 
+async def test_single_sign_on_never_takes_over_a_password_account(client, sso):
+    await client.post(
+        "/api/auth/register", json={"email": "ada@company.com", "password": "a-password-123"}
+    )
+    result, _ = await _sign_in(client, lambda nonce: _id_token(nonce))
+    assert "oidc_token" not in result and "uses a password" in result["oidc_error"]
+
+
 @pytest.mark.parametrize(
     ("token_for", "message"),
     [

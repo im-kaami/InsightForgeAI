@@ -5,6 +5,7 @@ from typing import Annotated
 from urllib.parse import urlencode
 
 import httpx
+import jwt
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select
@@ -22,6 +23,7 @@ from insightforge.api.schemas import (
     Preferences,
     Token,
     UserOut,
+    VerifyEmail,
 )
 from insightforge.config import get_settings
 from insightforge.db.models import ApiToken, User
@@ -30,6 +32,8 @@ from insightforge.services import oidc, refresh
 from insightforge.services.auth import (
     API_TOKEN_PREFIX,
     create_access_token,
+    create_verify_token,
+    decode_verify_token,
     hash_password,
     new_api_token,
     spend_password_check_time,
@@ -49,11 +53,69 @@ FORGOT_MINUTES = 5
 def register(body: NewCredentials, db: Db):
     if db.scalar(select(User).where(User.email == body.email)):
         raise HTTPException(409, "Email is already registered")
-    user = User(email=body.email, password_hash=hash_password(body.password))
+    wait = login_limiter.registration_wait()
+    if wait:
+        raise HTTPException(
+            429,
+            "Too many accounts were created just now; try again later",
+            headers={"Retry-After": str(wait)},
+        )
+    user = User(
+        email=body.email,
+        password_hash=hash_password(body.password),
+        email_verified=not email_enabled(),
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
+    if not user.email_verified:
+        _send_verification(user)
     return user
+
+
+def _send_verification(user: User) -> None:
+    _last_verification[user.id] = time.monotonic()
+    link = f"{get_settings().app_base_url.rstrip('/')}/verify#{create_verify_token(user.id)}"
+    send_in_background(
+        user.email,
+        "Confirm your InsightForge email address",
+        f"Open this link to confirm your email address. It works for 48 hours:\n\n{link}\n\n"
+        "If you did not create an account, ignore this email.\n",
+    )
+
+
+@router.post("/verify", status_code=204)
+def verify_email(body: VerifyEmail, db: Db):
+    try:
+        user = db.get(User, decode_verify_token(body.token))
+    except (jwt.PyJWTError, KeyError, ValueError):
+        user = None
+    if user is None:
+        raise HTTPException(400, "This confirmation link is invalid or has expired")
+    if not user.email_verified:
+        user.email_verified = True
+        db.commit()
+    return Response(status_code=204)
+
+
+_last_verification: dict[str, float] = {}
+
+
+@router.post("/verify/resend", status_code=204)
+def resend_verification(body: ForgotPassword, db: Db):
+    """Send the confirmation email again. The answer is the same for every address."""
+    user = db.scalar(select(User).where(User.email == body.email.strip().lower()))
+    if user is not None:
+        _resend_if_due(user)
+    return Response(status_code=204)
+
+
+def _resend_if_due(user: User) -> None:
+    if not email_enabled() or user.email_verified:
+        return
+    now = time.monotonic()
+    if now - _last_verification.get(user.id, -FORGOT_MINUTES * 60) >= FORGOT_MINUTES * 60:
+        _send_verification(user)
 
 
 def _refuse_if_locked(email: str) -> None:
@@ -73,6 +135,9 @@ def login(body: Credentials, db: Db, response: Response):
         login_limiter.record_failure(email)
         raise HTTPException(401, "Invalid email or password")
     login_limiter.clear(email)
+    if not user.email_verified:
+        _resend_if_due(user)
+        raise HTTPException(403, "Confirm your email address first: open the link we emailed you")
     refresh.set_cookie(response, refresh.issue(db, user))
     return Token(access_token=create_access_token(user.id, user.token_version or 0))
 

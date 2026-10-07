@@ -19,6 +19,7 @@ class LoginLimiter:
     def __init__(self, clock: Callable[[], float] = time.monotonic):
         self.clock = clock
         self.failures: dict[str, deque[float]] = {}
+        self.registrations: deque[float] = deque()
         self.lock = threading.Lock()
 
     def _window(self) -> float:
@@ -56,9 +57,21 @@ class LoginLimiter:
         with self.lock:
             self.failures.pop(email, None)
 
+    def registration_wait(self) -> int:
+        """Record a new account and return 0, or the seconds to wait when too many were just made."""
+        with self.lock:
+            now = self.clock()
+            while self.registrations and now - self.registrations[0] >= 3600:
+                self.registrations.popleft()
+            if len(self.registrations) >= get_settings().register_max_per_hour:
+                return max(1, math.ceil(self.registrations[0] + 3600 - now))
+            self.registrations.append(now)
+            return 0
+
     def reset(self) -> None:
         with self.lock:
             self.failures.clear()
+            self.registrations.clear()
 
     def _trim(self, now: float) -> None:
         for key in list(self.failures):

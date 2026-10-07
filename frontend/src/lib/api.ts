@@ -141,6 +141,8 @@ export const auth = {
       body: JSON.stringify({ email_alerts }),
     }),
   testEmail: () => apiFetch<void>("/auth/test-email", { method: "POST" }),
+  verifyEmail: (token: string) => apiFetch<void>("/auth/verify", json({ token })),
+  resendVerification: (email: string) => apiFetch<void>("/auth/verify/resend", json({ email })),
   forgotPassword: (email: string) => apiFetch<void>("/auth/password/forgot", json({ email })),
   logout: () =>
     fetch(`${API_BASE}/auth/logout`, {

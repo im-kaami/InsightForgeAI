@@ -47,6 +47,18 @@ def spend_password_check_time(password: str) -> None:
     verify_password(_dummy_hash, password)
 
 
+def create_verify_token(user_id: str, hours: int = 48) -> str:
+    claims = {"sub": user_id, "purpose": "verify-email", "exp": datetime.now(UTC) + timedelta(hours=hours)}
+    return jwt.encode(claims, get_settings().jwt_secret, algorithm="HS256")
+
+
+def decode_verify_token(token: str) -> str:
+    payload = jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
+    if payload.get("purpose") != "verify-email":
+        raise jwt.InvalidTokenError("wrong purpose")
+    return str(payload["sub"])
+
+
 def new_reset_secret() -> tuple[str, str]:
     """Return (secret, sha256 hex). The secret is shown once; only the hash is stored."""
     secret = "ifr_" + secrets.token_urlsafe(32)
