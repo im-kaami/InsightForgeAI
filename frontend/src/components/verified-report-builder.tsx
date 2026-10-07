@@ -78,7 +78,7 @@ export function VerifiedReportBuilder({
   const [approvedSignature, setApprovedSignature] = useState<string | null>(null);
   const [previousId, setPreviousId] = useState<string | null>(null);
   const [selectedDefinition, setSelectedDefinition] = useState("");
-  const [selectedVersion, setSelectedVersion] = useState(dataset.current_version_id ?? "");
+  const [versionChoice, setVersionChoice] = useState<string | null>(null);
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
   const [busy, setBusy] = useState(false);
@@ -103,6 +103,10 @@ export function VerifiedReportBuilder({
     (table) => table.name === factTable || joinedTables.includes(table.name),
   );
   const readyVersions = versions.filter((version) => version.state === "ready");
+  const selectedVersion =
+    versionChoice && readyVersions.some((version) => version.id === versionChoice)
+      ? versionChoice
+      : (dataset.current_version_id ?? "");
   const required = Boolean(name && factTable && rowKey && dateColumn && revenueColumn && currency);
   const assumptions = Boolean((refunds || noRefunds) && (currencyColumn || singleCurrency));
   const joinsComplete = joins.every((join) => join.table && join.fact_key && join.lookup_key);
@@ -607,7 +611,7 @@ export function VerifiedReportBuilder({
             </Button>
           )}
           <Label htmlFor="report-version">Dataset version</Label>
-          <NativeSelect id="report-version" value={selectedVersion} onChange={setSelectedVersion}>
+          <NativeSelect id="report-version" value={selectedVersion} onChange={setVersionChoice}>
             <option value="">Select confirmed version</option>
             {readyVersions.map((version) => (
               <option key={version.id} value={version.id}>

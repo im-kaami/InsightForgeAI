@@ -258,3 +258,108 @@ def test_plain_smtp_to_a_remote_host_is_a_configuration_problem():
         Settings(smtp_host="", smtp_security="none", **base),
     ):
         assert not any("SMTP_SECURITY" in problem for problem in validate_settings(fine))
+
+
+GOAL = "Payroll anomalies for the secret project"
+
+
+async def _scheduled_run(client, headers, hr_dataset, app, monkeypatch):
+    from insightforge.services.runs import execute_run
+    from insightforge.services.scheduler import SchedulerService
+
+    session = (
+        await client.post(
+            "/api/sessions", headers=headers, json={"dataset_id": hr_dataset["id"], "title": "Weekly"}
+        )
+    ).json()
+    schedule = await client.post(
+        "/api/schedules",
+        headers=headers,
+        json={
+            "dataset_id": hr_dataset["id"],
+            "session_id": session["id"],
+            "goal": GOAL,
+            "cron": "0 8 * * 1",
+            "timezone": "UTC",
+        },
+    )
+    assert schedule.status_code in {200, 201}, schedule.text
+    monkeypatch.setattr(app.state.queue, "enqueue", lambda run_id: execute_run(run_id))
+    service = SchedulerService()
+    service.app = app
+    return session, service.run_schedule(schedule.json()["id"])
+
+
+async def test_scheduled_runs_email_a_link_without_the_goal(
+    client, auth_headers, hr_dataset, app, smtp, monkeypatch
+):
+    _enable(monkeypatch)
+    await client.put("/api/auth/preferences", headers=auth_headers, json={"email_alerts": True})
+    session, run_id = await _scheduled_run(client, auth_headers, hr_dataset, app, monkeypatch)
+    assert (await client.get(f"/api/runs/{run_id}", headers=auth_headers)).json()["status"] == "completed"
+    [message] = _sent(smtp)
+    text = message.get_content()
+    assert message["Subject"] == "InsightForge: scheduled analysis finished"
+    assert f"/sessions/{session['id']}" in text and "(completed)" in text
+    assert GOAL not in text and "payroll" not in text.lower()
+    assert hr_dataset["name"] in text
+
+
+async def test_scheduled_run_emails_respect_the_opt_in(
+    client, auth_headers, hr_dataset, app, smtp, monkeypatch
+):
+    _enable(monkeypatch)
+    await _scheduled_run(client, auth_headers, hr_dataset, app, monkeypatch)
+    assert _sent(smtp) == []
+
+
+async def test_ordinary_and_run_now_runs_send_nothing(
+    client, auth_headers, hr_dataset, app, smtp, monkeypatch
+):
+    _enable(monkeypatch)
+    await client.put("/api/auth/preferences", headers=auth_headers, json={"email_alerts": True})
+    session = (
+        await client.post(
+            "/api/sessions", headers=auth_headers, json={"dataset_id": hr_dataset["id"], "title": "Ask"}
+        )
+    ).json()
+    from insightforge.services.runs import execute_run
+
+    monkeypatch.setattr(app.state.queue, "enqueue", lambda run_id: execute_run(run_id))
+    asked = await client.post(
+        f"/api/sessions/{session['id']}/runs", headers=auth_headers, json={"goal": "Headcount by department"}
+    )
+    assert asked.status_code == 202
+    schedule = await client.post(
+        "/api/schedules",
+        headers=auth_headers,
+        json={
+            "dataset_id": hr_dataset["id"],
+            "session_id": session["id"],
+            "goal": GOAL,
+            "cron": "0 8 * * 1",
+            "timezone": "UTC",
+        },
+    )
+    now = await client.post(f"/api/schedules/{schedule.json()['id']}/run-now", headers=auth_headers)
+    assert now.status_code == 200, now.text
+    assert _sent(smtp) == []
+
+
+async def test_failed_scheduled_runs_say_failed(client, auth_headers, hr_dataset, app, smtp, monkeypatch):
+    from insightforge.services import runs as runs_module
+
+    _enable(monkeypatch)
+    await client.put("/api/auth/preferences", headers=auth_headers, json={"email_alerts": True})
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("cannot open the data")
+
+    monkeypatch.setattr(runs_module, "open_catalog", broken)
+    session, run_id = await _scheduled_run(client, auth_headers, hr_dataset, app, monkeypatch)
+    assert (await client.get(f"/api/runs/{run_id}", headers=auth_headers)).json()["status"] == "failed"
+    [message] = _sent(smtp)
+    assert message["Subject"] == "InsightForge: scheduled analysis failed"
+    text = message.get_content()
+    assert "(failed)" in text and "cannot open" not in text and GOAL not in text
+    assert f"/sessions/{session['id']}" in text

@@ -213,7 +213,7 @@ export default function DatasetPage() {
         <SavedModels dataset={dataset} versions={versions.data ?? []} />
       )}
       <VerifiedReportBuilder
-        key={`${dataset.id}:${dataset.current_version_id ?? "draft"}`}
+        key={`${dataset.id}:${dataset.current_version_id ? "ready" : "draft"}`}
         dataset={dataset}
         versions={versions.data ?? []}
       />

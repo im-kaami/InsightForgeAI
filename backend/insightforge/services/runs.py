@@ -1,3 +1,4 @@
+import logging
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -39,6 +40,7 @@ from insightforge.services.access import dataset_access
 from insightforge.services.crypto import decrypt
 from insightforge.services.datasets import ensure_current_version, open_catalog
 from insightforge.services.events import RunEventBus
+from insightforge.services.mailer import notify_user
 from insightforge.services.storage import Storage
 
 REPORT_KINDS = ("sales_margin_v1", "metric_report_v1")
@@ -46,6 +48,31 @@ REPORT_KINDS = ("sales_margin_v1", "metric_report_v1")
 
 def _utc_iso(value: datetime) -> str:
     return (value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)).isoformat()
+
+
+def _email_scheduled_finish(db: Session, run_id: str) -> None:
+    """Tell the owner (if they opted in) that a scheduled analysis finished: names and a link only."""
+    try:
+        db.rollback()
+        run = db.get(Run, run_id)
+        if run is None or run.status not in {"completed", "failed"}:
+            return
+        if not (run.request_json or {}).get("schedule_id"):
+            return
+        chat = db.get(ChatSession, run.session_id)
+        dataset = db.get(Dataset, chat.dataset_id) if chat else None
+        if chat is None or dataset is None:
+            return
+        notify_user(
+            db,
+            run.owner_id,
+            f"InsightForge: scheduled analysis {'finished' if run.status == 'completed' else 'failed'}",
+            f"Your scheduled analysis on the dataset {dataset.name} finished ({run.status}).\n\n"
+            f"Open InsightForge for the result: {get_settings().app_base_url.rstrip('/')}"
+            f"/sessions/{chat.id}\n",
+        )
+    except Exception as error:  # noqa: BLE001 - a mail problem must not affect the run
+        logging.getLogger("insightforge").warning("schedule email skipped: %s", type(error).__name__)
 
 
 def _persist_artifacts(db: Session, run: Run, artifacts: list[Any]) -> None:
@@ -596,4 +623,5 @@ def execute_run(
             catalog.close()
         if bus:
             bus.finish(run_id)
+        _email_scheduled_finish(db, run_id)
         db.close()

@@ -173,7 +173,11 @@ class SchedulerService:
                 goal=schedule.goal,
                 status="pending",
                 dataset_version_id=version.id if version else None,
-                request_json={"kind": "exploratory", "privacy_mode": dataset.llm_policy},
+                request_json={
+                    "kind": "exploratory",
+                    "privacy_mode": dataset.llm_policy,
+                    "schedule_id": schedule.id,
+                },
             )
             db.add(run)
             db.flush()

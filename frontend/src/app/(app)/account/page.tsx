@@ -158,7 +158,8 @@ export default function AccountPage() {
               disabled={!features.data?.email || busy}
               onChange={(event) => toggleAlerts(event.target.checked)}
             />
-            Email me when a followed metric or a saved model raises an alert
+            Email me when a followed metric or a saved model raises an alert, or a scheduled
+            analysis finishes
           </label>
           <Button variant="outline" onClick={sendTest} disabled={!features.data?.email || busy}>
             Send test email
