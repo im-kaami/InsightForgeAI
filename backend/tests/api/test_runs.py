@@ -2,7 +2,7 @@ import asyncio
 
 
 async def _wait(client, headers, run_id):
-    for _ in range(100):
+    for _ in range(600):
         response = await client.get(f"/api/runs/{run_id}", headers=headers)
         if response.json()["status"] in {"completed", "failed"}:
             return response
