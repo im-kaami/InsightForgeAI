@@ -42,6 +42,7 @@ from insightforge.core.metrics import (
 from insightforge.core.profiling import DataProfile
 from insightforge.core.queries import ApprovedQuery, QuerySet, SavedQueries, query_problems
 from insightforge.core.recipes import AppliedRecipe, CleaningRecipe, SavedRecipe, suggest_steps
+from insightforge.core.redact import clean_error
 from insightforge.core.relationships import (
     RelationshipSet,
     RelationshipSuggestions,
@@ -94,6 +95,14 @@ router = APIRouter(prefix="/datasets", tags=["datasets"])
 _OPTIONS = TypeAdapter(list[ImportOptions])
 SQL_EDITOR_MAX_ROWS = 10000
 SQL_EDITOR_SHOWN_ROWS = 1000
+
+
+MAX_FILES_PER_UPLOAD = 20
+
+
+def _check_file_count(files: list) -> None:
+    if len(files) > MAX_FILES_PER_UPLOAD:
+        raise HTTPException(413, f"Upload at most {MAX_FILES_PER_UPLOAD} files at once")
 
 
 async def _stream_upload(file: UploadFile, storage: StorageDep) -> Path:
@@ -252,6 +261,7 @@ async def upload_dataset(
     review: Annotated[bool, Form()] = False,
     options_json: Annotated[str | None, Form()] = None,
 ):
+    _check_file_count(files)
     values: list[tuple[str, Path]] = []
     try:
         for file in files:
@@ -329,6 +339,7 @@ async def replace_version(
     dataset = owned(db, user, dataset_id, "edit")
     if dataset.connection_id:
         raise HTTPException(422, "Live connection datasets do not have immutable versions")
+    _check_file_count(files)
     values: list[tuple[str, Path]] = []
     try:
         for file in files:
@@ -776,14 +787,14 @@ def _run_user_sql(db, user, dataset_id: str, body: SqlQueryIn) -> tuple[str, pd.
         try:
             frame = catalog.query(guarded.sql, timeout_seconds=timeout)
         except Exception as error:  # noqa: BLE001 - reported to the user as a failed query
-            raise HTTPException(422, f"The query failed: {error}") from error
+            raise HTTPException(422, f"The query failed: {clean_error(error)}") from error
         elapsed_ms = int((time.monotonic() - started) * 1000)
         full_row_count = None
         if guarded.count_sql and len(frame) >= SQL_EDITOR_MAX_ROWS:
             try:
                 full_row_count = int(catalog.query(guarded.count_sql, timeout_seconds=timeout).iloc[0, 0])
             except Exception as error:  # noqa: BLE001 - reported to the user as a failed query
-                raise HTTPException(422, f"The query failed: {error}") from error
+                raise HTTPException(422, f"The query failed: {clean_error(error)}") from error
         return guarded.sql, frame, full_row_count, elapsed_ms
     finally:
         catalog.close()

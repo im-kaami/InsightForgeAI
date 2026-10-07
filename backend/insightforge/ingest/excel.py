@@ -1,4 +1,5 @@
 import re
+import zipfile
 from pathlib import Path
 
 import pandas as pd
@@ -7,6 +8,7 @@ from insightforge.core.catalog import DataCatalog, sanitize_identifier
 from insightforge.ingest.base import DataSource, IngestError, LoadResult, table_name_for
 
 _MAX_EXCEL_BYTES = 100 * 1024 * 1024
+_MAX_EXCEL_UNPACKED_BYTES = 1024 * 1024 * 1024
 _UNNAMED_RE = re.compile(r"^Unnamed:\s*(\d+)(?:_level_\d+)?$", re.IGNORECASE)
 
 
@@ -29,6 +31,14 @@ def load_excel(source: DataSource, catalog: DataCatalog) -> LoadResult:
         raise IngestError(f"Local source does not exist: {source.location}")
     if path.stat().st_size > _MAX_EXCEL_BYTES:
         raise IngestError("Excel source exceeds the 100 MB size limit")
+    if zipfile.is_zipfile(path):
+        try:
+            with zipfile.ZipFile(path) as archive:
+                unpacked = sum(item.file_size for item in archive.infolist())
+        except zipfile.BadZipFile as error:
+            raise IngestError("The Excel file is damaged") from error
+        if unpacked > _MAX_EXCEL_UNPACKED_BYTES:
+            raise IngestError("The Excel file expands to more than 1 GB; split it or save it as CSV")
     selected = source.options.get("sheets")
     sheet_name: list[str] | None = list(selected) if selected else None
     dtype = {name: "string" for name in source.options.get("text_columns", [])} or None

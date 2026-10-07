@@ -18,7 +18,7 @@ class APIModel(BaseModel):
 
 
 class Credentials(BaseModel):
-    email: str
+    email: str = Field(max_length=320)
     password: str = Field(max_length=256)
 
 
@@ -55,6 +55,10 @@ class UserOut(APIModel):
 
 class Preferences(BaseModel):
     email_alerts: bool
+
+
+class VerifyEmail(BaseModel):
+    token: str = Field(max_length=600)
 
 
 class ForgotPassword(BaseModel):
@@ -432,24 +436,24 @@ class ScheduleOut(APIModel):
 
 
 class ConnectionCreate(BaseModel):
-    name: str
-    uri: str
+    name: str = Field(max_length=200)
+    uri: str = Field(max_length=2000)
 
 
 class URLDatasetCreate(BaseModel):
-    url: str
-    name: str | None = None
-    sheets: list[str] | None = None
+    url: str = Field(max_length=2000)
+    name: str | None = Field(default=None, max_length=200)
+    sheets: list[str] | None = Field(default=None, max_length=50)
 
 
 SCHEMA_NAME = r"^[A-Za-z_][A-Za-z0-9_$]*$"
 
 
 class ConnectionDatasetCreate(BaseModel):
-    connection_id: str | None = None
-    uri: str | None = None
-    name: str
-    tables: list[str] | None = None
+    connection_id: str | None = Field(default=None, max_length=40)
+    uri: str | None = Field(default=None, max_length=2000)
+    name: str = Field(max_length=200)
+    tables: list[str] | None = Field(default=None, max_length=500)
     schema_name: str | None = Field(
         default=None, min_length=1, max_length=128, pattern=SCHEMA_NAME, alias="schema"
     )
@@ -473,29 +477,29 @@ class ConnectionTables(BaseModel):
 
 
 class SessionCreate(BaseModel):
-    dataset_id: str
-    title: str | None = None
+    dataset_id: str = Field(max_length=40)
+    title: str | None = Field(default=None, max_length=300)
 
 
 class RunCreate(BaseModel):
-    goal: str
+    goal: str = Field(max_length=6000)
     mode: Literal["quick", "deep"] = "quick"
     clarified: bool = False
 
 
 class ScheduleCreate(BaseModel):
-    dataset_id: str
-    session_id: str
-    goal: str
-    cron: str
-    timezone: str = "UTC"
+    dataset_id: str = Field(max_length=40)
+    session_id: str = Field(max_length=40)
+    goal: str = Field(max_length=2000)
+    cron: str = Field(max_length=100)
+    timezone: str = Field(default="UTC", max_length=64)
     enabled: bool = True
 
 
 class ScheduleUpdate(BaseModel):
-    goal: str | None = None
-    cron: str | None = None
-    timezone: str | None = None
+    goal: str | None = Field(default=None, max_length=2000)
+    cron: str | None = Field(default=None, max_length=100)
+    timezone: str | None = Field(default=None, max_length=64)
     enabled: bool | None = None
 
 class SaveModelIn(BaseModel):

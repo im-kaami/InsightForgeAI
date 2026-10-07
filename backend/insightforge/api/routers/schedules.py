@@ -2,17 +2,19 @@ from datetime import UTC, datetime
 
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from insightforge.api.deps import CurrentUser, Db
 from insightforge.api.routers.sessions import run_output
 from insightforge.api.schemas import ScheduleCreate, ScheduleOut, ScheduleUpdate
+from insightforge.config import get_settings
 from insightforge.db.models import ChatSession, Dataset, Run, Schedule, User
 from insightforge.services.datasets import ensure_current_version
 from insightforge.services.runs import execute_run
 from insightforge.services.scheduler import schedule_timezone, scheduler
 
 router = APIRouter(prefix="/schedules", tags=["schedules"])
+MIN_SCHEDULE_SECONDS = 300
 
 
 def validate_cron(value: str, timezone: str) -> CronTrigger:
@@ -21,9 +23,14 @@ def validate_cron(value: str, timezone: str) -> CronTrigger:
     except ValueError as error:
         raise HTTPException(422, "Unknown timezone") from error
     try:
-        return CronTrigger.from_crontab(value, timezone=zone)
+        trigger = CronTrigger.from_crontab(value, timezone=zone)
     except ValueError as error:
         raise HTTPException(422, f"Invalid cron expression: {error}") from error
+    first = trigger.get_next_fire_time(None, datetime.now(UTC))
+    second = trigger.get_next_fire_time(first, first) if first else None
+    if first and second and (second - first).total_seconds() < MIN_SCHEDULE_SECONDS:
+        raise HTTPException(422, "Schedules can run at most once every 5 minutes")
+    return trigger
 
 
 def owned(db: Db, user: User, schedule_id: str) -> Schedule:
@@ -107,6 +114,13 @@ def delete_schedule(schedule_id: str, db: Db, user: CurrentUser):
 @router.post("/{schedule_id}/run-now")
 def run_now(schedule_id: str, db: Db, user: CurrentUser):
     schedule = owned(db, user, schedule_id)
+    active = db.scalar(
+        select(func.count())
+        .select_from(Run)
+        .where(Run.owner_id == user.id, Run.status.in_(("pending", "running")))
+    )
+    if active >= get_settings().max_concurrent_runs_per_user:
+        raise HTTPException(429, "Too many analyses running; wait for one to finish")
     dataset = db.get(Dataset, schedule.dataset_id)
     version = ensure_current_version(db, dataset)
     run = Run(

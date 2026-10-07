@@ -17,7 +17,17 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from insightforge.db.models import Artifact, Dashboard, DashboardItem, Run, ShareLink
+from insightforge.db.models import (
+    Artifact,
+    ChatSession,
+    Dashboard,
+    DashboardItem,
+    Dataset,
+    Run,
+    ShareLink,
+    User,
+)
+from insightforge.services.access import dataset_access
 
 SHARE_PREFIX = "ifs_"
 MAX_ACTIVE_LINKS = 50
@@ -62,6 +72,14 @@ def hash_share(secret: str) -> str:
     return hashlib.sha256(secret.encode("utf-8")).hexdigest()
 
 
+def _may_publish(db: Session, run: Run) -> bool:
+    """Only someone who can edit the run's dataset may publish its results (viewers may not)."""
+    session = db.get(ChatSession, run.session_id)
+    dataset = db.get(Dataset, session.dataset_id) if session else None
+    user = db.get(User, run.owner_id)
+    return bool(dataset and user and dataset_access(db, user, dataset) in {"own", "edit"})
+
+
 def target_title(db: Session, owner_id: str, kind: str, target_id: str) -> str:
     if kind == "dashboard":
         dashboard = db.scalar(
@@ -75,6 +93,8 @@ def target_title(db: Session, owner_id: str, kind: str, target_id: str) -> str:
         raise ShareError("Answer not found", status=404)
     if run.status != "completed":
         raise ShareError("Only completed answers can be shared", status=409)
+    if not _may_publish(db, run):
+        raise ShareError("Only a dataset's owner or editors can share its answers", status=403)
     return run.goal.split("\n\nClarification:")[0][:200]
 
 
@@ -179,7 +199,7 @@ def public_view(db: Session, link: ShareLink) -> dict[str, Any]:
         content = dashboard_view(db, dashboard)
     else:
         run = db.scalar(select(Run).where(Run.id == link.target_id, Run.owner_id == link.owner_id))
-        if run is None or run.status != "completed":
+        if run is None or run.status != "completed" or not _may_publish(db, run):
             raise ShareError("This link does not exist, has expired or was revoked", status=404)
         content = run_view(db, run)
     link.view_count = (link.view_count or 0) + 1

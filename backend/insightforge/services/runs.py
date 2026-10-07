@@ -23,6 +23,7 @@ from insightforge.core.metrics import Metric, MetricError, SavedMetrics
 from insightforge.core.planner import Plan, PlotStep, SqlStep, SummaryStep
 from insightforge.core.plotter import figure_to_png, make_figure
 from insightforge.core.queries import SavedQueries
+from insightforge.core.redact import clean_error
 from insightforge.core.relationships import Relationship, SavedRelationships
 from insightforge.core.sandbox import build_sandbox
 from insightforge.core.schema import DatasetNotes, SchemaInfo
@@ -612,12 +613,12 @@ def execute_run(
             run.verification_status = (
                 "blocked" if (run.request_json or {}).get("kind") in REPORT_KINDS else "needs_review"
             )
-            run.error = str(error)
-            run.warnings_json = [str(error)]
+            run.error = clean_error(error)
+            run.warnings_json = [clean_error(error)]
             run.finished_at = datetime.now(UTC)
             db.commit()
         if bus:
-            bus.publish(run_id, {"type": "error", "message": str(error)})
+            bus.publish(run_id, {"type": "error", "message": clean_error(error)})
     finally:
         if catalog:
             catalog.close()

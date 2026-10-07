@@ -1,3 +1,4 @@
+import ipaddress
 import os
 import re
 from pathlib import Path
@@ -7,6 +8,7 @@ import pandas as pd
 
 from insightforge.config import get_settings, private_databases_allowed
 from insightforge.core.catalog import DataCatalog, sanitize_identifier
+from insightforge.ingest import netguard
 from insightforge.ingest.base import DataSource, IngestError, LoadResult
 from insightforge.ingest.netguard import check_public_host
 
@@ -25,6 +27,10 @@ def _mysql_connection(uri: str) -> str:
         "port": str(parsed.port or 3306),
         "database": unquote(database),
     }
+    for key, value in values.items():
+        # The connection string is "key=value key=value", so a value with whitespace could add settings.
+        if any(char.isspace() or ord(char) < 32 for char in value):
+            raise IngestError(f"The MySQL {key} may not contain spaces or control characters")
     return " ".join(f"{key}={value}" for key, value in values.items())
 
 
@@ -126,6 +132,26 @@ def _check_database_hosts(uri: str) -> None:
         check_public_host(host, PRIVATE_OFF)
 
 
+def pin_postgres_host(connection: str) -> str:
+    """Add libpq's ``hostaddr`` (the address that was just checked) so the name cannot be re-resolved."""
+    if private_databases_allowed(get_settings()) or "://" not in connection:
+        return connection
+    parts = urlsplit(connection)
+    host = parts.hostname or ""
+    query = parse_qs(parts.query)
+    if not host or "hostaddr" in query:
+        return connection
+    try:
+        ipaddress.ip_address(host)
+        return connection
+    except ValueError:
+        pass
+    addresses = netguard.resolve_host(host.lower().rstrip("."))
+    check_public_host(host, PRIVATE_OFF, lambda _name: addresses)
+    separator = "&" if parts.query else ""
+    return urlunsplit(parts._replace(query=f"{parts.query}{separator}hostaddr={addresses[0]}"))
+
+
 def check_database_target(uri: str) -> None:
     """Refuse database connections this server is not set up to allow (files, private hosts)."""
     if _is_sqlite(uri):
@@ -193,6 +219,8 @@ def list_tables(uri: str, schema: str | None = None) -> list[str]:
     """Names of the tables a connection can see (in ``schema`` if given), without copying any data."""
     check_database_target(uri)
     db_type, connection = parse_db_uri(uri)
+    if db_type == "postgres":
+        connection = pin_postgres_host(connection)
     if db_type in {"mssql", "sqlalchemy", "snowflake"}:
         from sqlalchemy import inspect
 
@@ -278,6 +306,8 @@ def _load_sqlalchemy(
 
 def load_database(source: DataSource, catalog: DataCatalog) -> LoadResult:
     db_type, connection = parse_db_uri(source.location)
+    if db_type == "postgres":
+        connection = pin_postgres_host(connection)
     default_alias = "sqlalchemy" if source.kind == "sqlalchemy" else db_type
     alias = sanitize_identifier(source.name or default_alias)
     if source.kind in {"sqlalchemy", "mssql", "snowflake"} or db_type in {

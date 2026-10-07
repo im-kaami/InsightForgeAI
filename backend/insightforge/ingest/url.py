@@ -15,7 +15,7 @@ from insightforge.ingest.base import (
     load_source,
     table_name_for,
 )
-from insightforge.ingest.netguard import validate_public_url
+from insightforge.ingest.netguard import pin_public_url, validate_public_url
 
 _KNOWN_SUFFIXES = {
     ".csv",
@@ -67,7 +67,12 @@ def download(
     try:
         for hop in range(6):
             validate_public_url(current, allow_private=private_allowed)
-            with http_client.stream("GET", current, follow_redirects=False) as response:
+            target, headers, extensions = current, {}, {}
+            if own_client and not private_allowed:
+                target, headers, extensions = pin_public_url(current)
+            with http_client.stream(
+                "GET", target, headers=headers, extensions=extensions, follow_redirects=False
+            ) as response:
                 if response.status_code in _REDIRECT_STATUSES:
                     location = response.headers.get("location")
                     if not location:
@@ -78,9 +83,9 @@ def download(
                     continue
                 if response.status_code < 200 or response.status_code >= 300:
                     raise IngestError(f"Download failed with HTTP {response.status_code}")
-                if allow_html and urlparse(str(response.url)).hostname == "accounts.google.com":
+                if allow_html and urlparse(current).hostname == "accounts.google.com":
                     raise IngestError("Download redirected to an authentication page")
-                name = _filename(response.headers, str(response.url))
+                name = _filename(response.headers, current)
                 content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
                 with tempfile.NamedTemporaryFile(dir=dest_dir, delete=False, suffix=".part") as output:
                     temp_path = Path(output.name)

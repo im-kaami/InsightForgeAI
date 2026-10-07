@@ -37,6 +37,8 @@ from insightforge.services.scheduler import scheduler
 async def lifespan(app: FastAPI):
     settings = get_settings()
     problems = validate_settings(settings)
+    if "change-me" in (settings.jwt_secret, settings.app_secret):
+        raise RuntimeError("Refusing to start: JWT_SECRET and APP_SECRET must not be the default change-me")
     if settings.environment == "production" and problems:
         raise RuntimeError("Refusing to start: " + "; ".join(problems))
     for problem in problems:
@@ -68,11 +70,43 @@ def create_app() -> FastAPI:
     if not logger.handlers:
         logger.addHandler(logging.StreamHandler())
     logger.setLevel(logging.INFO)
-    application = FastAPI(title="InsightForge", lifespan=lifespan)
+    production = settings.environment == "production"
+    security_log = logging.getLogger("insightforge.security")
+    application = FastAPI(
+        title="InsightForge",
+        lifespan=lifespan,
+        docs_url=None if production else "/docs",
+        redoc_url=None if production else "/redoc",
+        openapi_url=None if production else "/openapi.json",
+    )
+
+    @application.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        sensitive = request.method != "GET" and path.startswith(
+            (
+                "/api/shares",
+                "/api/workspaces",
+                "/api/auth/password",
+                "/api/auth/logout-all",
+                "/api/auth/tokens",
+            )
+        )
+        if response.status_code in (401, 403, 429) or (sensitive and response.status_code < 400):
+            # Method, path and status only: never bodies, query strings, tokens or data values.
+            security_log.info("%s %s -> %s", request.method, path, response.status_code)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        if production:
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+        return response
+
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+        allow_origin_regex=None if production else r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

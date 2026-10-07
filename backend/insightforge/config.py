@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     duckdb_memory_limit: str = "2GB"
     duckdb_threads: int = 4
     max_concurrent_runs_per_user: int = 2
+    max_runs_per_user_per_day: int = Field(default=500, ge=1)
+    daily_cost_budget_usd: float | None = Field(default=None, gt=0)
     run_workers: int = Field(default=4, ge=1, le=32)
     run_max_attempts: int = Field(default=2, ge=1, le=5)
     app_base_url: str = "http://localhost:3000"
@@ -55,6 +57,7 @@ class Settings(BaseSettings):
     smtp_timeout_seconds: int = 10
     login_max_failures: int = Field(default=5, ge=1)
     login_window_minutes: int = Field(default=15, ge=1)
+    register_max_per_hour: int = Field(default=30, ge=1)
     max_upload_bytes: int = 200_000_000
     llm_send_sample_values: bool = True
     llm_summary_max_rows: int = 20

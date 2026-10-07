@@ -19,6 +19,35 @@ def resolve_host(hostname: str) -> list[str]:
         raise IngestError("Could not resolve host") from error
 
 
+def pin_public_url(url: str) -> tuple[str, dict[str, str], dict[str, str]]:
+    """Resolve the host once, check every address, and return (url with the IP, headers, extensions).
+
+    Connecting to the checked address closes the DNS rebinding gap between the check and the request.
+    The Host header and the TLS server name keep the original host name.
+    """
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if parsed.scheme.lower() not in {"http", "https"} or not hostname:
+        raise IngestError("URL must be http or https and include a hostname")
+    message = "Private or internal URLs are not allowed"
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        addresses = resolve_host(hostname.lower().rstrip("."))
+        check_public_host(hostname, message, lambda _name: addresses)
+        address = addresses[0]
+    else:
+        check_public_host(hostname, message)
+        return url, {}, {}
+    ip = ipaddress.ip_address(address)
+    host = f"[{ip}]" if ip.version == 6 else str(ip)
+    netloc = host + (f":{parsed.port}" if parsed.port else "")
+    pinned = parsed._replace(netloc=netloc).geturl()
+    default_port = {"http": 80, "https": 443}[parsed.scheme.lower()]
+    host_header = hostname + (f":{parsed.port}" if parsed.port and parsed.port != default_port else "")
+    return pinned, {"Host": host_header}, {"sni_hostname": hostname}
+
+
 def validate_public_url(
     url: str,
     *,

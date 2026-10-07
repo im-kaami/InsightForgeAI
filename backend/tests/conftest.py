@@ -15,6 +15,14 @@ def public_dns(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def unpinned_downloads(monkeypatch):
+    """Download mocks match by host name; pin_public_url has its own tests."""
+    from insightforge.ingest import url
+
+    monkeypatch.setattr(url, "pin_public_url", lambda target: (target, {}, {}))
+
+
+@pytest.fixture(autouse=True)
 def fresh_settings():
     get_settings.cache_clear()
     yield

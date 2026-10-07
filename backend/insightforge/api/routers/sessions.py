@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import delete, func, select
@@ -192,6 +192,17 @@ async def create_run(
     )
     if active >= get_settings().max_concurrent_runs_per_user:
         raise HTTPException(429, "Too many analyses running; wait for one to finish")
+    settings = get_settings()
+    since = datetime.now(UTC) - timedelta(days=1)
+    today = db.execute(
+        select(func.count(), func.coalesce(func.sum(Run.cost_usd), 0.0)).where(
+            Run.owner_id == user.id, Run.created_at >= since
+        )
+    ).one()
+    if today[0] >= settings.max_runs_per_user_per_day:
+        raise HTTPException(429, "Daily limit of analyses reached; try again tomorrow")
+    if settings.daily_cost_budget_usd is not None and today[1] >= settings.daily_cost_budget_usd:
+        raise HTTPException(429, "Daily AI cost budget reached; try again tomorrow")
     run = Run(
         session_id=session.id,
         owner_id=user.id,
