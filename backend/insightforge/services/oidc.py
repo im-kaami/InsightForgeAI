@@ -184,4 +184,4 @@ def finish(
         db.add(user)
         db.commit()
         db.refresh(user)
-    return create_access_token(user.id)
+    return create_access_token(user.id, user.token_version or 0)

@@ -64,6 +64,18 @@ characters.
 - [ ] Sign in again. A wrong password shows "Invalid email or password".
 - [ ] Registering the same email twice shows an error.
 
+### 1.1b Account security (new in Phase 0d)
+- [ ] Registering with a password shorter than 8 characters, or an email without "@", shows a clear
+  error.
+- [ ] Sign in with a wrong password 5 times: the 6th attempt (even with the right password) says
+  "Too many failed sign-in attempts. Try again in 15 minutes." Use another account meanwhile.
+- [ ] **Account** in the sidebar: change your password. You stay signed in; a second browser (or a
+  private window) signed in before is sent to the sign-in page on its next click.
+- [ ] **Sign out everywhere** signs out this browser and every other one.
+- [ ] Forgotten password: in a terminal, `cd E:\InsightForgeAI\backend`, then
+  `.venv\Scripts\python.exe -m insightforge.cli reset-link you@example.com`. Open the printed link,
+  choose a new password, sign in with it. Opening the same link again says it is invalid.
+
 ### 1.2 Upload files and review the import
 - [ ] **Add data** → **Files** → choose `orders.csv` and `customers.csv` together → **Preview import**.
 - [ ] The review shows both tables, inferred column types, a preview and quality counts.

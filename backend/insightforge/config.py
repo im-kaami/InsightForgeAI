@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     max_concurrent_runs_per_user: int = 2
     run_workers: int = Field(default=4, ge=1, le=32)
     run_max_attempts: int = Field(default=2, ge=1, le=5)
+    login_max_failures: int = Field(default=5, ge=1)
+    login_window_minutes: int = Field(default=15, ge=1)
     max_upload_bytes: int = 200_000_000
     llm_send_sample_values: bool = True
     llm_summary_max_rows: int = 20

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from insightforge.core.metrics import Metric, MetricQuery, SavedMetrics
 from insightforge.core.profiling import DataProfile
@@ -19,7 +19,31 @@ class APIModel(BaseModel):
 
 class Credentials(BaseModel):
     email: str
-    password: str
+    password: str = Field(max_length=256)
+
+
+class NewCredentials(BaseModel):
+    email: str
+    password: str = Field(min_length=8, max_length=256)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: str) -> str:
+        value = value.strip().lower()
+        name, _, domain = value.partition("@")
+        if not 3 <= len(value) <= 320 or not name or not domain or "@" in domain or " " in value:
+            raise ValueError("Enter a valid email address")
+        return value
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(max_length=256)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
+class PasswordReset(BaseModel):
+    token: str = Field(max_length=200)
+    new_password: str = Field(min_length=8, max_length=256)
 
 
 class UserOut(APIModel):

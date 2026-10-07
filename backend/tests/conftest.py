@@ -5,11 +5,19 @@ import pytest
 
 from insightforge.core.catalog import DataCatalog
 from insightforge.ingest import netguard
+from insightforge.services.login_limits import login_limiter
 
 
 @pytest.fixture(autouse=True)
 def public_dns(monkeypatch):
     monkeypatch.setattr(netguard, "resolve_host", lambda _hostname: ["93.184.216.34"])
+
+
+@pytest.fixture(autouse=True)
+def fresh_login_limiter():
+    login_limiter.reset()
+    yield
+    login_limiter.reset()
 
 
 @pytest.fixture

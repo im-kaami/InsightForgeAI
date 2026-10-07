@@ -47,9 +47,11 @@ def test_legacy_database_with_empty_alembic_version_is_upgraded(tmp_path, monkey
     } <= set(inspect(engine).get_table_names())
     run_columns = {column["name"] for column in inspect(engine).get_columns("runs")}
     assert {"llm_provider", "llm_model", "cost_usd"} <= run_columns
+    assert "token_version" in {column["name"] for column in inspect(engine).get_columns("users")}
+    assert "password_resets" in inspect(engine).get_table_names()
     with engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == (
-            "0017_run_queue"
+            "0018_auth_security"
         )
     engine.dispose()
     get_settings.cache_clear()
@@ -119,10 +121,11 @@ def test_upgrade_from_0002_preserves_existing_rows(tmp_path, monkeypatch):
             connection.execute(text("SELECT llm_provider, llm_model, cost_usd FROM runs WHERE id='r'")).one()
         ) == (None, None, None)
         assert connection.execute(text("SELECT attempts FROM runs WHERE id='r'")).scalar() == 0
+        assert connection.execute(text("SELECT token_version FROM users WHERE id='u'")).scalar() == 0
         assert connection.execute(text("SELECT metrics_json FROM datasets WHERE id='d'")).scalar() == "{}"
         assert connection.execute(text("SELECT queries_json FROM datasets WHERE id='d'")).scalar() == "{}"
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == (
-            "0017_run_queue"
+            "0018_auth_security"
         )
     engine.dispose()
     get_settings.cache_clear()

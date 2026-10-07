@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   LogOut,
   Share2,
+  UserCog,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -31,6 +32,7 @@ const nav = [
   { href: "/workspaces", label: "Workspaces", icon: Users },
   { href: "/sharing", label: "Sharing", icon: Share2 },
   { href: "/usage", label: "Usage", icon: Gauge },
+  { href: "/account", label: "Account", icon: UserCog },
   { href: "/api-tokens", label: "API tokens", icon: KeyRound },
 ];
 

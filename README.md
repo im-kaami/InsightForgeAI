@@ -142,6 +142,8 @@ Copy `.env.example` to `.env` and adjust these values:
 | `DUCKDB_THREADS` | DuckDB worker threads per catalog | `4` |
 | `MAX_CONCURRENT_RUNS_PER_USER` | Pending/running analyses allowed per user | `2` |
 | `RUN_WORKERS` | Analyses that run at the same time (1-32); the rest wait in the queue | `4` |
+| `LOGIN_MAX_FAILURES` | Failed sign-ins per email allowed within the window before that email is locked (keyed by email, not IP; someone who knows an email can lock it for the window) | `5` |
+| `LOGIN_WINDOW_MINUTES` | Length of the sign-in failure window and lockout, in minutes | `15` |
 | `RUN_MAX_ATTEMPTS` | Times a run is tried when the server restarts mid-run (1-5), then it is marked failed | `2` |
 | `MAX_UPLOAD_BYTES` | Maximum bytes accepted for each uploaded file | `200000000` |
 | `LLM_SEND_SAMPLE_VALUES` | Include non-sensitive schema samples in planner prompts | `true` |
@@ -379,6 +381,12 @@ Limits: drift compares the new data with the training data; it does not prove th
 - **Approved question:** the result of an approved question's SQL on the current data.
 
 **Refresh** (one tile) and **Refresh all** re-run the metric and question tiles on the current data version with tested code; no AI is used. If a refresh fails (for example, the metric or question was removed), the tile shows why and keeps its last good result. **Up** and **Down** reorder tiles. Deleting a dataset deletes its tiles from every dashboard, pinned copies included, because they contain its data.
+
+## Accounts and sign-in security
+
+- Passwords are 8 to 256 characters. Open **Account** in the sidebar to change yours (other sessions are signed out) or to **Sign out everywhere**.
+- After `LOGIN_MAX_FAILURES` failed sign-ins for one email within `LOGIN_WINDOW_MINUTES`, that email is locked until the window passes (HTTP 429 with `Retry-After`). The limit is per email and held in memory, so a restart clears it, and anyone who knows an email can lock it for the window on purpose; client addresses are not trusted behind the proxy.
+- InsightForge sends no email. To reset a forgotten password, run `insightforge reset-link person@example.com` (optional `--base-url`, `--hours 1-72`) on the server and give the printed `/reset#...` link to the person. It works once, ends their sessions, and a new link replaces earlier unused ones.
 
 ## Single sign-on (OpenID Connect)
 

@@ -23,15 +23,38 @@ def verify_password(password_hash: str, password: str) -> bool:
         return False
 
 
-def create_access_token(user_id: str) -> str:
+def create_access_token(user_id: str, token_version: int = 0) -> str:
     settings = get_settings()
     expires = datetime.now(UTC) + timedelta(minutes=settings.access_token_minutes)
-    return jwt.encode({"sub": user_id, "exp": expires}, settings.jwt_secret, algorithm="HS256")
+    claims = {"sub": user_id, "exp": expires, "tv": token_version}
+    return jwt.encode(claims, settings.jwt_secret, algorithm="HS256")
 
 
-def decode_token(token: str) -> str:
+def decode_token(token: str) -> tuple[str, int]:
+    """Return the user id and the token version the token was issued for (missing means 0)."""
     payload = jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
-    return str(payload["sub"])
+    return str(payload["sub"]), int(payload.get("tv", 0))
+
+
+_dummy_hash: str | None = None
+
+
+def spend_password_check_time(password: str) -> None:
+    """Hash-verify against a dummy so unknown accounts take as long to reject as known ones."""
+    global _dummy_hash
+    if _dummy_hash is None:
+        _dummy_hash = hash_password("insightforge-dummy-password")
+    verify_password(_dummy_hash, password)
+
+
+def new_reset_secret() -> tuple[str, str]:
+    """Return (secret, sha256 hex). The secret is shown once; only the hash is stored."""
+    secret = "ifr_" + secrets.token_urlsafe(32)
+    return secret, hashlib.sha256(secret.encode("utf-8")).hexdigest()
+
+
+def hash_reset_secret(secret: str) -> str:
+    return hashlib.sha256(secret.encode("utf-8")).hexdigest()
 
 
 API_TOKEN_PREFIX = "ifk_"

@@ -54,7 +54,7 @@ function errorMessage(detail: unknown, fallback: string): string {
       .map((item) => {
         const value = item as { loc?: unknown[]; msg?: string };
         const location = value.loc?.slice(1).join(".");
-        return `${location ? `${location}: ` : ""}${value.msg ?? fallback}`;
+        return `${location ? `${location}: ` : ""}${(value.msg ?? fallback).replace(/^Value error, /, "")}`;
       })
       .join("; ");
   }
@@ -91,6 +91,14 @@ export const auth = {
   login: (email: string, password: string) =>
     apiFetch<components["schemas"]["Token"]>("/auth/login", json({ email, password })),
   me: () => apiFetch<User>("/auth/me"),
+  changePassword: (current_password: string, new_password: string) =>
+    apiFetch<components["schemas"]["Token"]>(
+      "/auth/password",
+      json({ current_password, new_password }),
+    ),
+  logoutAll: () => apiFetch<void>("/auth/logout-all", { method: "POST" }),
+  resetPassword: (token: string, new_password: string) =>
+    apiFetch<void>("/auth/password/reset", json({ token, new_password })),
 };
 
 export type ApiToken = components["schemas"]["ApiTokenOut"];

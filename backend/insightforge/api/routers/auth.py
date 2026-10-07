@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 
@@ -12,6 +12,9 @@ from insightforge.api.schemas import (
     ApiTokenIn,
     ApiTokenOut,
     Credentials,
+    NewCredentials,
+    PasswordChange,
+    PasswordReset,
     Token,
     UserOut,
 )
@@ -23,30 +26,75 @@ from insightforge.services.auth import (
     create_access_token,
     hash_password,
     new_api_token,
+    spend_password_check_time,
     verify_password,
 )
+from insightforge.services.login_limits import lockout_message, login_limiter
+from insightforge.services.password_reset import redeem_reset
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 MAX_ACTIVE_TOKENS = 20
 
 
 @router.post("/register", response_model=UserOut, status_code=201)
-def register(body: Credentials, db: Db):
-    if db.scalar(select(User).where(User.email == body.email.lower())):
+def register(body: NewCredentials, db: Db):
+    if db.scalar(select(User).where(User.email == body.email)):
         raise HTTPException(409, "Email is already registered")
-    user = User(email=body.email.lower(), password_hash=hash_password(body.password))
+    user = User(email=body.email, password_hash=hash_password(body.password))
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
 
 
+def _refuse_if_locked(email: str) -> None:
+    wait = login_limiter.retry_after(email)
+    if wait:
+        raise HTTPException(429, lockout_message(wait), headers={"Retry-After": str(wait)})
+
+
 @router.post("/login", response_model=Token)
 def login(body: Credentials, db: Db):
-    user = db.scalar(select(User).where(User.email == body.email.lower()))
-    if not user or not verify_password(user.password_hash, body.password):
+    email = body.email.strip().lower()
+    _refuse_if_locked(email)
+    user = db.scalar(select(User).where(User.email == email))
+    if user is None:
+        spend_password_check_time(body.password)
+    if user is None or not verify_password(user.password_hash, body.password):
+        login_limiter.record_failure(email)
         raise HTTPException(401, "Invalid email or password")
-    return Token(access_token=create_access_token(user.id))
+    login_limiter.clear(email)
+    return Token(access_token=create_access_token(user.id, user.token_version or 0))
+
+
+@router.post("/password", response_model=Token)
+def change_password(body: PasswordChange, db: Db, user: SignedInUser):
+    """Change the password; every other session ends and this one gets a fresh token."""
+    _refuse_if_locked(user.email)
+    if not verify_password(user.password_hash, body.current_password):
+        login_limiter.record_failure(user.email)
+        raise HTTPException(400, "Current password is incorrect")
+    login_limiter.clear(user.email)
+    user.password_hash = hash_password(body.new_password)
+    user.token_version = (user.token_version or 0) + 1
+    db.commit()
+    return Token(access_token=create_access_token(user.id, user.token_version))
+
+
+@router.post("/logout-all", status_code=204)
+def logout_all(db: Db, user: SignedInUser):
+    user.token_version = (user.token_version or 0) + 1
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/password/reset", status_code=204)
+def reset_password(body: PasswordReset, db: Db):
+    user = redeem_reset(db, body.token, body.new_password)
+    if user is None:
+        raise HTTPException(400, "This reset link is invalid or has expired")
+    login_limiter.clear(user.email)
+    return Response(status_code=204)
 
 
 @router.get("/me", response_model=UserOut)

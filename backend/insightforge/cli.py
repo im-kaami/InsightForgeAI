@@ -56,6 +56,13 @@ def _parser() -> argparse.ArgumentParser:
         "mcp", help="Run the MCP server on stdio (set INSIGHTFORGE_TOKEN to an API token)"
     )
     serve.add_argument("--url", help="InsightForge API address (default: INSIGHTFORGE_URL or localhost:8000)")
+
+    reset = commands.add_parser(
+        "reset-link", help="Print a single-use password reset link for an account (no email is sent)"
+    )
+    reset.add_argument("email")
+    reset.add_argument("--base-url", default="http://localhost:3000")
+    reset.add_argument("--hours", type=int, default=1, choices=range(1, 73), metavar="1-72")
     return parser
 
 
@@ -226,6 +233,26 @@ def _eval(args: argparse.Namespace) -> int:
     return 1 if comparison.accuracy_delta < -args.max_drop else 0
 
 
+def _reset_link(args: argparse.Namespace) -> int:
+    from insightforge.db.session import SessionLocal, configure, init_db
+    from insightforge.services.password_reset import create_reset
+
+    init_db()
+    configure()
+    db = SessionLocal()
+    try:
+        created = create_reset(db, args.email, args.hours)
+    finally:
+        db.close()
+    if created is None:
+        print("No account has that email address.", file=sys.stderr)
+        return 1
+    secret, expires = created
+    print(f"{args.base_url.rstrip('/')}/reset#{secret}")
+    print(f"Single use; expires {expires.strftime('%Y-%m-%d %H:%M')} UTC.")
+    return 0
+
+
 def _run(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
@@ -239,6 +266,8 @@ def _run(argv: list[str] | None = None) -> int:
                 return 1
             run_from_environment(args.url)
             return 0
+        if args.command == "reset-link":
+            return _reset_link(args)
         return _ask(args) if args.command == "ask" else _schema(args)
     except IngestError as error:
         print(f"Ingestion error: {error}", file=sys.stderr)

@@ -50,12 +50,14 @@ def get_current_user(
     if is_api_token(credentials.credentials):
         return _api_token_user(db, request, credentials.credentials)
     try:
-        user_id = decode_token(credentials.credentials)
-    except (jwt.PyJWTError, KeyError):
+        user_id, version = decode_token(credentials.credentials)
+    except (jwt.PyJWTError, KeyError, ValueError):
         raise HTTPException(401, "Invalid access token") from None
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(401, "Invalid access token")
+    if version != (user.token_version or 0):
+        raise HTTPException(401, "Your session has ended; sign in again")
     return user
 
 
