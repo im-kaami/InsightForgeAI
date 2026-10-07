@@ -22,7 +22,7 @@ dependencies = [
     "uvicorn[standard]==0.53.0",
     "sqlalchemy==2.0.53",
     "alembic==1.20.0",
-    "PyJWT==2.14.0",
+    "PyJWT==2.15.0",
     "argon2-cffi==25.1.0",
     "APScheduler==3.11.3",
     "python-multipart==0.0.32",
