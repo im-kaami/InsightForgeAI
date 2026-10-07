@@ -20,7 +20,7 @@ test("SQLite files are only offered when the server allows them", async ({ page 
   );
   const form = await openDatabaseTab(page);
   await expect(form.getByLabel("Database type")).toBeVisible();
-  await expect(form.getByLabel("Database type").locator("option")).toHaveCount(5);
+  await expect(form.getByLabel("Database type").locator("option")).toHaveCount(6);
   await expect(form.getByLabel("Database type").locator("option[value='sqlite']")).toHaveCount(0);
 
   await page.reload();
@@ -32,7 +32,7 @@ test("SQLite files are only offered when the server allows them", async ({ page 
   await page.getByRole("tab", { name: "Database" }).click();
   await expect(
     page.getByTestId("database-form").getByLabel("Database type").locator("option"),
-  ).toHaveCount(6);
+  ).toHaveCount(7);
 });
 
 test("the database tab builds the address, lists tables and connects with a table choice", async ({
@@ -90,4 +90,57 @@ test("the database tab builds the address, lists tables and connects with a tabl
     tables: ["orders"],
     schema: "sales",
   });
+});
+
+test("Snowflake builds an encoded address and starts with no tables ticked", async ({ page }) => {
+  await page.route("**/api/connections/options", (route) =>
+    route.fulfill({ json: { sqlite_files: false } }),
+  );
+  const tests: { uri: string; schema: string | null }[] = [];
+  await page.route("**/api/connections/test", async (route) => {
+    tests.push(route.request().postDataJSON());
+    await route.fulfill({
+      json: {
+        kind: "snowflake",
+        tables: ["customer", "nation", "orders", "region"],
+        redacted_uri: "snowflake://x",
+      },
+    });
+  });
+  let connected: Record<string, unknown> | null = null;
+  await page.route("**/api/datasets/from-connection", async (route) => {
+    connected = route.request().postDataJSON();
+    await route.fulfill({ status: 400, json: { detail: "Mocked: not really connected" } });
+  });
+
+  const form = await openDatabaseTab(page);
+  await form.getByLabel("Database type").selectOption("snowflake");
+  await expect(form.getByLabel("Warehouse")).toHaveValue("COMPUTE_WH");
+  await expect(form.getByText("locator.region, e.g. ft45233.eu-central-2.aws")).toBeVisible();
+  await expect(form.getByRole("button", { name: "Test connection" })).toBeDisabled();
+  await form.getByLabel("Account identifier").fill("ft45233.eu-central-2.aws");
+  await form.getByLabel("User").fill("kaami");
+  await form.getByLabel("Password").fill("p@ss:w/rd?#1");
+  await form.getByLabel("Database", { exact: true }).fill("SNOWFLAKE_SAMPLE_DATA");
+  await form.getByLabel("Schema", { exact: true }).fill("TPCH_SF1");
+  await form.getByLabel("Role (optional)").fill("MY ROLE");
+  await form.getByRole("button", { name: "Test connection" }).click();
+
+  const tables = page.getByTestId("database-tables");
+  await expect(tables).toContainText("Tables to use (0 of 4)");
+  await expect(tables.getByRole("checkbox", { checked: true })).toHaveCount(0);
+  await expect(page.getByTestId("snowflake-credits")).toContainText("uses Snowflake credits");
+  const uri =
+    "snowflake://kaami:p%40ss%3Aw%2Frd%3F%231@ft45233.eu-central-2.aws/SNOWFLAKE_SAMPLE_DATA/TPCH_SF1" +
+    "?warehouse=COMPUTE_WH&role=MY%20ROLE";
+  expect(tests[0]).toEqual({ uri, schema: null });
+
+  const connect = form.getByRole("button", { name: "Connect", exact: true });
+  await expect(connect).toBeDisabled();
+  await tables.getByRole("checkbox", { name: "nation" }).check();
+  await tables.getByRole("checkbox", { name: "region" }).check();
+  await form.getByLabel("Dataset name").fill("Sample");
+  await connect.click();
+  await expect(page.getByText("Mocked: not really connected")).toBeVisible();
+  expect(connected).toEqual({ uri, name: "Sample", tables: ["nation", "region"] });
 });

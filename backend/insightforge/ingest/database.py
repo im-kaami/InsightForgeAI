@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit, urlunsplit
 
@@ -39,6 +40,8 @@ def parse_db_uri(uri: str) -> tuple[str, str]:
         return "sqlite", _sqlite_path(uri)
     if lowered.startswith(("mssql://", "sqlserver://", "mssql+pymssql://")):
         return "mssql", f"mssql+pymssql://{uri.split('://', 1)[1]}"
+    if lowered.startswith("snowflake://"):
+        return "snowflake", uri
     if "://" in uri:
         return "sqlalchemy", uri
     if Path(uri).suffix.lower() in {".sqlite", ".sqlite3", ".db"}:
@@ -95,6 +98,17 @@ def _check_sqlite_file(uri: str) -> None:
         raise IngestError("That SQLite file is inside the application's storage")
 
 
+_ACCOUNT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
+
+
+def _check_snowflake(uri: str) -> None:
+    account = urlsplit(uri).hostname or ""
+    if not _ACCOUNT.match(account):
+        raise IngestError("Enter the Snowflake account identifier, for example ft45233.eu-central-2.aws")
+    if not private_databases_allowed(get_settings()):
+        check_public_host(f"{account}.snowflakecomputing.com", PRIVATE_OFF)
+
+
 def _check_database_hosts(uri: str) -> None:
     if private_databases_allowed(get_settings()):
         return
@@ -116,6 +130,8 @@ def check_database_target(uri: str) -> None:
     """Refuse database connections this server is not set up to allow (files, private hosts)."""
     if _is_sqlite(uri):
         _check_sqlite_file(uri)
+    elif uri.lower().startswith("snowflake://"):
+        _check_snowflake(uri)
     else:
         _check_database_hosts(uri)
 
@@ -131,6 +147,28 @@ def redact_uri(uri: str) -> str:
     port = f":{parsed.port}" if parsed.port else ""
     netloc = f"{username}:***@{hostname}{port}"
     return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+
+
+def _with_snowflake_schema(uri: str, schema: str | None) -> str:
+    """Snowflake takes database and schema from the address path; ``schema`` replaces the schema part."""
+    if not schema:
+        return uri
+    parts = urlsplit(uri)
+    database = parts.path.strip("/").split("/")[0]
+    if not database:
+        raise IngestError("Name a database in the address to choose a schema")
+    return urlunsplit((parts.scheme, parts.netloc, f"/{database}/{schema}", parts.query, parts.fragment))
+
+
+def _reason(error: Exception, uri: str, db_type: str) -> str:
+    """A short reason from the database driver, for Snowflake only, with the password removed."""
+    if db_type != "snowflake":
+        return ""
+    text = " ".join(str(error).split())[:240]
+    password = urlsplit(uri).password or ""
+    for secret in {password, unquote(password)} - {""}:
+        text = text.replace(secret, "***")
+    return f": {text}" if text else ""
 
 
 def _driver_missing(location: str) -> IngestError:
@@ -155,16 +193,20 @@ def list_tables(uri: str, schema: str | None = None) -> list[str]:
     """Names of the tables a connection can see (in ``schema`` if given), without copying any data."""
     check_database_target(uri)
     db_type, connection = parse_db_uri(uri)
-    if db_type in {"mssql", "sqlalchemy"}:
+    if db_type in {"mssql", "sqlalchemy", "snowflake"}:
         from sqlalchemy import inspect
 
+        if db_type == "snowflake":
+            connection, schema = _with_snowflake_schema(connection, schema), None
         engine = _engine(connection)
         try:
             return sorted(inspect(engine).get_table_names(schema=schema))
         except (ImportError, ModuleNotFoundError) as error:
             raise _driver_missing(uri) from error
         except Exception as error:
-            raise IngestError(f"Could not read tables from {redact_uri(uri)}") from error
+            raise IngestError(
+                f"Could not read tables from {redact_uri(uri)}{_reason(error, uri, db_type)}"
+            ) from error
         finally:
             engine.dispose()
     catalog = DataCatalog()
@@ -185,6 +227,8 @@ def _load_sqlalchemy(
 ) -> LoadResult:
     location = location or source.location
     schema = source.options.get("schema") or None
+    if source.kind == "snowflake" or location.lower().startswith("snowflake://"):
+        location, schema = _with_snowflake_schema(location, schema), None
     try:
         from sqlalchemy import inspect
 
@@ -236,7 +280,11 @@ def load_database(source: DataSource, catalog: DataCatalog) -> LoadResult:
     db_type, connection = parse_db_uri(source.location)
     default_alias = "sqlalchemy" if source.kind == "sqlalchemy" else db_type
     alias = sanitize_identifier(source.name or default_alias)
-    if source.kind in {"sqlalchemy", "mssql"} or db_type in {"sqlalchemy", "mssql"}:
+    if source.kind in {"sqlalchemy", "mssql", "snowflake"} or db_type in {
+        "sqlalchemy",
+        "mssql",
+        "snowflake",
+    }:
         return _load_sqlalchemy(source, catalog, alias, connection)
     if db_type == "sqlite" and not Path(connection).expanduser().exists():
         raise IngestError(f"SQLite database does not exist: {redact_uri(source.location)}")

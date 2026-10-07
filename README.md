@@ -33,6 +33,7 @@ The same engine powers the web application, CLI, Python package, and submission 
 | Google Sheets | Public share links, including individual tabs |
 | PostgreSQL / MySQL / SQLite | Read-only DuckDB attachments (live) |
 | SQL Server | Copied into a snapshot each time the data is opened (driver `pymssql`, in the `db` extra) |
+| Snowflake | Copied into a snapshot each time the data is opened (drivers `snowflake-sqlalchemy` and `snowflake-connector-python`, in the `db` extra) |
 | Other databases | SQLAlchemy URIs with installed drivers, copied the same way |
 
 ## Architecture
@@ -398,7 +399,8 @@ Open **Add data > Database**, pick the database type, and fill in host, port, da
 - **Schema.** For PostgreSQL and SQL Server you can name one schema (letters, digits, `_`, `$`). Without it, PostgreSQL uses `public` and SQL Server uses the login's default schema, usually `dbo`. Tables in other PostgreSQL schemas are not listed unless you choose that schema.
 - **PostgreSQL, MySQL and SQLite** are attached live and read-only through DuckDB, so questions see current data. A table list narrows what InsightForge shows and sends to the AI; it is not an access control, because the whole database is attached read-only and your own SQL could still name a table you unticked. Use a database user that can only read what you want to expose.
 - **SQL Server and other SQLAlchemy databases** are copied into a DuckDB snapshot **every time the dataset is opened**, not once: each question, preview, SQL-editor query and schema load copies the allowed tables again, up to 2,000,000 rows each. For a large database, always use the table list to copy only what you need. Nothing is written to the server; use a read-only login anyway. The driver is `pymssql`, installed with `pip install "insightforge[db]"` (the Docker image includes it).
-- Passwords are stored encrypted and never returned or logged; addresses are shown with the password replaced by `***`. Redshift, Snowflake and BigQuery are not supported.
+- **Snowflake.** Choose "Snowflake" and fill in the account identifier, user, password, warehouse (a running warehouse is required to read any table), database, schema and optional role. The account identifier is `orgname-accountname` or the older `locator.region` form: from a Snowflake address `app.snowflake.com/<region>/<locator>` write `locator.region`, for example `ft45233.eu-central-2.aws` (add the cloud suffix, such as `.aws`, when your address shows one). Tables are copied like SQL Server's, up to 2,000,000 rows each, **every time the dataset is opened**, and that uses Snowflake credits, so no table is ticked by default and you must choose the ones you need. Nothing is written to Snowflake; use a role that can only read what you want to expose. The sign-in is a password. If your account requires multi-factor authentication, create a programmatic access token in Snowflake and use it as the password. The address form is `snowflake://USER:PASSWORD@ACCOUNT/DATABASE/SCHEMA?warehouse=WH&role=ROLE` (encode special characters in the password); a separate schema option replaces the schema in the address. The host checked against private-network rules is `<account>.snowflakecomputing.com`.
+- Passwords are stored encrypted and never returned or logged; addresses are shown with the password replaced by `***`. Redshift and BigQuery are not supported.
 
 ## Accounts and sign-in security
 

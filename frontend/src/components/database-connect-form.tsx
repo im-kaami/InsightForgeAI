@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { connections, type Connection } from "@/lib/api";
 
-type DatabaseType = "postgres" | "postgres-cloud" | "mysql" | "mssql" | "sqlite" | "other";
+type DatabaseType =
+  "postgres" | "postgres-cloud" | "mysql" | "mssql" | "snowflake" | "sqlite" | "other";
 
 const TYPES: { value: DatabaseType; label: string; port: string; scheme: string }[] = [
   { value: "postgres", label: "PostgreSQL", port: "5432", scheme: "postgresql" },
@@ -20,6 +21,7 @@ const TYPES: { value: DatabaseType; label: string; port: string; scheme: string 
   },
   { value: "mysql", label: "MySQL", port: "3306", scheme: "mysql" },
   { value: "mssql", label: "SQL Server", port: "1433", scheme: "mssql+pymssql" },
+  { value: "snowflake", label: "Snowflake", port: "", scheme: "snowflake" },
   { value: "sqlite", label: "SQLite file", port: "", scheme: "sqlite" },
   { value: "other", label: "Other (SQLAlchemy URI)", port: "", scheme: "" },
 ];
@@ -39,10 +41,19 @@ function buildUri(
   values: { host: string; port: string; database: string; user: string; password: string },
   path: string,
   raw: string,
+  snowflake: { warehouse: string; role: string; schema: string },
 ) {
   if (type === "other") return raw.trim();
   if (type === "sqlite") return `sqlite:///${path.trim()}`;
   const spec = TYPES.find((item) => item.value === type)!;
+  if (type === "snowflake") {
+    const encode = encodeURIComponent;
+    const place = [values.database.trim(), snowflake.schema.trim()].filter(Boolean).map(encode);
+    const options = [`warehouse=${encode(snowflake.warehouse.trim())}`];
+    if (snowflake.role.trim()) options.push(`role=${encode(snowflake.role.trim())}`);
+    const credentials = `${encode(values.user)}:${encode(values.password)}@`;
+    return `snowflake://${credentials}${values.host.trim()}/${place.join("/")}?${options.join("&")}`;
+  }
   const login = values.user
     ? `${encodeURIComponent(values.user)}${
         values.password ? `:${encodeURIComponent(values.password)}` : ""
@@ -73,6 +84,8 @@ export function DatabaseConnectForm({
   const [path, setPath] = useState("");
   const [raw, setRaw] = useState("");
   const [schema, setSchema] = useState("");
+  const [warehouse, setWarehouse] = useState("COMPUTE_WH");
+  const [role, setRole] = useState("");
   const [name, setName] = useState("");
   const [connectionId, setConnectionId] = useState("");
   const [found, setFound] = useState<string[] | null>(null);
@@ -83,13 +96,22 @@ export function DatabaseConnectForm({
   const shownTypes = TYPES.filter((item) => item.value !== "sqlite" || sqliteAllowed);
 
   const usesSchema = type === "postgres" || type === "postgres-cloud" || type === "mssql";
-  const hostBased = type !== "sqlite" && type !== "other";
-  const uri = buildUri(type, values, path, raw);
-  const complete = hostBased
-    ? Boolean(values.host.trim() && values.database.trim())
-    : type === "sqlite"
-      ? Boolean(path.trim())
-      : Boolean(raw.trim());
+  const isSnowflake = type === "snowflake";
+  const hostBased = type !== "sqlite" && type !== "other" && !isSnowflake;
+  const uri = buildUri(type, values, path, raw, { warehouse, role, schema });
+  const complete = isSnowflake
+    ? Boolean(
+        values.host.trim() &&
+        values.user &&
+        values.password &&
+        warehouse.trim() &&
+        values.database.trim(),
+      )
+    : hostBased
+      ? Boolean(values.host.trim() && values.database.trim())
+      : type === "sqlite"
+        ? Boolean(path.trim())
+        : Boolean(raw.trim());
   const ready = Boolean(connectionId) || complete;
   const schemaValue = usesSchema && schema.trim() ? schema.trim() : undefined;
 
@@ -110,7 +132,7 @@ export function DatabaseConnectForm({
         ? await connections.tables(connectionId, schemaValue)
         : await connections.test(uri, schemaValue);
       setFound(result.tables);
-      setChosen(result.tables);
+      setChosen(isSnowflake ? [] : result.tables);
       if (result.tables.length === 0) toast.info("Connected, but no tables were found");
       else toast.success(`Connected: ${result.tables.length} tables found`);
     } catch (error) {
@@ -244,6 +266,83 @@ export function DatabaseConnectForm({
           )}
         </>
       )}
+      {isSnowflake && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2 space-y-1">
+            <Label htmlFor="sf-account">Account identifier</Label>
+            <Input
+              id="sf-account"
+              placeholder="orgname-accountname or locator.region"
+              value={values.host}
+              onChange={(event) => update({ host: event.target.value })}
+            />
+            <p className="text-xs text-muted-foreground">
+              From your Snowflake address app.snowflake.com/&lt;region&gt;/&lt;locator&gt;: write
+              locator.region, e.g. ft45233.eu-central-2.aws
+            </p>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="sf-user">User</Label>
+            <Input
+              id="sf-user"
+              autoComplete="off"
+              value={values.user}
+              onChange={(event) => update({ user: event.target.value })}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="sf-password">Password</Label>
+            <Input
+              id="sf-password"
+              type="password"
+              autoComplete="new-password"
+              value={values.password}
+              onChange={(event) => update({ password: event.target.value })}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="sf-warehouse">Warehouse</Label>
+            <Input
+              id="sf-warehouse"
+              value={warehouse}
+              onChange={(event) => {
+                setWarehouse(event.target.value);
+                reset();
+              }}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="sf-role">Role (optional)</Label>
+            <Input
+              id="sf-role"
+              value={role}
+              onChange={(event) => {
+                setRole(event.target.value);
+                reset();
+              }}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="sf-database">Database</Label>
+            <Input
+              id="sf-database"
+              value={values.database}
+              onChange={(event) => update({ database: event.target.value })}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="sf-schema">Schema</Label>
+            <Input
+              id="sf-schema"
+              value={schema}
+              onChange={(event) => {
+                setSchema(event.target.value);
+                reset();
+              }}
+            />
+          </div>
+        </div>
+      )}
       {usesSchema && (
         <div className="space-y-1">
           <Label htmlFor="db-schema">Schema (optional)</Label>
@@ -298,6 +397,12 @@ export function DatabaseConnectForm({
               </label>
             ))}
           </div>
+          {isSnowflake && (
+            <p role="note" className="text-xs text-amber-600" data-testid="snowflake-credits">
+              Each ticked table is copied (up to 2,000,000 rows) every time the dataset is opened,
+              and that uses Snowflake credits. Tick only what you need.
+            </p>
+          )}
         </div>
       )}
       <Input
@@ -308,13 +413,18 @@ export function DatabaseConnectForm({
       />
       <Button
         type="button"
-        disabled={!ready || busy || (found !== null && chosen.length === 0)}
+        disabled={
+          !ready ||
+          busy ||
+          (found !== null && chosen.length === 0) ||
+          (isSnowflake && found === null)
+        }
         onClick={() =>
           onConnect({
             connection_id: connectionId || undefined,
             uri: connectionId ? undefined : uri,
             name: name || "Connected data",
-            tables: found !== null && !allChosen ? chosen : undefined,
+            tables: found !== null && (isSnowflake || !allChosen) ? chosen : undefined,
             schema: schemaValue,
           })
         }

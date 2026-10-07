@@ -52,6 +52,8 @@ db = [
     "psycopg[binary]==3.3.5",
     "PyMySQL==1.2.0",
     "pymssql==2.4.2",
+    "snowflake-sqlalchemy==1.11.1",
+    "snowflake-connector-python==4.7.5",
 ]
 pdf = ["xhtml2pdf==0.2.19"]
 mcp = [
