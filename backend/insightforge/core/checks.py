@@ -7,7 +7,9 @@ from sqlglot.errors import ParseError
 
 from insightforge.core.catalog import DataCatalog, _qualified, _quote
 
-FindingCode = Literal["empty_result", "zero_result", "filter_matches_nothing", "many_to_many_join"]
+FindingCode = Literal[
+    "empty_result", "zero_result", "filter_matches_nothing", "many_to_many_join", "value_matched"
+]
 SERIOUS_FINDINGS = {"filter_matches_nothing", "many_to_many_join"}
 
 

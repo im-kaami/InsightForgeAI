@@ -9,7 +9,7 @@ from insightforge.core.checks import check_result
 from insightforge.core.llm import FakeLLMClient, offline_fake_llm
 from insightforge.evals import load_suite, open_dataset
 
-REMOTE_WRONG = "SELECT COUNT(*) AS n FROM employees WHERE location = 'remote'"
+REMOTE_WRONG = "SELECT COUNT(*) AS n FROM employees WHERE location = 'remot'"
 REMOTE_RIGHT = "SELECT COUNT(*) AS n FROM employees WHERE location = 'Remote'"
 
 

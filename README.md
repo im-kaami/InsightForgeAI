@@ -358,6 +358,12 @@ People rarely type values exactly as they are stored: "the west" for `West`, "el
 - Without an AI model, a question that names an approved metric and a value ("What is revenue in the west?") is filtered on that value, if the metric may be grouped by its column.
 - Every answer lists the matches in its Assumptions ("west" -> orders.region = 'West'), so you can see how a word was read.
 
+**Small automatic corrections.** Code makes three fixes to the AI's SQL and lists each in the answer's Assumptions:
+
+- A filter such as `location = 'remote'` that matches nothing is rewritten to the stored spelling (`'Remote'`) when exactly one stored value equals it ignoring case and spaces, and the step is run again once. This is done only when the AI may see values (Full, or Local with a local model), because the corrected SQL contains a stored value.
+- A grouped query with one aggregate and no ORDER BY or LIMIT is sorted when the question asks for the highest/most/top (descending) or lowest/least/fewest (ascending), but not when it asks for both.
+- When a test of "what drove the change" gets a result with fewer than two periods, the AI is asked once to rebuild the query with both periods and told exactly why.
+
 The index is built for each question from the confirmed data version, so it is never stale. Live database connections are not scanned.
 
 ## Approved questions and "Approved data only"

@@ -216,6 +216,7 @@ class InsightForgeAgent:
                 assumptions.append(
                     f"{table.name}: only the first {table.total_rows:,} of {full} result rows were kept."
                 )
+        assumptions.extend(item for item in state.assumptions if item not in assumptions)
         number_check, evidence = None, []
         if text_artifacts:
             summary = text_artifacts[-1].text

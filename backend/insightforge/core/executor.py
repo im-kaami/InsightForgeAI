@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -30,6 +31,7 @@ from insightforge.core.planner import (
     SummaryStep,
 )
 from insightforge.core.plotter import figure_to_png, make_figure, series_figure
+from insightforge.core.query_fixes import add_superlative_order, match_stored_values
 from insightforge.core.sandbox import DockerSandbox
 from insightforge.core.schema import SchemaInfo
 from insightforge.core.sql_guard import GuardedQuery, add_missing_group_by, guard_query
@@ -66,6 +68,7 @@ class ExecutionState:
     notes: dict[str, str] = field(default_factory=dict)
     row_counts: dict[str, list[int]] = field(default_factory=dict)
     findings: list[ResultFinding] = field(default_factory=list)
+    assumptions: list[str] = field(default_factory=list)
     summary: str = ""
     summary_usage: dict[str, int] = field(
         default_factory=lambda: {"prompt_tokens": 0, "completion_tokens": 0}
@@ -159,10 +162,19 @@ class Executor:
         columns = ", ".join(
             dict.fromkeys(c for c in [step.x, step.y, *step.by, *step.controls, *step.features] if c)
         )
-        hint = (
-            f"Question: {state.goal}\nThe tested method {step.method} could not use this query's result. "
-            f"Return one row per record with the columns {columns} and only the filters the question states."
-        )
+        found = re.search(r"exactly two periods.*found (\d+)", str(error))
+        if step.method == "explain_change" and found and int(found.group(1)) < 2:
+            hint = (
+                f"Question: {state.goal}\nThe column {step.x} must contain exactly two periods, but the "
+                f"result had only {found.group(1)}. Remove WHERE conditions that keep only one period: "
+                "both periods' rows must be in the result."
+            )
+        else:
+            hint = (
+                f"Question: {state.goal}\nThe tested method {step.method} could not use this query's "
+                f"result. Return one row per record with the columns {columns} and only the filters the "
+                "question states."
+            )
         try:
             repaired = self.planner.repair_sql(
                 SqlStep(name=step.data_source, query=guarded.full_sql or guarded.sql),
@@ -389,6 +401,52 @@ class Executor:
         if not any(isinstance(artifact, PlotArtifact) for artifact in state.artifacts):
             state.auto_chart = self.auto_chart
 
+    def _sorted(self, state: ExecutionState, step: SqlStep, query: str, started: float) -> str:
+        """Sort a grouped result when the question asks for the highest/lowest, and record it."""
+        if step.metric is not None or step.approved_query is not None:
+            return query
+        ordered = add_superlative_order(query, state.goal)
+        if ordered is None:
+            return query
+        sql, note = ordered
+        state.assumptions.append(f"{step.name}: {note}")
+        self.tracer.record(f"sorted:{step.name}", "code", started, ok=True, note=note)
+        return sql
+
+    def _match_values(
+        self, state: ExecutionState, step: SqlStep, guarded: GuardedQuery, frame: pd.DataFrame
+    ) -> tuple[GuardedQuery, pd.DataFrame, bool, int | None] | None:
+        """When a filter matches nothing only because of case or spaces, fix it once and say so."""
+        if step.metric is not None or step.approved_query is not None:
+            return None
+        if not self.planner.policy.values_visible_to_model:
+            return None  # the corrected SQL would show a stored value to a model that may not see values
+        values = frame.iloc[0].tolist() if len(frame) == 1 else []
+        numeric = [v for v in values if isinstance(v, int | float) and not isinstance(v, bool)]
+        if not (frame.empty or (numeric and all(pd.isna(v) or v == 0 for v in values))):
+            return None
+        started = time.perf_counter()
+        try:
+            fixed = match_stored_values(step.query, self.catalog, self.query_timeout)
+            if fixed is None:
+                return None
+            query, notes = fixed
+            corrected, result = self._run_sql(query)
+        except Exception:
+            return None
+        truncated, full_row_count = self._full_row_count(corrected, result)
+        state.assumptions.extend(f"{step.name}: {note}" for note in notes)
+        state.findings.append(
+            ResultFinding(
+                step=step.name,
+                code="value_matched",
+                message=f"{step.name}: {'; '.join(notes)}.",
+                model_message=f"{step.name}: a filter value was matched to the stored spelling.",
+            )
+        )
+        self.tracer.record(f"value_match:{step.name}", "code", started, ok=True, fixes=notes)
+        return corrected, result, truncated, full_row_count
+
     def _check(self, state: ExecutionState, step: SqlStep, sql: str, frame: pd.DataFrame) -> None:
         started = time.perf_counter()
         findings = check_result(step.name, sql, frame, self.catalog, self.query_timeout)
@@ -411,6 +469,7 @@ class Executor:
                 if step.name in state.results or any(item.name == step.name for item in state.artifacts):
                     self._forget(state, step.name)
                 repaired_sql = False
+                step = step.model_copy(update={"query": self._sorted(state, step, step.query, started)})
                 try:
                     guarded, frame = self._run_sql(step.query)
                 except Exception as first_error:
@@ -424,10 +483,12 @@ class Executor:
                         )
                         if grouped is not None:
                             # A forgotten GROUP BY is fixed by code before asking the AI.
+                            grouped = self._sorted(state, step, grouped, started)
                             guarded, frame = self._run_sql(grouped)
                         else:
                             repaired = self.planner.repair_sql(step, str(first_error), state.schema)
-                            guarded, frame = self._run_sql(repaired.query)
+                            repaired_query = self._sorted(state, step, repaired.query, started)
+                            guarded, frame = self._run_sql(repaired_query)
                         repaired_sql = True
                     except Exception as second_error:
                         message = f"{first_error}; repair failed: {second_error}"
@@ -461,6 +522,17 @@ class Executor:
                 state.sources[step.name] = (guarded, truncated, full_row_count)
                 if truncated:
                     state.notes[step.name] = truncation_note(len(frame), full_row_count)
+                matched = self._match_values(state, step, guarded, frame)
+                if matched is not None:
+                    guarded, frame, truncated, full_row_count = matched
+                    state.results[step.name] = frame
+                    state.row_counts[step.name] = [len(frame)] + (
+                        [full_row_count] if full_row_count is not None else []
+                    )
+                    state.sources[step.name] = (guarded, truncated, full_row_count)
+                    state.notes.pop(step.name, None)
+                    if truncated:
+                        state.notes[step.name] = truncation_note(len(frame), full_row_count)
                 self._check(state, step, guarded.sql, frame)
                 csv_path = None
                 if self.artifact_dir:

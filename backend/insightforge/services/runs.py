@@ -503,7 +503,7 @@ def execute_run(
             verification_status = "needs_review" if needs_review else "exploratory"
             warnings = [result.fallback_reason] if result.fallback_reason else []
             warnings += [f"Plan step skipped: {issue}" for issue in result.plan_issues]
-            warnings += [finding.message for finding in result.findings]
+            warnings += [f.message for f in result.findings if f.code != "value_matched"]
             warnings += result.deep_notes
             warnings += [
                 f"{artifact.name}: {truncation_note(artifact.total_rows, artifact.full_row_count)}"
@@ -549,7 +549,11 @@ def execute_run(
                     else []
                 )
                 + [
-                    {"code": finding.code, "passed": False, "message": finding.message}
+                    {
+                        "code": finding.code,
+                        "passed": finding.code == "value_matched",
+                        "message": finding.message,
+                    }
                     for finding in result.findings
                 ],
             }
