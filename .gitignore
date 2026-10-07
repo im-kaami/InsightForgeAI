@@ -17,3 +17,13 @@ out/
 
 # Frontend
 node_modules/
+
+# AI agent notes and handoff files (kept locally, never pushed)
+AGENTS.md
+CLAUDE.md
+frontend/AGENTS.md
+frontend/CLAUDE.md
+.kiro/
+.devin/
+docs/HANDOFF.md
+backend/.scratch_*
