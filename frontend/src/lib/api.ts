@@ -62,7 +62,41 @@ function errorMessage(detail: unknown, fallback: string): string {
   return fallback;
 }
 
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+let refreshing: Promise<string | null> | null = null;
+
+/** Trade the HttpOnly refresh cookie for a new access token; concurrent callers share one request. */
+export function refreshAccessToken(): Promise<string | null> {
+  refreshing ??= (async () => {
+    try {
+      const response = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "X-InsightForge-Refresh": "1" },
+      });
+      if (!response.ok) {
+        if (response.status === 401) localStorage.removeItem("if_session");
+        return null;
+      }
+      const body = (await response.json()) as { access_token: string };
+      localStorage.setItem("if_token", body.access_token);
+      localStorage.setItem("if_session", "1");
+      return body.access_token;
+    } catch {
+      return null;
+    }
+  })().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+
+const NO_REFRESH = ["/auth/login", "/auth/refresh", "/auth/logout"];
+
+export async function apiFetch<T>(
+  path: string,
+  init: RequestInit = {},
+  retried = false,
+): Promise<T> {
   const headers = new Headers(init.headers);
   const token = typeof window !== "undefined" ? localStorage.getItem("if_token") : null;
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -72,6 +106,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     if (response.status === 401 && typeof window !== "undefined") {
+      if (!retried && !NO_REFRESH.some((item) => path.startsWith(item))) {
+        if (await refreshAccessToken()) return apiFetch<T>(path, init, true);
+      }
       localStorage.removeItem("if_token");
       if (!location.pathname.startsWith("/login"))
         window.location.assign(new URL("/login", window.location.origin));
@@ -105,6 +142,12 @@ export const auth = {
     }),
   testEmail: () => apiFetch<void>("/auth/test-email", { method: "POST" }),
   forgotPassword: (email: string) => apiFetch<void>("/auth/password/forgot", json({ email })),
+  logout: () =>
+    fetch(`${API_BASE}/auth/logout`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "X-InsightForge-Refresh": "1" },
+    }),
   logoutAll: () => apiFetch<void>("/auth/logout-all", { method: "POST" }),
   resetPassword: (token: string, new_password: string) =>
     apiFetch<void>("/auth/password/reset", json({ token, new_password })),
@@ -254,7 +297,11 @@ export async function downloadBlob(path: string, filename: string, init: Request
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (init.body) headers.set("Content-Type", "application/json");
-  const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  let response = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  if (response.status === 401 && (await refreshAccessToken())) {
+    headers.set("Authorization", `Bearer ${localStorage.getItem("if_token")}`);
+    response = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new ApiError(response.status, errorMessage(body.detail, response.statusText));

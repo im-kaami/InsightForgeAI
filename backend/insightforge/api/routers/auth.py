@@ -1,11 +1,12 @@
 import logging
 import time
 from datetime import UTC, datetime, timedelta
+from typing import Annotated
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Header, HTTPException, Request, Response
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select
 
 from insightforge.api.deps import CurrentUser, Db, SignedInUser
@@ -25,7 +26,7 @@ from insightforge.api.schemas import (
 from insightforge.config import get_settings
 from insightforge.db.models import ApiToken, User
 from insightforge.db.models import PasswordReset as PasswordResetRecord
-from insightforge.services import oidc
+from insightforge.services import oidc, refresh
 from insightforge.services.auth import (
     API_TOKEN_PREFIX,
     create_access_token,
@@ -62,7 +63,7 @@ def _refuse_if_locked(email: str) -> None:
 
 
 @router.post("/login", response_model=Token)
-def login(body: Credentials, db: Db):
+def login(body: Credentials, db: Db, response: Response):
     email = body.email.strip().lower()
     _refuse_if_locked(email)
     user = db.scalar(select(User).where(User.email == email))
@@ -72,11 +73,50 @@ def login(body: Credentials, db: Db):
         login_limiter.record_failure(email)
         raise HTTPException(401, "Invalid email or password")
     login_limiter.clear(email)
+    refresh.set_cookie(response, refresh.issue(db, user))
     return Token(access_token=create_access_token(user.id, user.token_version or 0))
 
 
+def _require_refresh_header(value: str | None) -> None:
+    if value != "1":
+        raise HTTPException(403, "This request must come from the InsightForge app")
+
+
+@router.post("/refresh", response_model=Token)
+def refresh_session(
+    request: Request,
+    db: Db,
+    response: Response,
+    marker: Annotated[str | None, Header(alias=refresh.HEADER)] = None,
+):
+    """Trade the refresh cookie for a new access token (and a rotated cookie)."""
+    _require_refresh_header(marker)
+    rotated = refresh.rotate(db, request.cookies.get(refresh.COOKIE))
+    if rotated is None:
+        failure = JSONResponse({"detail": "Your session has ended; sign in again"}, status_code=401)
+        refresh.clear_cookie(failure)
+        return failure
+    user, secret = rotated
+    refresh.set_cookie(response, secret)
+    return Token(access_token=create_access_token(user.id, user.token_version or 0))
+
+
+@router.post("/logout", status_code=204)
+def logout(
+    request: Request,
+    db: Db,
+    marker: Annotated[str | None, Header(alias=refresh.HEADER)] = None,
+):
+    """End this browser's session: revoke its refresh tokens and clear the cookie."""
+    _require_refresh_header(marker)
+    refresh.revoke_secret(db, request.cookies.get(refresh.COOKIE))
+    response = Response(status_code=204)
+    refresh.clear_cookie(response)
+    return response
+
+
 @router.post("/password", response_model=Token)
-def change_password(body: PasswordChange, db: Db, user: SignedInUser):
+def change_password(body: PasswordChange, db: Db, user: SignedInUser, response: Response):
     """Change the password; every other session ends and this one gets a fresh token."""
     _refuse_if_locked(user.email)
     if not verify_password(user.password_hash, body.current_password):
@@ -86,6 +126,8 @@ def change_password(body: PasswordChange, db: Db, user: SignedInUser):
     user.password_hash = hash_password(body.new_password)
     user.token_version = (user.token_version or 0) + 1
     db.commit()
+    refresh.revoke_all(db, user.id)
+    refresh.set_cookie(response, refresh.issue(db, user))
     return Token(access_token=create_access_token(user.id, user.token_version))
 
 
@@ -93,7 +135,10 @@ def change_password(body: PasswordChange, db: Db, user: SignedInUser):
 def logout_all(db: Db, user: SignedInUser):
     user.token_version = (user.token_version or 0) + 1
     db.commit()
-    return Response(status_code=204)
+    refresh.revoke_all(db, user.id)
+    response = Response(status_code=204)
+    refresh.clear_cookie(response)
+    return response
 
 
 @router.get("/features")
@@ -165,6 +210,7 @@ def reset_password(body: PasswordReset, db: Db):
     if user is None:
         raise HTTPException(400, "This reset link is invalid or has expired")
     login_limiter.clear(user.email)
+    refresh.revoke_all(db, user.id)
     return Response(status_code=204)
 
 
@@ -212,11 +258,16 @@ def oidc_callback(
     try:
         if error or not code or not state:
             raise oidc.OIDCError("The identity provider did not complete the sign-in")
-        token = oidc.finish(db, settings, code, state, request.cookies.get(oidc.STATE_COOKIE))
+        user = oidc.finish(db, settings, code, state, request.cookies.get(oidc.STATE_COOKIE))
+        token = create_access_token(user.id, user.token_version or 0)
+        secret = refresh.issue(db, user)
         target = f"{login}#{urlencode({'oidc_token': token})}"
     except (oidc.OIDCError, httpx.HTTPError) as problem:
+        secret = None
         target = f"{login}#{urlencode({'oidc_error': str(problem)[:200]})}"
     response = RedirectResponse(target, status_code=302)
+    if secret:
+        refresh.set_cookie(response, secret)
     response.delete_cookie(oidc.STATE_COOKIE, path="/api/auth/oidc")
     return response
 

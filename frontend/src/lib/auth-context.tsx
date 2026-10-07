@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
-import { auth, type User } from "./api";
+import { auth, refreshAccessToken, type User } from "./api";
 
 type AuthContextValue = {
   user: User | null;
@@ -24,17 +24,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let active = true;
     Promise.resolve().then(async () => {
-      const stored = localStorage.getItem("if_token");
-      if (!active) return;
-      setToken(stored);
-      if (stored) {
+      // Closing the browser keeps the refresh cookie, so a missing or expired token is renewed first.
+      // "if_session" only records that this browser signed in before, so visitors who never did do not
+      // make a pointless refresh request.
+      let current = localStorage.getItem("if_token");
+      if (!current && localStorage.getItem("if_session")) current = await refreshAccessToken();
+      if (current) {
         try {
-          setUser(await auth.me());
+          const me = await auth.me();
+          if (!active) return;
+          current = localStorage.getItem("if_token");
+          setUser(me);
         } catch {
           localStorage.removeItem("if_token");
+          current = null;
         }
       }
-      if (active) setLoading(false);
+      if (!active) return;
+      setToken(current);
+      setLoading(false);
     });
     return () => {
       active = false;
@@ -43,11 +51,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function login(email: string, password: string) {
     const result = await auth.login(email, password);
     localStorage.setItem("if_token", result.access_token);
+    localStorage.setItem("if_session", "1");
     setToken(result.access_token);
     setUser(await auth.me());
   }
   async function loginWithToken(value: string) {
     localStorage.setItem("if_token", value);
+    localStorage.setItem("if_session", "1");
     setToken(value);
     setUser(await auth.me());
   }
@@ -56,7 +66,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await login(email, password);
   }
   function logout() {
+    void auth.logout().catch(() => undefined);
     localStorage.removeItem("if_token");
+    localStorage.removeItem("if_session");
     setToken(null);
     setUser(null);
     router.push("/login");

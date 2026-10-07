@@ -133,7 +133,8 @@ Copy `.env.example` to `.env` and adjust these values:
 | `STORAGE_DIR` | Dataset catalogs, uploads, downloads, and run artifacts | `./storage` |
 | `JWT_SECRET` | Access-token signing secret | `change-me` |
 | `APP_SECRET` | Fernet key derivation secret for connection URIs | `change-me` |
-| `ACCESS_TOKEN_MINUTES` | Access-token lifetime | `10080` |
+| `ACCESS_TOKEN_MINUTES` | Access-token lifetime; the browser renews it from the refresh cookie | `30` |
+| `REFRESH_TOKEN_DAYS` | How long a sign-in lasts without use (1-365); each use extends it | `30` |
 | `CORS_ORIGINS` | JSON list of allowed frontend origins | `["http://localhost:3000"]` |
 | `SCHEDULER_ENABLED` | Start APScheduler with the API | `true` |
 | `AUTO_CREATE_TABLES` | Apply database migrations during application startup | `true` |

@@ -171,6 +171,7 @@ export default function AccountPage() {
           <CardTitle>Sign out everywhere</CardTitle>
           <CardDescription>
             Ends every session of this account, including this one. API tokens keep working.
+            Signed-in browsers stay signed in for up to 30 days of inactivity.
           </CardDescription>
         </CardHeader>
         <CardContent>

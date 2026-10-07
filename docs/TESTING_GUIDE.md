@@ -72,6 +72,9 @@ characters.
 - [ ] **Account** in the sidebar: change your password. You stay signed in; a second browser (or a
   private window) signed in before is sent to the sign-in page on its next click.
 - [ ] **Sign out everywhere** signs out this browser and every other one.
+- [ ] Sign in, close the browser completely, open http://localhost:3000 again: you are still signed
+  in (sessions last up to 30 days of inactivity). **Log out** then really ends it: reopening shows
+  the sign-in page.
 - [ ] Forgotten password: in a terminal, `cd E:\InsightForgeAI\backend`, then
   `.venv\Scripts\python.exe -m insightforge.cli reset-link you@example.com`. Open the printed link,
   choose a new password, sign in with it. Opening the same link again says it is invalid.

@@ -32,7 +32,8 @@ class Settings(BaseSettings):
     app_secret: str = "change-me"
     auto_create_tables: bool = True
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
-    access_token_minutes: int = 60 * 24 * 7
+    access_token_minutes: int = 30
+    refresh_token_days: int = Field(default=30, ge=1, le=365)
     scheduler_enabled: bool = True
     environment: Literal["development", "production"] = "development"
     allow_private_urls: bool = False

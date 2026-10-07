@@ -122,6 +122,9 @@ async def test_single_sign_on_creates_an_account_and_returns_a_session(client, s
     assert seen["pkce"] is True and "oidc_error" not in result
     me = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {result['oidc_token']}"})
     assert me.status_code == 200 and me.json()["email"] == "ada@company.com"
+    assert (client.cookies.get("if_refresh") or "").startswith("ifs_")
+    refreshed = await client.post("/api/auth/refresh", headers={"X-InsightForge-Refresh": "1"})
+    assert refreshed.status_code == 200
     # The same person signing in again gets the same account.
     again, _ = await _sign_in(client, lambda nonce: _id_token(nonce))
     second = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {again['oidc_token']}"})

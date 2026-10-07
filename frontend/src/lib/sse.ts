@@ -1,4 +1,4 @@
-import { API_BASE, runs, type Run } from "./api";
+import { API_BASE, refreshAccessToken, runs, type Run } from "./api";
 
 export type RunEvent = {
   type: string;
@@ -14,12 +14,16 @@ export async function streamRunEvents(
   onEvent: (event: RunEvent) => void,
   signal?: AbortSignal,
 ) {
-  const token = localStorage.getItem("if_token");
-  try {
-    const response = await fetch(`${API_BASE}/runs/${runId}/events`, {
+  const connect = () => {
+    const token = localStorage.getItem("if_token");
+    return fetch(`${API_BASE}/runs/${runId}/events`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       signal,
     });
+  };
+  try {
+    let response = await connect();
+    if (response.status === 401 && (await refreshAccessToken())) response = await connect();
     if (!response.ok || !response.body) throw new Error("Event stream unavailable");
     const reader = response.body.getReader();
     const decoder = new TextDecoder();

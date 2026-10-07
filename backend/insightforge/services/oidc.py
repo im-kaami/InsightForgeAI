@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from insightforge.config import Settings
 from insightforge.db.models import User
-from insightforge.services.auth import create_access_token, hash_password
+from insightforge.services.auth import hash_password
 
 STATE_SECONDS = 600
 STATE_COOKIE = "if_oidc_state"
@@ -135,8 +135,8 @@ def finish(
     state: str,
     cookie_state: str | None,
     client: httpx.Client | None = None,
-) -> str:
-    """Exchange the code, check the ID token and return an InsightForge session token."""
+) -> User:
+    """Exchange the code, check the ID token and return the account that signed in."""
     if not enabled(settings):
         raise OIDCError("Single sign-on is not configured")
     if not cookie_state or not secrets.compare_digest(cookie_state, state):
@@ -184,4 +184,4 @@ def finish(
         db.add(user)
         db.commit()
         db.refresh(user)
-    return create_access_token(user.id, user.token_version or 0)
+    return user
