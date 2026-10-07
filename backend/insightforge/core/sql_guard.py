@@ -28,6 +28,7 @@ _FORBIDDEN_FUNCTIONS = {
     "query",
     "query_table",
     "which_secret",
+    "json_execute_serialized_sql",
     "sniff_csv",
     "st_read",
     "getvariable",
@@ -113,8 +114,15 @@ def guard_query(sql: str, default_limit: int = 10000) -> GuardedQuery:
         )
         if within:
             return GuardedQuery(sql=expression.sql(dialect="duckdb"))
-        # A query's own LIMIT may not exceed the cap: wrap it so the cap always applies.
-        return GuardedQuery(sql=f"SELECT * FROM ({expression.sql(dialect='duckdb')}) AS q LIMIT {limit}")
+        # A query's own LIMIT may not exceed the cap: wrap it so the cap always applies, and keep the
+        # counting query so callers can say the result was cut off.
+        own = expression.sql(dialect="duckdb")
+        return GuardedQuery(
+            sql=f"SELECT * FROM ({own}) AS q LIMIT {limit}",
+            full_sql=own,
+            count_sql=f"SELECT COUNT(*) FROM ({own}) AS q",
+            limit=limit,
+        )
     full_sql = expression.sql(dialect="duckdb")
     if isinstance(expression, exp.Union):
         limited = f"SELECT * FROM ({full_sql}) AS q LIMIT {limit}"

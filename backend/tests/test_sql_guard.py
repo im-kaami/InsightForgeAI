@@ -72,6 +72,7 @@ def test_guard_query_does_not_count_explicitly_limited_queries():
         "SELECT * FROM mysql_execute('my', 'x')",
         "SELECT * FROM pragma_database_size()",
         "SELECT getenv('PATH')",
+        "SELECT * FROM json_execute_serialized_sql('x')",
     ],
 )
 def test_guard_rejects_server_reading_functions(query):
@@ -82,6 +83,8 @@ def test_guard_rejects_server_reading_functions(query):
 def test_guard_caps_a_larger_user_limit():
     guarded = guard_sql("SELECT range AS r FROM range(5000000) LIMIT 5000000", 10000)
     assert guarded.endswith("LIMIT 10000")
+    capped = guard_query("SELECT range AS r FROM range(5000000) LIMIT 5000000", 10000)
+    assert capped.limit == 10000 and capped.count_sql.startswith("SELECT COUNT(*) FROM (")
     assert guard_sql("SELECT 1 LIMIT 5", 10000).endswith("LIMIT 5")
 
 
