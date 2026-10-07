@@ -28,6 +28,21 @@ def test_lock_blocks_external_file_access(catalog):
         catalog.query("SELECT * FROM read_csv_auto('x.csv')")
 
 
+def test_lock_blocks_file_access_on_a_writable_file_catalog(tmp_path):
+    """Live-connection datasets keep a writable catalog file; locking must still stop file reads."""
+    note = tmp_path / "note.txt"
+    note.write_text("synthetic", encoding="utf-8")
+    catalog = DataCatalog(tmp_path / "catalog.duckdb")
+    try:
+        assert catalog.query(f"SELECT content FROM read_text('{note.as_posix()}')").iloc[0, 0] == "synthetic"
+        catalog.lock()
+        with pytest.raises(duckdb.Error, match="disabled"):
+            catalog.query(f"SELECT content FROM read_text('{note.as_posix()}')")
+        assert catalog.query("SELECT 1 AS x").iloc[0, 0] == 1
+    finally:
+        catalog.close()
+
+
 def test_query_timeout_interrupts_long_query():
     catalog = DataCatalog()
     try:

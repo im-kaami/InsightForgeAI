@@ -780,10 +780,12 @@ def open_catalog(
         )
         try:
             load_source(source, catalog)
-            # Attached databases keep working; files, new attachments and extension installs do not.
-            catalog.lock()
         except Exception:
             catalog.close()
             raise
+    if dataset.connection_id and for_run:
+        # Catalogs that run queries are locked: attached databases keep working; files, new
+        # attachments and extension installs do not. Adding a source (for_run=False) still loads files.
+        catalog.lock()
     # DuckDB 1.4.5 cannot re-enable external access on a running file-backed database.
     return catalog
