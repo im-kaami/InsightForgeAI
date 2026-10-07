@@ -3,7 +3,12 @@ import pytest
 from insightforge.config import get_settings
 from insightforge.ingest import netguard
 from insightforge.ingest.base import IngestError
-from insightforge.ingest.database import pin_postgres_host
+from insightforge.ingest.database import (
+    pin_connection,
+    pin_mysql_host,
+    pin_postgres_host,
+    pin_url_host,
+)
 from insightforge.ingest.netguard import pin_public_url
 
 
@@ -35,6 +40,23 @@ def test_postgres_host_gets_the_checked_hostaddr():
     pinned = pin_postgres_host("postgresql://u:p@db.example.org:5432/app?sslmode=require")
     assert pinned.endswith("sslmode=require&hostaddr=93.184.216.34")
     assert pin_postgres_host(pinned) == pinned
+
+
+def test_mysql_host_is_replaced_by_the_checked_address():
+    pinned = pin_mysql_host("host=db.example.org user=u password=p port=3306 database=app")
+    assert pinned == "host=93.184.216.34 user=u password=p port=3306 database=app"
+    assert pin_mysql_host(pinned) == pinned
+
+
+def test_sqlalchemy_url_host_is_replaced_and_credentials_kept():
+    pinned = pin_url_host("mssql+pymssql://sa:p%40ss@db.example.org:1433/master")
+    assert pinned == "mssql+pymssql://sa:p%40ss@93.184.216.34:1433/master"
+    assert pin_url_host("mssql+pymssql://sa:p@10.0.0.4/master") == "mssql+pymssql://sa:p@10.0.0.4/master"
+
+
+def test_snowflake_is_left_alone():
+    uri = "snowflake://u:p@ft45233.eu-central-2.aws/db"
+    assert pin_connection("snowflake", uri) == uri
 
 
 def test_postgres_pinning_refuses_a_private_resolution(monkeypatch):

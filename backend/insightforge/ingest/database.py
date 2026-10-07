@@ -152,6 +152,55 @@ def pin_postgres_host(connection: str) -> str:
     return urlunsplit(parts._replace(query=f"{parts.query}{separator}hostaddr={addresses[0]}"))
 
 
+def _checked_address(host: str) -> str | None:
+    """The one address a host name resolves to after every address passed the public check."""
+    if private_databases_allowed(get_settings()) or not host:
+        return None
+    try:
+        ipaddress.ip_address(host)
+        return None
+    except ValueError:
+        pass
+    addresses = netguard.resolve_host(host.lower().rstrip("."))
+    check_public_host(host, PRIVATE_OFF, lambda _name: addresses)
+    return addresses[0]
+
+
+def pin_mysql_host(connection: str) -> str:
+    """Connect to the checked address: the "host=name" setting becomes "host=address"."""
+    match = re.search(r"(?:^| )host=(\S+)", connection)
+    address = _checked_address(match.group(1)) if match else None
+    if not match or address is None:
+        return connection
+    return connection[: match.start(1)] + address + connection[match.end(1) :]
+
+
+def pin_url_host(location: str) -> str:
+    """Replace the host name of a SQLAlchemy URL with the checked address (no TLS name is checked
+    by these drivers' default settings, so the address is what they connect to)."""
+    if "://" not in location:
+        return location
+    parts = urlsplit(location)
+    address = _checked_address(parts.hostname or "")
+    if address is None:
+        return location
+    host = f"[{address}]" if ":" in address else address
+    userinfo = parts.netloc.rpartition("@")[0]
+    port = f":{parts.port}" if parts.port else ""
+    netloc = (f"{userinfo}@" if userinfo else "") + host + port
+    return urlunsplit(parts._replace(netloc=netloc))
+
+
+def pin_connection(db_type: str, connection: str) -> str:
+    if db_type == "postgres":
+        return pin_postgres_host(connection)
+    if db_type == "mysql":
+        return pin_mysql_host(connection)
+    if db_type in {"mssql", "sqlalchemy"}:
+        return pin_url_host(connection)
+    return connection  # snowflake: the host is always <account>.snowflakecomputing.com
+
+
 def check_database_target(uri: str) -> None:
     """Refuse database connections this server is not set up to allow (files, private hosts)."""
     if _is_sqlite(uri):
@@ -219,8 +268,7 @@ def list_tables(uri: str, schema: str | None = None) -> list[str]:
     """Names of the tables a connection can see (in ``schema`` if given), without copying any data."""
     check_database_target(uri)
     db_type, connection = parse_db_uri(uri)
-    if db_type == "postgres":
-        connection = pin_postgres_host(connection)
+    connection = pin_connection(db_type, connection)
     if db_type in {"mssql", "sqlalchemy", "snowflake"}:
         from sqlalchemy import inspect
 
@@ -306,8 +354,7 @@ def _load_sqlalchemy(
 
 def load_database(source: DataSource, catalog: DataCatalog) -> LoadResult:
     db_type, connection = parse_db_uri(source.location)
-    if db_type == "postgres":
-        connection = pin_postgres_host(connection)
+    connection = pin_connection(db_type, connection)
     default_alias = "sqlalchemy" if source.kind == "sqlalchemy" else db_type
     alias = sanitize_identifier(source.name or default_alias)
     if source.kind in {"sqlalchemy", "mssql", "snowflake"} or db_type in {

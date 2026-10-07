@@ -128,6 +128,35 @@ async def test_the_sql_guard_refuses_writes(client, auth_headers, database):
     assert counted.json()["rows"] == [{"n": 1000}]
 
 
+async def test_connection_datasets_refuse_server_reading_queries_and_still_query_the_database(
+    client, auth_headers, database
+):
+    _, uri = database
+    dataset = await _create(client, auth_headers, uri, "Locked", tables=["orders"])
+    table = next(name for name in dataset["tables"] if name.endswith("orders"))
+    quoted = ".".join(f'"{part}"' for part in table.split("."))
+    endpoint = f"/api/datasets/{dataset['id']}/sql"
+    for sql in (
+        "SELECT * FROM query('SELECT 1')",
+        "SELECT * FROM duckdb_databases()",
+        "SELECT * FROM sniff_csv('x.csv')",
+        "SELECT * FROM postgres_query('pg', 'SELECT 1')",
+        "SELECT * FROM read_text('x')",
+    ):
+        refused = await client.post(endpoint, headers=auth_headers, json={"sql": sql})
+        assert refused.status_code == 422, sql
+    capped = await client.post(
+        endpoint,
+        headers=auth_headers,
+        json={"sql": f"SELECT * FROM {quoted} LIMIT 5000000"},
+    )
+    assert capped.status_code == 200 and capped.json()["total_rows"] == 1000
+    counted = await client.post(
+        endpoint, headers=auth_headers, json={"sql": f"SELECT COUNT(*) AS n FROM {quoted}"}
+    )
+    assert counted.json()["rows"] == [{"n": 1000}]
+
+
 def test_postgres_is_attached_read_only():
     uri = os.getenv("INSIGHTFORGE_TEST_PG_URI")
     if not uri:
