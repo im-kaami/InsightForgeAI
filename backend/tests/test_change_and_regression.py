@@ -156,7 +156,8 @@ def test_rejected_test_data_gets_one_query_rewrite(catalog):
     artifact = next(item for item in result.artifacts if isinstance(item, StatArtifact))
     assert artifact.method == "explain_change" and artifact.n == 60
     assert len(repairs) == 1
-    assert "could not use this query's result" in repairs[0]
+    assert "must contain exactly two periods, but the result had only 1" in repairs[0]
+    assert "Remove WHERE conditions that keep only one period" in repairs[0]
     assert "found 1: before" not in repairs[0]
     table = next(item for item in result.artifacts if getattr(item, "name", "") == "rows")
     assert "CASE WHEN" in table.sql

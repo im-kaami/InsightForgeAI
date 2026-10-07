@@ -40,10 +40,10 @@ async def test_wrong_filters_are_flagged_for_review(client, auth_headers, hr_dat
         auth_headers,
         hr_dataset,
         "Nobody works remotely.",
-        query=f"SELECT COUNT(*) AS n FROM \"{table}\" WHERE location = 'remote'",
+        query=f"SELECT COUNT(*) AS n FROM \"{table}\" WHERE location = 'remot'",
     )
     assert payload["verification_status"] == "needs_review"
-    expected = f"headcount: the filter location = 'remote' matches no rows in {table}"
+    expected = f"headcount: the filter location = 'remot' matches no rows in {table}"
     assert f"{expected}; similar values: 'Remote'." in payload["warnings"]
     codes = [check["code"] for check in payload["provenance"]["checks"]]
     assert codes == ["zero_result", "filter_matches_nothing"]
