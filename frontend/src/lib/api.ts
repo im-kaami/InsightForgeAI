@@ -96,6 +96,14 @@ export const auth = {
       "/auth/password",
       json({ current_password, new_password }),
     ),
+  features: () => apiFetch<{ email: boolean }>("/auth/features"),
+  setEmailAlerts: (email_alerts: boolean) =>
+    apiFetch<User>("/auth/preferences", {
+      method: "PUT",
+      body: JSON.stringify({ email_alerts }),
+    }),
+  testEmail: () => apiFetch<void>("/auth/test-email", { method: "POST" }),
+  forgotPassword: (email: string) => apiFetch<void>("/auth/password/forgot", json({ email })),
   logoutAll: () => apiFetch<void>("/auth/logout-all", { method: "POST" }),
   resetPassword: (token: string, new_password: string) =>
     apiFetch<void>("/auth/password/reset", json({ token, new_password })),

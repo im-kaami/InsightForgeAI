@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,8 @@ import { auth } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
 export default function AccountPage() {
-  const { user, loginWithToken, logout } = useAuth();
+  const { user, loginWithToken, setUser, logout } = useAuth();
+  const features = useQuery({ queryKey: ["auth-features"], queryFn: auth.features });
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +44,36 @@ export default function AccountPage() {
       toast.success("Password changed; other sessions were signed out");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The password could not be changed");
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function toggleAlerts(enabled: boolean) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    try {
+      setUser(await auth.setEmailAlerts(enabled));
+      toast.success(enabled ? "Email alerts are on" : "Email alerts are off");
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Could not save the setting");
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function sendTest() {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    try {
+      await auth.testEmail();
+      toast.success(`Test email sent to ${user?.email}`);
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Could not send the test email");
     } finally {
       inFlight.current = false;
       setBusy(false);
@@ -103,6 +135,34 @@ export default function AccountPage() {
               {busy ? "Saving..." : "Change password"}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+      <Card data-testid="email-alerts">
+        <CardHeader>
+          <CardTitle>Email alerts</CardTitle>
+          <CardDescription>
+            Emails contain the names you chose and a link, never data values.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {features.data && !features.data.email ? (
+            <p className="text-sm text-muted-foreground" data-testid="email-off">
+              Email is not set up on this server (SMTP settings in backend/.env).
+            </p>
+          ) : null}
+          <label className="flex items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              className="size-4"
+              checked={user?.email_alerts ?? false}
+              disabled={!features.data?.email || busy}
+              onChange={(event) => toggleAlerts(event.target.checked)}
+            />
+            Email me when a followed metric or a saved model raises an alert
+          </label>
+          <Button variant="outline" onClick={sendTest} disabled={!features.data?.email || busy}>
+            Send test email
+          </Button>
         </CardContent>
       </Card>
       <Card>

@@ -50,6 +50,15 @@ class UserOut(APIModel):
     id: str
     email: str
     created_at: datetime
+    email_alerts: bool = False
+
+
+class Preferences(BaseModel):
+    email_alerts: bool
+
+
+class ForgotPassword(BaseModel):
+    email: str = Field(max_length=320)
 
 
 class Token(BaseModel):

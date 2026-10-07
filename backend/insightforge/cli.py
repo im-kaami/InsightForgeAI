@@ -61,7 +61,7 @@ def _parser() -> argparse.ArgumentParser:
         "reset-link", help="Print a single-use password reset link for an account (no email is sent)"
     )
     reset.add_argument("email")
-    reset.add_argument("--base-url", default="http://localhost:3000")
+    reset.add_argument("--base-url", default=None, help="default: APP_BASE_URL")
     reset.add_argument("--hours", type=int, default=1, choices=range(1, 73), metavar="1-72")
     return parser
 
@@ -248,7 +248,8 @@ def _reset_link(args: argparse.Namespace) -> int:
         print("No account has that email address.", file=sys.stderr)
         return 1
     secret, expires = created
-    print(f"{args.base_url.rstrip('/')}/reset#{secret}")
+    base_url = args.base_url or get_settings().app_base_url
+    print(f"{base_url.rstrip('/')}/reset#{secret}")
     print(f"Single use; expires {expires.strftime('%Y-%m-%d %H:%M')} UTC.")
     return 0
 

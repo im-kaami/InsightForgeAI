@@ -10,6 +10,7 @@ type AuthContextValue = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   loginWithToken: (token: string) => Promise<void>;
+  setUser: (user: User) => void;
   register: (email: string, password: string) => Promise<void>;
   logout: () => void;
 };
@@ -61,7 +62,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/login");
   }
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, loginWithToken, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, token, loading, login, loginWithToken, setUser, register, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

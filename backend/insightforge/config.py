@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     max_concurrent_runs_per_user: int = 2
     run_workers: int = Field(default=4, ge=1, le=32)
     run_max_attempts: int = Field(default=2, ge=1, le=5)
+    app_base_url: str = "http://localhost:3000"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
+    smtp_timeout_seconds: int = 10
     login_max_failures: int = Field(default=5, ge=1)
     login_window_minutes: int = Field(default=15, ge=1)
     max_upload_bytes: int = 200_000_000
@@ -85,8 +93,7 @@ class Settings(BaseSettings):
         return value
 
 
-def is_loopback_url(url: str) -> bool:
-    host = urlparse(url).hostname
+def is_loopback_host(host: str | None) -> bool:
     if not host:
         return False
     if host == "localhost":
@@ -95,6 +102,10 @@ def is_loopback_url(url: str) -> bool:
         return ipaddress.ip_address(host).is_loopback
     except ValueError:
         return False
+
+
+def is_loopback_url(url: str) -> bool:
+    return is_loopback_host(urlparse(url).hostname)
 
 
 @lru_cache
@@ -119,5 +130,15 @@ def validate_settings(settings: Settings) -> list[str]:
     if settings.local_llm_model and not is_loopback_url(settings.local_llm_base_url):
         problems.append(
             "LOCAL_LLM_BASE_URL must point to this computer (localhost); the local model is disabled"
+        )
+    if (
+        settings.smtp_host
+        and settings.smtp_from
+        and settings.smtp_security == "none"
+        and not is_loopback_host(settings.smtp_host)
+    ):
+        problems.append(
+            "SMTP_SECURITY=none sends email and the password unencrypted; use starttls or ssl "
+            "unless SMTP_HOST is on this computer"
         )
     return problems

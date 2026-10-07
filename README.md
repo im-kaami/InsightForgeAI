@@ -142,6 +142,11 @@ Copy `.env.example` to `.env` and adjust these values:
 | `DUCKDB_THREADS` | DuckDB worker threads per catalog | `4` |
 | `MAX_CONCURRENT_RUNS_PER_USER` | Pending/running analyses allowed per user | `2` |
 | `RUN_WORKERS` | Analyses that run at the same time (1-32); the rest wait in the queue | `4` |
+| `APP_BASE_URL` | Address of the web app, used in links inside emails and as the default for `insightforge reset-link` | `http://localhost:3000` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | Mail server for alert emails and "Forgot password?"; email is off unless `SMTP_HOST` and `SMTP_FROM` are set | empty, port `587` |
+| `SMTP_FROM` | Sender address of emails | empty |
+| `SMTP_SECURITY` | `starttls`, `ssl` or `none` (`none` is only accepted for a server on this computer in production) | `starttls` |
+| `SMTP_TIMEOUT_SECONDS` | Mail server timeout | `10` |
 | `LOGIN_MAX_FAILURES` | Failed sign-ins per email allowed within the window before that email is locked (keyed by email, not IP; someone who knows an email can lock it for the window) | `5` |
 | `LOGIN_WINDOW_MINUTES` | Length of the sign-in failure window and lockout, in minutes | `15` |
 | `RUN_MAX_ATTEMPTS` | Times a run is tried when the server restarts mid-run (1-5), then it is marked failed | `2` |
@@ -386,7 +391,8 @@ Limits: drift compares the new data with the training data; it does not prove th
 
 - Passwords are 8 to 256 characters. Open **Account** in the sidebar to change yours (other sessions are signed out) or to **Sign out everywhere**.
 - After `LOGIN_MAX_FAILURES` failed sign-ins for one email within `LOGIN_WINDOW_MINUTES`, that email is locked until the window passes (HTTP 429 with `Retry-After`). The limit is per email and held in memory, so a restart clears it, and anyone who knows an email can lock it for the window on purpose; client addresses are not trusted behind the proxy.
-- InsightForge sends no email. To reset a forgotten password, run `insightforge reset-link person@example.com` (optional `--base-url`, `--hours 1-72`) on the server and give the printed `/reset#...` link to the person. It works once, ends their sessions, and a new link replaces earlier unused ones.
+- With email set up (`SMTP_HOST` and `SMTP_FROM`), the sign-in page offers "Forgot password?", which emails a one-hour, single-use link, and **Account** can email you when a followed metric or a saved model raises an alert. Alert emails contain only the names you chose and a link, never data values. Open **Account** and use "Send test email" to check the settings.
+- Without email, to reset a forgotten password, run `insightforge reset-link person@example.com` (optional `--base-url`, `--hours 1-72`) on the server and give the printed `/reset#...` link to the person. It works once, ends their sessions, and a new link replaces earlier unused ones.
 
 ## Single sign-on (OpenID Connect)
 

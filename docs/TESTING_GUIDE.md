@@ -75,6 +75,10 @@ characters.
 - [ ] Forgotten password: in a terminal, `cd E:\InsightForgeAI\backend`, then
   `.venv\Scripts\python.exe -m insightforge.cli reset-link you@example.com`. Open the printed link,
   choose a new password, sign in with it. Opening the same link again says it is invalid.
+- [ ] **Account** → **Email alerts** says "Email is not set up on this server" (no SMTP settings yet).
+  Optional, with a mail account: add `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
+  `SMTP_FROM` to `backend/.env`, restart the backend, then **Send test email**, tick the alerts box,
+  and try **Forgot password?** on the sign-in page.
 
 ### 1.2 Upload files and review the import
 - [ ] **Add data** → **Files** → choose `orders.csv` and `customers.csv` together → **Preview import**.

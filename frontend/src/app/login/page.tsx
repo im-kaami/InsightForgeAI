@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, auth } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
 const credentialsSchema = z.object({
@@ -22,6 +22,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [sso, setSso] = useState<{ enabled: boolean; name: string } | null>(null);
+  const [canEmail, setCanEmail] = useState(false);
 
   useEffect(() => {
     // After single sign-on the server returns here with the session token after "#", which never
@@ -39,6 +40,10 @@ export default function LoginPage() {
       .then((response) => (response.ok ? response.json() : null))
       .then(setSso)
       .catch(() => setSso(null));
+    auth
+      .features()
+      .then((features) => setCanEmail(features.email))
+      .catch(() => setCanEmail(false));
     // Runs once, when the page opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -79,6 +84,11 @@ export default function LoginPage() {
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input id="password" name="password" type="password" minLength={8} required />
+              {canEmail ? (
+                <Link className="text-xs text-muted-foreground underline" href="/forgot">
+                  Forgot password?
+                </Link>
+              ) : null}
             </div>
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Signing in..." : "Sign in"}

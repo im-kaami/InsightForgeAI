@@ -8,6 +8,7 @@ stored on the database row (never from user input). Nothing here contacts an LLM
 from __future__ import annotations
 
 import csv
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -31,6 +32,7 @@ from insightforge.db.models import (
     SavedModel,
 )
 from insightforge.services.datasets import open_catalog
+from insightforge.services.mailer import notify_user
 from insightforge.services.storage import Storage
 
 # Metrics that must match the run's reported holdout (within this tolerance).
@@ -445,7 +447,29 @@ def _record_scoring(
         db.execute(delete(ModelScoring).where(ModelScoring.id.in_(stale)))
     db.commit()
     db.refresh(scoring)
+    if alert:
+        _email_alert(db, model, scoring)
     return scoring
+
+
+def _email_alert(db: Session, model: SavedModel, scoring: ModelScoring) -> None:
+    """Email the owner (if they opted in) the model's name and a link, never any numbers."""
+    try:
+        what = (
+            "the scheduled check could not run"
+            if scoring.status == "failed"
+            else "the scheduled check recommends retraining"
+        )
+        notify_user(
+            db,
+            model.owner_id,
+            f"InsightForge alert: model {model.name}",
+            f"Your saved model {model.name}: {what}.\n\n"
+            f"Open InsightForge for the details: {get_settings().app_base_url.rstrip('/')}"
+            f"/datasets/{model.dataset_id}\n",
+        )
+    except Exception as error:  # noqa: BLE001 - a mail problem must not break the check
+        logging.getLogger("insightforge").warning("model alert email skipped: %s", type(error).__name__)
 
 
 def run_scheduled_scoring(db: Session, model_id: str) -> ModelScoring:

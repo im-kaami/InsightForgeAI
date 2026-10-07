@@ -18,6 +18,7 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from insightforge.config import get_settings
 from insightforge.core.metric_report import latest_date, rolling_period
 from insightforge.core.metrics import (
     Metric,
@@ -39,6 +40,7 @@ from insightforge.db.models import (
     MetricFollow,
     Run,
 )
+from insightforge.services.mailer import notify_user
 
 MAX_CHECKS_KEPT = 100
 log = logging.getLogger("insightforge")
@@ -144,7 +146,34 @@ def _record(db: Session, follow: MetricFollow, trigger: str, **values: Any) -> M
         db.execute(delete(MetricCheck).where(MetricCheck.id.in_(stale)))
     db.commit()
     db.refresh(check)
+    if check.alert:
+        _email_alert(db, follow, check)
     return check
+
+
+def _email_alert(db: Session, follow: MetricFollow, check: MetricCheck) -> None:
+    """Email the owner (if they opted in) the name of the metric and a link, never any numbers."""
+    try:
+        dataset = db.get(Dataset, follow.dataset_id)
+        if dataset is None:
+            return
+        defined = find_metric(SavedMetrics.model_validate(dataset.metrics_json or {}).metrics, follow.metric)
+        display = defined.display if defined else follow.metric
+        what = (
+            "its check could not run"
+            if check.status == "failed"
+            else "moved past its alert threshold"
+        )
+        notify_user(
+            db,
+            follow.owner_id,
+            f"InsightForge alert: {display} on {dataset.name}",
+            f"Your followed metric {display} on the dataset {dataset.name}: {what}.\n\n"
+            f"Open InsightForge for the details: {get_settings().app_base_url.rstrip('/')}"
+            f"/datasets/{dataset.id}\n",
+        )
+    except Exception as error:  # noqa: BLE001 - a mail problem must not break the check
+        log.warning("metric alert email skipped: %s", type(error).__name__)
 
 
 def rolling_report(
